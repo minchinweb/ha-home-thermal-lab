@@ -1,4 +1,4 @@
-# 10 Electrical use becomes indoor heat
+# 11 Electrical use becomes indoor heat
 
 **Status:** untested
 

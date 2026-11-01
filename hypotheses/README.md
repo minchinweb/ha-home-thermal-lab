@@ -18,16 +18,16 @@ Home Assistant, so they can be re-run later or by others.
 | [07](07-static-flux.md) | Static heat flux between rooms/floors | B | untested |
 | [08](08-solar-gain.md) | Predict room solar gain | C. Disturbances | untested |
 | [09](09-wind-loss.md) | Predict heat loss from wind speed/direction | C | untested |
-| [10](10-electrical-heat.md) | Electrical use becomes indoor heat | B | untested |
-| [11](11-occupancy.md) | Occupancy from room temperature changes | B | untested |
-| [12](12-predict-day.md) | Predict next-day house/room temperature | D. Predict and control | untested |
-| [13](13-control.md) | Decide whether to run furnace/AC to avoid overshoot | D | untested |
-| [14](14-thermal-momentum.md) | Measure the house's thermal momentum (inertia, time constant) | B | untested |
+| [10](10-thermal-momentum.md) | Measure the house's thermal momentum (inertia, time constant) | B | untested |
+| [11](11-electrical-heat.md) | Electrical use becomes indoor heat | B | untested |
+| [12](12-occupancy.md) | Occupancy from room temperature changes | B | untested |
+| [13](13-predict-day.md) | Predict next-day house/room temperature | D. Predict and control | untested |
+| [14](14-control.md) | Decide whether to run furnace/AC to avoid overshoot | D | untested |
 
 ## Dependency order
 
 A (1, 2) feeds back into the wave component. B and C produce the parameters
-for a grey-box RC thermal model. D (12, 13) uses that model plus a weather
+for a grey-box RC thermal model. D (13, 14) uses that model plus a weather
 forecast, and only makes sense once B and C hold up.
 
 ## Cross-cutting notes
