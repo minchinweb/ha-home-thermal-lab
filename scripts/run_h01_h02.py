@@ -15,6 +15,7 @@ To find sensor entity ids, run with ``--ha-list``. To add a Home Assistant
 sensor, set ``HA_URL``, ``HA_TOKEN`` (a long-lived access token) and ``HA_ENTITY``
 (or pass ``--ha-url``/``--ha-entity``). The home position comes from Home
 Assistant, and weather classes come from Open-Meteo for that position.
+"""
 
 from __future__ import annotations
 
