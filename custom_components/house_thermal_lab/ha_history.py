@@ -16,9 +16,9 @@ from __future__ import annotations
 
 from collections import defaultdict
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
+import itertools
 import json
-import statistics
 import urllib.parse
 import urllib.request
 
@@ -62,8 +62,16 @@ def fetch_home_position(
     return float(config["latitude"]), float(config["longitude"])
 
 
-def hourly_means(states: list[dict], attribute: str | None = None) -> list[Reading]:
-    """Average irregular sensor states into hourly UTC readings.
+def hourly_means(
+    states: list[dict],
+    attribute: str | None = None,
+    until: datetime | None = None,
+) -> list[Reading]:
+    """Turn irregular sensor states into time-weighted hourly UTC readings.
+
+    Home Assistant only records a state when it changes, so a value holds until
+    the next row. Each hour is the time-weighted mean of the held values;
+    stretches where the sensor was unavailable (or not numeric) are left out.
 
     Args:
         states: Home Assistant state dicts with ``state`` and ``last_changed``
@@ -71,28 +79,49 @@ def hourly_means(states: list[dict], attribute: str | None = None) -> list[Readi
         attribute: Read this attribute instead of the state, as for the
             ``temperature`` of a ``weather`` entity (whose state is a
             condition such as ``cloudy``).
+        until: The last value holds until this time (timezone-aware). Defaults
+            to the end of the hour of the last state.
 
     Returns:
-        One reading per hour that has numeric states, oldest first.
+        One reading per hour that has any valid time, oldest first.
     """
-    buckets: dict[datetime, list[float]] = defaultdict(list)
+    events: list[tuple[datetime, float | None]] = []
     for s in states:
         raw = (
             s.get("state")
             if attribute is None
             else s.get("attributes", {}).get(attribute)
         )
-        if raw is None or raw in _BAD_STATES:
-            continue
         try:
-            value = float(raw)
+            value = None if raw is None or raw in _BAD_STATES else float(raw)
         except (TypeError, ValueError):
-            continue
+            value = None
         stamp = s["last_changed"] if attribute is None else s["last_updated"]
-        when = datetime.fromisoformat(stamp).astimezone(UTC)
-        hour = when.replace(minute=0, second=0, microsecond=0, tzinfo=None)
-        buckets[hour].append(value)
-    return [Reading(h, statistics.fmean(v)) for h, v in sorted(buckets.items())]
+        events.append((datetime.fromisoformat(stamp).astimezone(UTC), value))
+    if not events:
+        return []
+    events.sort(key=lambda e: e[0])
+    last = events[-1][0].replace(minute=0, second=0, microsecond=0)
+    end = until.astimezone(UTC) if until is not None else last + timedelta(hours=1)
+    events.append((end, None))
+
+    weighted: dict[datetime, list[float]] = defaultdict(lambda: [0.0, 0.0])
+    for (t0, value), (t1, _) in itertools.pairwise(events):
+        if value is None:
+            continue
+        cursor = t0
+        while cursor < t1:
+            hour = cursor.replace(minute=0, second=0, microsecond=0)
+            stop = min(t1, hour + timedelta(hours=1))
+            seconds = (stop - cursor).total_seconds()
+            weighted[hour][0] += value * seconds
+            weighted[hour][1] += seconds
+            cursor = stop
+    return [
+        Reading(h.replace(tzinfo=None), total / seconds)
+        for h, (total, seconds) in sorted(weighted.items())
+        if seconds > 0
+    ]
 
 
 def fetch_sensor_history(
@@ -133,7 +162,7 @@ def fetch_sensor_history(
         f"{urllib.parse.quote(start.isoformat())}?{query}"
     )
     body = fetch(url, token)
-    return hourly_means(body[0] if body else [], attribute)
+    return hourly_means(body[0] if body else [], attribute, end)
 
 
 def list_temperature_sensors(

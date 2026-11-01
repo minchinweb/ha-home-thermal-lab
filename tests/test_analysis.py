@@ -125,19 +125,26 @@ def test_external_weather_is_used():
     assert r.weather == "cloudy"
 
 
-def test_hourly_means_skips_bad_states_and_averages():
+def test_hourly_means_holds_values_and_skips_unavailable():
     states = [
         {"state": "10", "last_changed": "2025-06-01T00:10:00+00:00"},
         {"state": "12", "last_changed": "2025-06-01T00:40:00+00:00"},
         {"state": "unavailable", "last_changed": "2025-06-01T01:00:00+00:00"},
-        {"state": "oops", "last_changed": "2025-06-01T01:30:00+00:00"},
         {"state": "20", "last_changed": "2025-06-01T02:00:00-06:00"},
     ]
     out = ha_history.hourly_means(states)
     assert out == [
-        Reading(datetime(2025, 6, 1, 0), 11.0),
+        Reading(datetime(2025, 6, 1, 0), pytest.approx(10.8)),
         Reading(datetime(2025, 6, 1, 8), 20.0),
     ]
+
+
+def test_hourly_means_fills_quiet_hours_until_end():
+    states = [{"state": "21.5", "last_changed": "2025-06-01T00:00:00+00:00"}]
+    until = datetime(2025, 6, 1, 3, 30, tzinfo=UTC)
+    out = ha_history.hourly_means(states, until=until)
+    assert [r.time.hour for r in out] == [0, 1, 2, 3]
+    assert all(r.temperature == 21.5 for r in out)
 
 
 def test_fetch_sensor_history_builds_request():
@@ -148,8 +155,9 @@ def test_fetch_sensor_history_builds_request():
         return [[{"state": "5", "last_changed": "2025-06-01T00:00:00+00:00"}]]
 
     start = datetime(2025, 6, 1, tzinfo=UTC)
+    end = datetime(2025, 6, 1, 1, tzinfo=UTC)
     out = ha_history.fetch_sensor_history(
-        "http://ha:8123/", "tok", "sensor.out", start, start, fake
+        "http://ha:8123/", "tok", "sensor.out", start, end, fake
     )
     url, token = seen[0]
     assert token == "tok"
@@ -209,10 +217,11 @@ def test_weather_entity_reads_temperature_attribute():
         ]
 
     start = datetime(2025, 6, 1, tzinfo=UTC)
+    end = datetime(2025, 6, 1, 1, tzinfo=UTC)
     out = ha_history.fetch_sensor_history(
-        "http://ha", "t", "weather.home", start, start, fake
+        "http://ha", "t", "weather.home", start, end, fake
     )
-    assert out == [Reading(datetime(2025, 6, 1, 0), -3.0)]
+    assert out == [Reading(datetime(2025, 6, 1, 0), pytest.approx(-2.7))]
     assert "no_attributes" not in seen[0]
 
 

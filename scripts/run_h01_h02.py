@@ -13,7 +13,8 @@ Settings (HA_URL, HA_TOKEN, HA_ENTITY) are read from a git-ignored ``.env`` file
 
 To find sensor entity ids, run with ``--ha-list``. To add a Home Assistant
 sensor, set ``HA_URL``, ``HA_TOKEN`` (a long-lived access token) and ``HA_ENTITY``
-(or pass ``--ha-url``/``--ha-entity``). The home position comes from Home
+(or pass ``--ha-url`` and ``--ha-entity``, which may be repeated; HA_ENTITY
+can list several separated by commas). The home position comes from Home
 Assistant, and weather classes come from Open-Meteo for that position.
 """
 
@@ -79,8 +80,9 @@ def main() -> None:
     )
     p.add_argument(
         "--ha-entity",
-        default=os.environ.get("HA_ENTITY"),
-        help="sensor entity id (default: HA_ENTITY)",
+        action="append",
+        help="sensor entity id; repeat for several (default: HA_ENTITY, which "
+        "may hold several separated by commas)",
     )
     p.add_argument(
         "--ha-list", action="store_true", help="list temperature sensors and exit"
@@ -110,22 +112,26 @@ def main() -> None:
         locations, args.start, args.end, group_by=args.group_by, on_results=plot
     )
 
-    if args.ha_url and args.ha_entity:
+    entities = args.ha_entity or [
+        e for e in os.environ.get("HA_ENTITY", "").replace(",", " ").split() if e
+    ]
+    if args.ha_url and entities:
         token = os.environ["HA_TOKEN"]
         lat, lon = fetch_home_position(args.ha_url, token)
-        here = home_location(lat, lon, f"HA {args.ha_entity}")
         start = datetime.combine(args.start, time.min, tzinfo=UTC)
         end = datetime.combine(args.end, time.max, tzinfo=UTC)
-        sensor = fetch_sensor_history(args.ha_url, token, args.ha_entity, start, end)
-        weather = fetch_hourly(here, args.start, args.end)
-        results = analyse_with_external_weather(sensor, weather, here)
-        if not results:
-            print(
-                f"{args.ha_entity}: fewer than 22 hourly readings on every day, "
-                "so nothing to analyse (is the history too short or too sparse?)",
-                file=sys.stderr,
-            )
-        else:
+        weather = fetch_hourly(home_location(lat, lon), args.start, args.end)
+        for entity in entities:
+            here = home_location(lat, lon, entity)
+            sensor = fetch_sensor_history(args.ha_url, token, entity, start, end)
+            results = analyse_with_external_weather(sensor, weather, here)
+            if not results:
+                print(
+                    f"{entity}: fewer than 22 hourly readings on every day, so "
+                    "nothing to analyse (is the history too short or too sparse?)",
+                    file=sys.stderr,
+                )
+                continue
             if plot:
                 plot(here, results)
             summaries.extend(

@@ -322,14 +322,15 @@ def format_table(summaries: list[GroupSummary]) -> str:
     Returns:
         The table, one row per summary.
     """
+    width = max([8, *(len(s.location.name) for s in summaries)]) + 2
     head = (
-        f"{'location':<12}{'kind':<9}{'group':<14}{'days':>5}{'amp C':>7}"
+        f"{'location':<{width}}{'kind':<9}{'group':<14}{'days':>5}{'amp C':>7}"
         f"{'rmse C':>8}{'range C':>9}{'fit pk-noon h':>15}"
         f"{'obs pk-noon h':>15}{'obs lo-midn h':>15}{'pk->lo h':>10}"
     )
     rows = [head]
     rows.extend(
-        f"{s.location.name:<12}{s.location.kind:<9}{s.group:<14}{s.days:>5}"
+        f"{s.location.name:<{width}}{s.location.kind:<9}{s.group:<14}{s.days:>5}"
         f"{s.mean_amplitude:>7.1f}{s.median_rmse:>8.2f}"
         f"{s.mean_observed_range:>9.1f}"
         f"{s.median_fitted_peak_offset_h:>15.1f}"
