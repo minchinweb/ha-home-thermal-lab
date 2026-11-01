@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-import statistics
 from dataclasses import dataclass
 from datetime import date
+import statistics
 
 from .locations import Location
 from .open_meteo import Fetcher, fetch_hourly, to_solar_days, urllib_fetch

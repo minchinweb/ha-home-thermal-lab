@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import math
 from datetime import date
+import math
 
 
 def equation_of_time_minutes(day: date) -> float:

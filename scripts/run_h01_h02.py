@@ -9,14 +9,14 @@ Usage (from the repository root)::
 """
 
 import argparse
+from datetime import date
 import pathlib
 import sys
-from datetime import date
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent.parent))
 
-from custom_components.house_thermal_lab.experiments import format_table, run  # noqa: E402
-from custom_components.house_thermal_lab.locations import (  # noqa: E402
+from custom_components.house_thermal_lab.experiments import format_table, run
+from custom_components.house_thermal_lab.locations import (
     EXAMPLE_LOCATIONS,
     Location,
 )

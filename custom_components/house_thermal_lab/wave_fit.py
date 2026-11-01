@@ -8,8 +8,8 @@ least squares.
 
 from __future__ import annotations
 
-import math
 from dataclasses import dataclass
+import math
 
 _OMEGA = 2 * math.pi / 24.0  # radians per hour
 
@@ -32,7 +32,7 @@ class WaveFit:
 
 def _solve3(a: list[list[float]], b: list[float]) -> list[float]:
     """Solve a 3x3 linear system by Gaussian elimination with pivoting."""
-    m = [row[:] + [rhs] for row, rhs in zip(a, b)]
+    m = [[*row, rhs] for row, rhs in zip(a, b, strict=True)]
     for i in range(3):
         p = max(range(i, 3), key=lambda r: abs(m[r][i]))
         if abs(m[p][i]) < 1e-12:
@@ -55,11 +55,13 @@ def fit_day(samples: list[tuple[float, float]]) -> WaveFit:
     rows = [(1.0, math.sin(_OMEGA * h), math.cos(_OMEGA * h)) for h, _ in samples]
     ys = [t for _, t in samples]
     ata = [[sum(r[i] * r[j] for r in rows) for j in range(3)] for i in range(3)]
-    aty = [sum(r[i] * y for r, y in zip(rows, ys)) for i in range(3)]
+    aty = [sum(r[i] * y for r, y in zip(rows, ys, strict=True)) for i in range(3)]
     mean, s, c = _solve3(ata, aty)
     amplitude = math.hypot(s, c)
     peak_hour = (math.atan2(s, c) / _OMEGA) % 24.0
-    sse = sum((y - (mean + s * r[1] + c * r[2])) ** 2 for r, y in zip(rows, ys))
+    sse = sum(
+        (y - (mean + s * r[1] + c * r[2])) ** 2 for r, y in zip(rows, ys, strict=True)
+    )
     return WaveFit(mean, amplitude, peak_hour, math.sqrt(sse / len(ys)), len(ys))
 
 

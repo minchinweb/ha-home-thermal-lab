@@ -1,0 +1,86 @@
+[project]
+name = "ha-targeting-temperature-wave"
+version = "0"
+description = "Home Assistant custom components for a target daily temperature wave, and experiments on house thermal behaviour."
+# Home Assistant's own minimum.
+requires-python = ">=3.13"
+# Direct runtime requirements, with minimum versions. Exact versions of
+# everything, direct and indirect, live in `uv.lock`.
+dependencies = []
+
+
+[dependency-groups]
+# Plots and reports for the experiments (scripts only; the custom components
+# themselves use the standard library).
+analysis = ["matplotlib >= 3.9"]
+dev = [
+  { include-group = "analysis" },
+  "invoke >= 2.2",
+  "pytest >= 8",
+  "ruff >= 0.14",
+  "taplo >= 0.9",                 # formats pyproject.toml
+  "validate-pyproject >= 0.24",   # checks pyproject.toml against the schemas
+]
+
+[tool.python-style]
+kind = "tooling"
+
+[tool.uv]
+# not built or installed as a package
+package = false
+
+[tool.pytest.ini_options]
+addopts = ["--import-mode=importlib"]
+pythonpath = ["."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 88
+# also skip excluded paths when a path is given explicitly
+force-exclude = true
+extend-exclude = ["_build"]
+
+[tool.ruff.format]
+# Reformat code snippets in docstrings.
+docstring-code-format = true
+# Keep each file's existing line endings, so Windows (CRLF working tree) and
+# the Linux CI runner don't fight each other.
+line-ending = "auto"
+
+[tool.ruff.lint]
+# Enable `from __future__ import annotations` imports
+future-annotations = true
+# Added to ruff's default (E4, E7, E9, F)
+extend-select = [
+  "A",   # shadowing builtin names
+  "B",   # bugbear
+  "E",
+  "W",   # pycodestyle
+  "I",   # isort
+  "N",   # PEP8 naming
+  "PTH", # use pathlib
+  "RUF", # ruff-specific
+  "SIM", # simplify
+  "UP",  # pyupgrade (limited by `requires-python`)
+  "YTT", # flake8-2020 (common issues with Python version checks)
+]
+
+[tool.ruff.lint.isort]
+# Sort imports within their section independent of the import type
+force-sort-within-sections = true
+known-first-party = ["custom_components"]
+# Framework sections are standard boilerplate; an unused one costs nothing.
+# Delete a section's name from `section-order` only if its package clashes.
+section-order = [
+  "future",
+  "standard-library",
+  "django",
+  "pelican",
+  "third-party",
+  "first-party",
+  "local-folder",
+]
+
+[tool.ruff.lint.isort.sections]
+"django" = ["django"]
+"pelican" = ["pelican"]

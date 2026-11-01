@@ -36,7 +36,7 @@ EXAMPLE_LOCATIONS: tuple[Location, ...] = (
 
 
 def locations_from_config(items: list[dict]) -> list[Location]:
-    """Build locations from config dicts: ``name``, ``latitude``, ``longitude``, ``kind``."""
+    """Build locations from dicts with name, latitude, longitude and kind."""
     return [
         Location(
             name=item["name"],

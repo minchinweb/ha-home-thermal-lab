@@ -1,7 +1,8 @@
-"""Tests for the wave fit (run with ``python -m unittest`` or pytest)."""
+"""Tests for the wave fit."""
 
 import math
-import unittest
+
+import pytest
 
 from custom_components.house_thermal_lab import wave_fit
 
@@ -14,31 +15,30 @@ def _day(mean, amp, peak, step=1.0):
     ]
 
 
-class FitDayTests(unittest.TestCase):
-    def test_recovers_parameters(self):
-        fit = wave_fit.fit_day(_day(10.0, 6.0, 15.0))
-        self.assertAlmostEqual(fit.mean, 10.0, places=6)
-        self.assertAlmostEqual(fit.amplitude, 6.0, places=6)
-        self.assertAlmostEqual(fit.peak_hour, 15.0, places=6)
-        self.assertAlmostEqual(fit.trough_hour, 3.0, places=6)
-        self.assertLess(fit.rmse, 1e-9)
-
-    def test_peak_wraps_past_midnight(self):
-        fit = wave_fit.fit_day(_day(0.0, 3.0, 1.0))
-        self.assertAlmostEqual(fit.peak_hour, 1.0, places=6)
-
-    def test_non_sinusoidal_day_has_residual(self):
-        samples = [(h, 20.0 if 10 <= h < 16 else 10.0) for h in range(24)]
-        self.assertGreater(wave_fit.fit_day(samples).rmse, 1.0)
-
-    def test_too_few_samples(self):
-        with self.assertRaises(ValueError):
-            wave_fit.fit_day([(0, 1.0), (6, 2.0)])
-
-    def test_offset_wraps(self):
-        self.assertAlmostEqual(wave_fit.signed_offset_hours(23.0, 1.0), -2.0)
-        self.assertAlmostEqual(wave_fit.signed_offset_hours(15.0, 12.5), 2.5)
+def test_recovers_parameters():
+    fit = wave_fit.fit_day(_day(10.0, 6.0, 15.0))
+    assert fit.mean == pytest.approx(10.0)
+    assert fit.amplitude == pytest.approx(6.0)
+    assert fit.peak_hour == pytest.approx(15.0)
+    assert fit.trough_hour == pytest.approx(3.0)
+    assert fit.rmse < 1e-9
 
 
-if __name__ == "__main__":
-    unittest.main()
+def test_peak_wraps_past_midnight():
+    fit = wave_fit.fit_day(_day(0.0, 3.0, 1.0))
+    assert fit.peak_hour == pytest.approx(1.0)
+
+
+def test_non_sinusoidal_day_has_residual():
+    samples = [(h, 20.0 if 10 <= h < 16 else 10.0) for h in range(24)]
+    assert wave_fit.fit_day(samples).rmse > 1.0
+
+
+def test_too_few_samples():
+    with pytest.raises(ValueError, match="at least 4"):
+        wave_fit.fit_day([(0, 1.0), (6, 2.0)])
+
+
+def test_offset_wraps():
+    assert wave_fit.signed_offset_hours(23.0, 1.0) == pytest.approx(-2.0)
+    assert wave_fit.signed_offset_hours(15.0, 12.5) == pytest.approx(2.5)

@@ -7,11 +7,11 @@ comparable across places (see :mod:`solar`).
 
 from __future__ import annotations
 
+from collections.abc import Callable
+from datetime import date, datetime, timedelta
 import json
 import urllib.parse
 import urllib.request
-from collections.abc import Callable
-from datetime import date, datetime, timedelta
 
 from .locations import Location
 
@@ -23,7 +23,7 @@ Fetcher = Callable[[str], dict]
 
 def urllib_fetch(url: str) -> dict:
     """Blocking fetch; run in an executor when called from Home Assistant."""
-    with urllib.request.urlopen(url, timeout=60) as resp:  # noqa: S310
+    with urllib.request.urlopen(url, timeout=60) as resp:
         return json.load(resp)
 
 
@@ -53,7 +53,7 @@ def fetch_hourly(
     hourly = body["hourly"]
     return [
         (datetime.fromisoformat(t), float(v))
-        for t, v in zip(hourly["time"], hourly["temperature_2m"])
+        for t, v in zip(hourly["time"], hourly["temperature_2m"], strict=True)
         if v is not None
     ]
 
