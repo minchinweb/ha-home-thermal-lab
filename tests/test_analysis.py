@@ -163,3 +163,26 @@ def test_fetch_home_position():
         "http://ha:8123", "t", lambda _u, _t: {"latitude": 53.5, "longitude": -113.5}
     )
     assert pos == (53.5, -113.5)
+
+
+def test_list_temperature_sensors():
+    states = [
+        {
+            "entity_id": "sensor.b",
+            "state": "1",
+            "attributes": {"device_class": "temperature", "friendly_name": "B"},
+        },
+        {
+            "entity_id": "sensor.a",
+            "state": "2",
+            "attributes": {"device_class": "temperature"},
+        },
+        {
+            "entity_id": "sensor.h",
+            "state": "3",
+            "attributes": {"device_class": "humidity"},
+        },
+        {"entity_id": "light.x", "state": "on", "attributes": {}},
+    ]
+    out = ha_history.list_temperature_sensors("http://ha", "t", lambda _u, _t: states)
+    assert out == [("sensor.a", "", "2"), ("sensor.b", "B", "1")]

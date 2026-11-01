@@ -120,3 +120,30 @@ def fetch_sensor_history(
     )
     body = fetch(url, token)
     return hourly_means(body[0] if body else [])
+
+
+def list_temperature_sensors(
+    base_url: str, token: str, fetch: AuthFetcher = urllib_fetch_auth
+) -> list[tuple[str, str, str]]:
+    """List temperature sensors, to find the entity ids to analyse.
+
+    Args:
+        base_url: Home Assistant URL.
+        token: Long-lived access token.
+        fetch: Function that fetches a URL as JSON (replaceable in tests).
+
+    Returns:
+        ``(entity_id, friendly_name, current_state)`` for each sensor whose
+        device class is temperature, sorted by entity id.
+    """
+    states = fetch(f"{base_url.rstrip('/')}/api/states", token)
+    return sorted(
+        (
+            s["entity_id"],
+            s.get("attributes", {}).get("friendly_name", ""),
+            s["state"],
+        )
+        for s in states
+        if s["entity_id"].startswith("sensor.")
+        and s.get("attributes", {}).get("device_class") == "temperature"
+    )

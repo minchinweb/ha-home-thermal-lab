@@ -8,6 +8,7 @@ Usage (from the repository root)::
 ``--location "name,lat,lon,kind"`` may be repeated; with none given the example
 locations are used.
 
+To find sensor entity ids, run with ``--ha-url URL --ha-list``.
 To add a Home Assistant sensor, set ``HA_TOKEN`` (a long-lived access token) and
 pass ``--ha-url`` and ``--ha-entity``. The home position comes from Home
 Assistant, and weather classes come from Open-Meteo for that position.
@@ -35,6 +36,7 @@ from custom_components.house_thermal_lab.experiments import (
 from custom_components.house_thermal_lab.ha_history import (
     fetch_home_position,
     fetch_sensor_history,
+    list_temperature_sensors,
 )
 from custom_components.house_thermal_lab.locations import (
     EXAMPLE_LOCATIONS,
@@ -66,7 +68,17 @@ def main() -> None:
     p.add_argument("--plot-dir", type=Path, help="write one PNG per location here")
     p.add_argument("--ha-url", help="Home Assistant URL, e.g. http://ha.local:8123")
     p.add_argument("--ha-entity", help="temperature sensor entity id")
+    p.add_argument(
+        "--ha-list", action="store_true", help="list temperature sensors and exit"
+    )
     args = p.parse_args()
+
+    if args.ha_list:
+        for entity_id, name, state in list_temperature_sensors(
+            args.ha_url, os.environ["HA_TOKEN"]
+        ):
+            print(f"{entity_id:<55} {state:>12}  {name}")
+        return
 
     plot = None
     if args.plot_dir:
