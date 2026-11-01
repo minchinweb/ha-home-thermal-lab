@@ -1,4 +1,4 @@
-# 12 Thermal momentum of the house
+# 13 Thermal momentum of the house
 
 **Status:** untested
 
@@ -12,7 +12,7 @@
 - Lag: the delay and damping of each room's daily wave compared with the outdoor wave (the phase lag and amplitude ratio of the fits from 01/02).
 - Compare rooms and floors; a larger `tau` means more momentum.
 
-**Feeds:** 15 (prediction) and 16 (control): the overshoot to avoid is this momentum. Shares parameters with 04, 05, 09 and 11.
+**Feeds:** 16 (prediction) and 17 (control): the overshoot to avoid is this momentum. Shares parameters with 04, 05, 06, 10 and 12.
 
 ## Results
 

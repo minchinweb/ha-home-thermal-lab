@@ -1,4 +1,4 @@
-"""Measure heat bleeding into other zones when one zone calls (hypotheses 05, 09).
+"""Measure heat bleeding into other zones when one zone calls (hypothesis 06).
 
 The zoning valves leak, so a heat call in one zone warms the others too, the
 kitchen most of all. This looks only at episodes where a single zone called for

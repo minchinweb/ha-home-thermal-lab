@@ -1,4 +1,4 @@
-# 14 Occupancy from room temperature changes
+# 15 Occupancy from room temperature changes
 
 **Status:** untested
 
@@ -13,7 +13,7 @@
 - Evaluate as a detector (precision/recall), and check whether it adds information beyond existing sensors.
 - Optionally add humidity and CO2 as stronger occupancy signals.
 
-**Depends on:** 04, 05, 09, 10, 11, 12 (thermal momentum), 13 (electrical heat).
+**Depends on:** 04, 05, 06, 10, 11, 12, 13 (thermal momentum), 14 (electrical heat).
 
 ## Results
 

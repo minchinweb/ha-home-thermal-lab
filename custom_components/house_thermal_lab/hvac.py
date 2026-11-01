@@ -1,4 +1,4 @@
-"""Furnace/AC runs from on/off call-state history (hypotheses 05-07)."""
+"""Furnace/AC runs from on/off call-state history (hypotheses 05-08)."""
 
 from __future__ import annotations
 

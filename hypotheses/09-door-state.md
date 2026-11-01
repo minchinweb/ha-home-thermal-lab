@@ -1,4 +1,4 @@
-# 8 Door open/closed from inter-room gradients
+# 09 Door open/closed from inter-room gradients
 
 **Status:** untested
 
@@ -10,7 +10,7 @@
 - Classification problem. Features: gradient, decay rate of the gradient, rate-of-change correlation.
 - Needs labelled examples; collect by logging door state for a few weeks.
 
-**Feeds:** 09 (coupling depends on door state).
+**Feeds:** 10 (coupling depends on door state).
 
 ## Results
 

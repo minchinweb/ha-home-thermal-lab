@@ -1,4 +1,4 @@
-"""How a room's temperature responds to furnace runs (hypotheses 05 and 12)."""
+"""How a room's temperature responds to furnace runs (hypotheses 05 and 13)."""
 
 from __future__ import annotations
 

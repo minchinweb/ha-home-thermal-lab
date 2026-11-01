@@ -1,4 +1,4 @@
-"""How each zone's temperature responds to furnace runs (hypotheses 05, 12).
+"""How each zone's temperature responds to furnace runs (hypotheses 05, 13).
 
 The zone board means the furnace runs whenever any zone calls for heat, so
 episodes are the union of every zone's heating runs. For each zone this reports

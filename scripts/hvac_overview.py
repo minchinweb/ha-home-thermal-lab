@@ -1,6 +1,6 @@
 """Summarise furnace and AC activity per zone from Home Assistant history.
 
-A first look for hypotheses 05-07: how often, and for how long, does each zone
+A first look for hypotheses 05-08: how often, and for how long, does each zone
 call for heating, cooling or the fan alone? Uses the ``hvac_action`` attribute
 of ``climate.<zone>`` over the last ``--days`` days (the recorder keeps states
 for ``purge_keep_days``; the climate entities are never in the statistics).

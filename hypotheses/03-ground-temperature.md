@@ -21,7 +21,7 @@ where `T_mean` is the mean annual air (surface) temperature, `A` is the annual a
 - Test how well air temperature alone predicts them, and whether snow depth or soil moisture improves it.
 - Use the fitted model as the "outside" temperature for basement rooms in 04, and check whether it makes the basement flux fit better than using air temperature.
 
-**Feeds:** 04, and the basement parts of 05-07, 09 and 12.
+**Feeds:** 04, and the basement parts of 05-08, 10 and 13.
 
 ## Results
 
