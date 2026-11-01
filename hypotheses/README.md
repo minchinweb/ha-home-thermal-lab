@@ -22,6 +22,7 @@ Home Assistant, so they can be re-run later or by others.
 | [11](11-occupancy.md) | Occupancy from room temperature changes | B | untested |
 | [12](12-predict-day.md) | Predict next-day house/room temperature | D. Predict and control | untested |
 | [13](13-control.md) | Decide whether to run furnace/AC to avoid overshoot | D | untested |
+| [14](14-thermal-momentum.md) | Measure the house's thermal momentum (inertia, time constant) | B | untested |
 
 ## Dependency order
 

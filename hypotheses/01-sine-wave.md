@@ -19,4 +19,14 @@
 
 Run with `python scripts/run_h01_h02.py START END [--location "name,lat,lon,kind"]`. Locations are configurable; day boundaries use local mean solar time.
 
-_No full-year results recorded yet. June 2025 smoke run: median fitted peak was 3.0 h after solar noon (Edmonton), 1.9 h (Dieppe) and 0.9 h (Tahiti), so the solar-noon peak looks refuted, and the lag varies by location._
+Full year 2025, by season (medians; "range" is the mean warmest-minus-coolest reading):
+
+| Location | Season | Range C | RMSE C | Fitted peak after solar noon (h) |
+|---|---|---|---|---|
+| Edmonton | winter / summer | 9.0 / 9.6 | 1.22 / 0.76 | 2.8 / 3.2 |
+| Dieppe | winter / summer | 5.1 / 6.9 | 0.82 / 0.68 | 2.4 / 1.9 |
+| Tahiti | winter / summer | 8.1 / 8.4 | 1.14 / 1.07 | 0.9 / 0.7 |
+
+By weather, Edmonton's range is 11.9 C on sunny days against 7.9 C on rainy ones, and Dieppe's is 9.1 C against 5.3 C. Snow days at Edmonton peak earlier (0.8 h after noon).
+
+Early reading: the sine fit is decent (RMSE about 1 C on a range of 5-12 C), the peak is reliably after solar noon rather than at it, and the lag varies by place, season and weather. Winter at Edmonton fits worst. Not yet compared with a skewed wave or a second harmonic.

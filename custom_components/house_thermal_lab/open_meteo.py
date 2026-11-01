@@ -1,4 +1,4 @@
-"""Fetch historical hourly temperatures from the Open-Meteo archive API.
+"""Fetch historical hourly weather from the Open-Meteo archive API.
 
 Data is requested in GMT and converted to local *mean solar time* (UTC plus
 longitude / 15 h). That avoids daylight-saving jumps and makes "solar noon"
@@ -10,36 +10,63 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import date, datetime, timedelta
 import json
+from typing import TYPE_CHECKING
 import urllib.parse
 import urllib.request
 
-from .locations import Location
+from .readings import Reading, SolarReading
+
+if TYPE_CHECKING:
+    from .locations import Location
 
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
+HOURLY_VARIABLES = "temperature_2m,weather_code,cloud_cover"
 
 # A fetcher takes a URL and returns the decoded JSON body.
 Fetcher = Callable[[str], dict]
 
 
 def urllib_fetch(url: str) -> dict:
-    """Blocking fetch; run in an executor when called from Home Assistant."""
+    """Fetch JSON, blocking; run in an executor when called from Home Assistant.
+
+    Args:
+        url: The URL to fetch.
+
+    Returns:
+        The decoded JSON body.
+    """
     with urllib.request.urlopen(url, timeout=60) as resp:
         return json.load(resp)
 
 
 def build_url(location: Location, start: date, end: date) -> str:
-    """Archive API URL for hourly 2 m temperature in GMT."""
+    """Build the archive API URL for hourly weather in GMT.
+
+    Args:
+        location: Where to fetch.
+        start: First day, inclusive.
+        end: Last day, inclusive.
+
+    Returns:
+        The request URL.
+    """
     query = urllib.parse.urlencode(
         {
             "latitude": location.latitude,
             "longitude": location.longitude,
             "start_date": start.isoformat(),
             "end_date": end.isoformat(),
-            "hourly": "temperature_2m",
+            "hourly": HOURLY_VARIABLES,
             "timezone": "GMT",
         }
     )
     return f"{ARCHIVE_URL}?{query}"
+
+
+def _optional(values: list | None, index: int) -> float | None:
+    if values is None or index >= len(values):
+        return None
+    return values[index]
 
 
 def fetch_hourly(
@@ -47,28 +74,57 @@ def fetch_hourly(
     start: date,
     end: date,
     fetch: Fetcher = urllib_fetch,
-) -> list[tuple[datetime, float]]:
-    """Return ``(utc_time, temperature_c)`` pairs, skipping missing values."""
-    body = fetch(build_url(location, start, end))
-    hourly = body["hourly"]
-    return [
-        (datetime.fromisoformat(t), float(v))
-        for t, v in zip(hourly["time"], hourly["temperature_2m"], strict=True)
-        if v is not None
-    ]
+) -> list[Reading]:
+    """Fetch hourly readings, skipping hours with no temperature.
+
+    Args:
+        location: Where to fetch.
+        start: First day, inclusive.
+        end: Last day, inclusive.
+        fetch: Function that fetches a URL as JSON (replaceable in tests).
+
+    Returns:
+        Readings in UTC, oldest first.
+    """
+    hourly = fetch(build_url(location, start, end))["hourly"]
+    codes = hourly.get("weather_code")
+    clouds = hourly.get("cloud_cover")
+    out = []
+    for i, (t, temp) in enumerate(
+        zip(hourly["time"], hourly["temperature_2m"], strict=True)
+    ):
+        if temp is None:
+            continue
+        code = _optional(codes, i)
+        out.append(
+            Reading(
+                datetime.fromisoformat(t),
+                float(temp),
+                None if code is None else int(code),
+                _optional(clouds, i),
+            )
+        )
+    return out
 
 
 def to_solar_days(
-    samples: list[tuple[datetime, float]], longitude: float
-) -> dict[date, list[tuple[float, float]]]:
-    """Group UTC samples into local-mean-solar-time days.
+    readings: list[Reading], longitude: float
+) -> dict[date, list[SolarReading]]:
+    """Group UTC readings into local-mean-solar-time days.
 
-    Returns ``{date: [(solar_hour, temperature), ...]}``.
+    Args:
+        readings: Readings in UTC.
+        longitude: Longitude in degrees east.
+
+    Returns:
+        Readings for each solar day.
     """
     shift = timedelta(hours=longitude / 15.0)
-    days: dict[date, list[tuple[float, float]]] = {}
-    for t, v in samples:
-        solar = t + shift
+    days: dict[date, list[SolarReading]] = {}
+    for r in readings:
+        solar = r.time + shift
         hour = solar.hour + solar.minute / 60.0
-        days.setdefault(solar.date(), []).append((hour, v))
+        days.setdefault(solar.date(), []).append(
+            SolarReading(hour, r.temperature, r.weather_code, r.cloud_cover)
+        )
     return days

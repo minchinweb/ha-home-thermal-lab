@@ -10,6 +10,7 @@ from custom_components.house_thermal_lab.locations import (
     Location,
     locations_from_config,
 )
+from custom_components.house_thermal_lab.readings import Reading, SolarReading
 
 
 def _fake_body(lon, start, days, peak_after_noon=3.0, amp=5.0, mean=10.0):
@@ -72,8 +73,8 @@ def test_skips_missing_values():
 
 def test_solar_day_shift():
     # 15 degrees east is +1 h: 23:00 UTC falls on the next solar day at 00:00.
-    days = open_meteo.to_solar_days([(datetime(2025, 1, 1, 23), 1.0)], 15.0)
-    assert days == {date(2025, 1, 2): [(0.0, 1.0)]}
+    days = open_meteo.to_solar_days([Reading(datetime(2025, 1, 1, 23), 1.0)], 15.0)
+    assert days == {date(2025, 1, 2): [SolarReading(0.0, 1.0)]}
 
 
 def test_equation_of_time_known_extremes():
