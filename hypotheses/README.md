@@ -11,23 +11,25 @@ Home Assistant, so they can be re-run later or by others.
 |---|---|---|---|
 | [01](01-sine-wave.md) | Daily temperature is roughly sinusoidal | A. Validate the wave | in progress |
 | [02](02-solar-noon-peak.md) | Peak at solar noon, trough at solar midnight | A | in progress |
-| [03](03-furnace-power.md) | Furnace heating power from room gradient | B. Characterise house | untested |
-| [04](04-ac-power.md) | AC cooling power from room gradient | B | untested |
-| [05](05-fan-flux.md) | Heat flux of running the furnace fan | B | untested |
-| [06](06-door-state.md) | Door open/closed from inter-room gradients | B | untested |
-| [07](07-static-flux.md) | Static heat flux between rooms/floors | B | untested |
-| [08](08-solar-gain.md) | Predict room solar gain | C. Disturbances | untested |
-| [09](09-wind-loss.md) | Predict heat loss from wind speed/direction | C | untested |
-| [10](10-thermal-momentum.md) | Measure the house's thermal momentum (inertia, time constant) | B | untested |
-| [11](11-electrical-heat.md) | Electrical use becomes indoor heat | B | untested |
-| [12](12-occupancy.md) | Occupancy from room temperature changes | B | untested |
-| [13](13-predict-day.md) | Predict next-day house/room temperature | D. Predict and control | untested |
-| [14](14-control.md) | Decide whether to run furnace/AC to avoid overshoot | D | untested |
+| [03](03-ground-temperature.md) | Ground temperature follows a damped, lagged wave of air temperature | B. Characterise house | untested |
+| [04](04-envelope-flux.md) | Heat flux through the envelope from inside and outside (or ground) temperatures | B | untested |
+| [05](05-furnace-power.md) | Furnace heating power from room gradient | B. Characterise house | untested |
+| [06](06-ac-power.md) | AC cooling power from room gradient | B | untested |
+| [07](07-fan-flux.md) | Heat flux of running the furnace fan | B | untested |
+| [08](08-door-state.md) | Door open/closed from inter-room gradients | B | untested |
+| [09](09-static-flux.md) | Static heat flux between rooms/floors | B | untested |
+| [10](10-solar-gain.md) | Predict room solar gain | C. Disturbances | untested |
+| [11](11-wind-loss.md) | Predict heat loss from wind speed/direction | C | untested |
+| [12](12-thermal-momentum.md) | Measure the house's thermal momentum (inertia, time constant) | B | untested |
+| [13](13-electrical-heat.md) | Electrical use becomes indoor heat | B | untested |
+| [14](14-occupancy.md) | Occupancy from room temperature changes | B | untested |
+| [15](15-predict-day.md) | Predict next-day house/room temperature | D. Predict and control | untested |
+| [16](16-control.md) | Decide whether to run furnace/AC to avoid overshoot | D | untested |
 
 ## Dependency order
 
 A (1, 2) feeds back into the wave component. B and C produce the parameters
-for a grey-box RC thermal model. D (13, 14) uses that model plus a weather
+for a grey-box RC thermal model. D (15, 16) uses that model plus a weather
 forecast, and only makes sense once B and C hold up.
 
 ## Cross-cutting notes
@@ -40,4 +42,4 @@ forecast, and only makes sense once B and C hold up.
 - Furnace, fan, solar gain and occupants all act at once. Pick clean windows
   (e.g. overnight, one actor changing) to isolate effects.
 - AC and oven are not individually metered, so they are unexplained terms
-  in the electrical-to-heat balance (#10).
+  in the electrical-to-heat balance (#13).

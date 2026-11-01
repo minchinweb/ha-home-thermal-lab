@@ -1,4 +1,4 @@
-# 05 Heat flux of running the furnace fan
+# 7 Heat flux of running the furnace fan
 
 **Status:** untested
 
@@ -8,7 +8,7 @@
 
 **Method:**
 - Isolate fan-only periods.
-- Measure how quickly inter-room differences collapse versus the no-fan baseline (07).
+- Measure how quickly inter-room differences collapse versus the no-fan baseline (09).
 - Estimate per-zone fan flux coefficients.
 
 **Caveats:** Fan-only periods may be rare; may need to schedule deliberate experiments.

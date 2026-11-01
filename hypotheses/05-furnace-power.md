@@ -1,4 +1,4 @@
-# 03 Furnace heating power from room temperature gradient
+# 5 Furnace heating power from room temperature gradient
 
 **Status:** untested
 

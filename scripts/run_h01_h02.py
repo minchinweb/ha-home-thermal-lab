@@ -8,11 +8,13 @@ Usage (from the repository root)::
 ``--location "name,lat,lon,kind"`` may be repeated; with none given the example
 locations are used.
 
-To find sensor entity ids, run with ``--ha-url URL --ha-list``.
-To add a Home Assistant sensor, set ``HA_TOKEN`` (a long-lived access token) and
-pass ``--ha-url`` and ``--ha-entity``. The home position comes from Home
+Settings (HA_URL, HA_TOKEN, HA_ENTITY) are read from a git-ignored ``.env`` file
+(copy ``.env.example``) or from the environment.
+
+To find sensor entity ids, run with ``--ha-list``. To add a Home Assistant
+sensor, set ``HA_URL``, ``HA_TOKEN`` (a long-lived access token) and ``HA_ENTITY``
+(or pass ``--ha-url``/``--ha-entity``). The home position comes from Home
 Assistant, and weather classes come from Open-Meteo for that position.
-"""
 
 from __future__ import annotations
 
@@ -24,6 +26,8 @@ import sys
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from envfile import load_env
 
 from custom_components.house_thermal_lab.experiments import (
     GROUP_BY,
@@ -60,14 +64,23 @@ def _slug(name: str) -> str:
 
 def main() -> None:
     """Parse arguments, run the experiments and print (and plot) the results."""
+    load_env()
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("start", type=date.fromisoformat)
     p.add_argument("end", type=date.fromisoformat)
     p.add_argument("--location", action="append", type=_parse_location)
     p.add_argument("--group-by", choices=GROUP_BY, default="all")
     p.add_argument("--plot-dir", type=Path, help="write one PNG per location here")
-    p.add_argument("--ha-url", help="Home Assistant URL, e.g. http://ha.local:8123")
-    p.add_argument("--ha-entity", help="temperature sensor entity id")
+    p.add_argument(
+        "--ha-url",
+        default=os.environ.get("HA_URL"),
+        help="Home Assistant URL (default: HA_URL)",
+    )
+    p.add_argument(
+        "--ha-entity",
+        default=os.environ.get("HA_ENTITY"),
+        help="sensor entity id (default: HA_ENTITY)",
+    )
     p.add_argument(
         "--ha-list", action="store_true", help="list temperature sensors and exit"
     )

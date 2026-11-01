@@ -6,7 +6,7 @@ wave, and for testing hypotheses about how a house behaves thermally.
 - `custom_components/house_thermal_lab/`: runs the experiments inside Home
   Assistant, using data already in its recorder.
 - `hypotheses/`: one file per hypothesis (claim, data, method, results).
-- `scripts/`: command-line runners and reports.
+- `scripts/`: command-line runners and reports. Copy `.env.example` to `.env` (git-ignored) and fill in your Home Assistant URL, token and sensor.
 
 ## Development
 
