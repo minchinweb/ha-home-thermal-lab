@@ -62,24 +62,34 @@ def fetch_home_position(
     return float(config["latitude"]), float(config["longitude"])
 
 
-def hourly_means(states: list[dict]) -> list[Reading]:
+def hourly_means(states: list[dict], attribute: str | None = None) -> list[Reading]:
     """Average irregular sensor states into hourly UTC readings.
 
     Args:
-        states: Home Assistant state dicts with ``state`` and ``last_changed``.
+        states: Home Assistant state dicts with ``state`` and ``last_changed``
+            (or ``last_updated``, used when reading an attribute).
+        attribute: Read this attribute instead of the state, as for the
+            ``temperature`` of a ``weather`` entity (whose state is a
+            condition such as ``cloudy``).
 
     Returns:
         One reading per hour that has numeric states, oldest first.
     """
     buckets: dict[datetime, list[float]] = defaultdict(list)
     for s in states:
-        if s.get("state") in _BAD_STATES:
+        raw = (
+            s.get("state")
+            if attribute is None
+            else s.get("attributes", {}).get(attribute)
+        )
+        if raw is None or raw in _BAD_STATES:
             continue
         try:
-            value = float(s["state"])
+            value = float(raw)
         except (TypeError, ValueError):
             continue
-        when = datetime.fromisoformat(s["last_changed"]).astimezone(UTC)
+        stamp = s["last_changed"] if attribute is None else s["last_updated"]
+        when = datetime.fromisoformat(stamp).astimezone(UTC)
         hour = when.replace(minute=0, second=0, microsecond=0, tzinfo=None)
         buckets[hour].append(value)
     return [Reading(h, statistics.fmean(v)) for h, v in sorted(buckets.items())]
@@ -92,8 +102,12 @@ def fetch_sensor_history(
     start: datetime,
     end: datetime,
     fetch: AuthFetcher = urllib_fetch_auth,
+    attribute: str | None = None,
 ) -> list[Reading]:
     """Fetch an entity's history as hourly readings.
+
+    A ``weather.*`` entity keeps its temperature in the ``temperature``
+    attribute, so that attribute is read automatically for those.
 
     Args:
         base_url: Home Assistant URL.
@@ -102,30 +116,33 @@ def fetch_sensor_history(
         start: Start of the period (timezone-aware).
         end: End of the period (timezone-aware).
         fetch: Function that fetches a URL as JSON (replaceable in tests).
+        attribute: Read this attribute instead of the state.
 
     Returns:
         Hourly mean readings in UTC.
     """
-    query = urllib.parse.urlencode(
-        {
-            "filter_entity_id": entity_id,
-            "end_time": end.isoformat(),
-            "minimal_response": "",
-            "no_attributes": "",
-        }
-    )
+    if attribute is None and entity_id.startswith("weather."):
+        attribute = "temperature"
+    params = {"filter_entity_id": entity_id, "end_time": end.isoformat()}
+    if attribute is None:
+        # states only; attributes make the response much bigger
+        params |= {"minimal_response": "", "no_attributes": ""}
+    query = urllib.parse.urlencode(params)
     url = (
         f"{base_url.rstrip('/')}/api/history/period/"
         f"{urllib.parse.quote(start.isoformat())}?{query}"
     )
     body = fetch(url, token)
-    return hourly_means(body[0] if body else [])
+    return hourly_means(body[0] if body else [], attribute)
 
 
 def list_temperature_sensors(
     base_url: str, token: str, fetch: AuthFetcher = urllib_fetch_auth
 ) -> list[tuple[str, str, str]]:
-    """List temperature sensors, to find the entity ids to analyse.
+    """List entities that report a temperature, to find the ids to analyse.
+
+    Includes ``sensor.*`` entities with the temperature device class, and
+    ``weather.*`` entities (which report it as an attribute).
 
     Args:
         base_url: Home Assistant URL.
@@ -133,17 +150,21 @@ def list_temperature_sensors(
         fetch: Function that fetches a URL as JSON (replaceable in tests).
 
     Returns:
-        ``(entity_id, friendly_name, current_state)`` for each sensor whose
-        device class is temperature, sorted by entity id.
+        ``(entity_id, friendly_name, current_temperature)`` sorted by id.
     """
     states = fetch(f"{base_url.rstrip('/')}/api/states", token)
-    return sorted(
-        (
-            s["entity_id"],
-            s.get("attributes", {}).get("friendly_name", ""),
-            s["state"],
-        )
-        for s in states
-        if s["entity_id"].startswith("sensor.")
-        and s.get("attributes", {}).get("device_class") == "temperature"
-    )
+    found = []
+    for s in states:
+        attrs = s.get("attributes", {})
+        entity_id = s["entity_id"]
+        if (
+            entity_id.startswith("sensor.")
+            and attrs.get("device_class") == "temperature"
+        ):
+            value = s["state"]
+        elif entity_id.startswith("weather.") and "temperature" in attrs:
+            value = str(attrs["temperature"])
+        else:
+            continue
+        found.append((entity_id, attrs.get("friendly_name", ""), value))
+    return sorted(found)

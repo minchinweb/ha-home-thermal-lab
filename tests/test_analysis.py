@@ -186,3 +186,44 @@ def test_list_temperature_sensors():
     ]
     out = ha_history.list_temperature_sensors("http://ha", "t", lambda _u, _t: states)
     assert out == [("sensor.a", "", "2"), ("sensor.b", "B", "1")]
+
+
+def test_weather_entity_reads_temperature_attribute():
+    seen = []
+
+    def fake(url, _token):
+        seen.append(url)
+        return [
+            [
+                {
+                    "state": "cloudy",
+                    "attributes": {"temperature": -2.5},
+                    "last_updated": "2025-06-01T00:10:00+00:00",
+                },
+                {
+                    "state": "fog",
+                    "attributes": {"temperature": -3.5},
+                    "last_updated": "2025-06-01T00:50:00+00:00",
+                },
+            ]
+        ]
+
+    start = datetime(2025, 6, 1, tzinfo=UTC)
+    out = ha_history.fetch_sensor_history(
+        "http://ha", "t", "weather.home", start, start, fake
+    )
+    assert out == [Reading(datetime(2025, 6, 1, 0), -3.0)]
+    assert "no_attributes" not in seen[0]
+
+
+def test_list_includes_weather_entities():
+    states = [
+        {
+            "entity_id": "weather.home",
+            "state": "fog",
+            "attributes": {"temperature": -2.4},
+        },
+        {"entity_id": "weather.broken", "state": "unknown", "attributes": {}},
+    ]
+    out = ha_history.list_temperature_sensors("http://ha", "t", lambda _u, _t: states)
+    assert out == [("weather.home", "", "-2.4")]

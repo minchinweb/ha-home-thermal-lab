@@ -119,12 +119,19 @@ def main() -> None:
         sensor = fetch_sensor_history(args.ha_url, token, args.ha_entity, start, end)
         weather = fetch_hourly(here, args.start, args.end)
         results = analyse_with_external_weather(sensor, weather, here)
-        if plot:
-            plot(here, results)
-        summaries.extend(
-            summarise(here, group, label)
-            for label, group in group_results(results, args.group_by).items()
-        )
+        if not results:
+            print(
+                f"{args.ha_entity}: fewer than 22 hourly readings on every day, "
+                "so nothing to analyse (is the history too short or too sparse?)",
+                file=sys.stderr,
+            )
+        else:
+            if plot:
+                plot(here, results)
+            summaries.extend(
+                summarise(here, group, label)
+                for label, group in group_results(results, args.group_by).items()
+            )
 
     print(format_table(summaries))
 
