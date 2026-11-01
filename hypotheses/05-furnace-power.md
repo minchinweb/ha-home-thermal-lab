@@ -37,3 +37,12 @@ First response look (10 days, late October 2026; `scripts/hvac_response.py`, the
 
 Cautions: short episodes (the median is 9 minutes, about 16 a day) are within the thermostat's resolution (about 0.1 C), so only the 20-minute-plus episodes are usable. The kitchen warms by 2 C during long episodes although its thermostat never calls for heat. That is either air arriving through the zone board (several zones calling) or daytime solar gain through the south and west windows, and this data cannot separate them yet; it needs the solar term from 10. The rate is the room's rise per hour, not power in watts; converting needs the thermal mass.
 
+Crossover bleed (`scripts/hvac_bleed.py`, 10 days). A heat call in one zone also warms the others through the leaky zoning valves, and the kitchen most of all. Looking only at episodes where z4 alone called for at least 15 minutes, and subtracting each room's drift over an equal quiet stretch just before, the median extra warming rate (C per hour) was:
+
+| Time of day | Episodes | z4 (calling) | z1 kitchen | z2 basement | z3 master |
+|---|---|---|---|---|---|
+| Night (sun below -6 degrees) | 20 | +1.66 | +3.06 | +0.55 | +0.33 |
+| Day (sun above 5 degrees) | 6 | +1.66 | +3.08 | +0.86 | +0.07 |
+
+At night, with no sun, the kitchen warms about twice as fast as the zone that is calling, and at the same rate as in the day. So the kitchen's rise is bleed from z4's call, and solar gain is not needed to explain it. This is the crossover flux between zones, and it can be measured per pair of zones. Only z4-alone episodes are well covered; z2-alone has a single episode, so the other direction is still open.
+

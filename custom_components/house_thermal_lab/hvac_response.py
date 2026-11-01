@@ -85,6 +85,9 @@ class RunResponse:
             ``t_end``), within the follow-up window.
         minutes_to_peak: Minutes after the end until the room peaked.
         own_call: Whether this room's own thermostat was calling during it.
+        baseline_rate_per_h: The room's drift per hour over an equally long
+            quiet stretch just before the episode, or ``None`` if another
+            episode was too close.
     """
 
     start: datetime
@@ -96,6 +99,14 @@ class RunResponse:
     overshoot: float
     minutes_to_peak: float
     own_call: bool
+    baseline_rate_per_h: float | None = None
+
+    @property
+    def excess_rate_per_h(self) -> float | None:
+        """Rate while running minus the drift beforehand (the furnace's effect)."""
+        if self.baseline_rate_per_h is None:
+            return None
+        return self.rate_per_h - self.baseline_rate_per_h
 
 
 def analyse_responses(
@@ -132,6 +143,10 @@ def analyse_responses(
         t1 = value_at(series, ep.end)
         if t0 is None or t1 is None:
             continue
+        pre_start = ep.start - timedelta(minutes=ep.minutes)
+        quiet = i == 0 or episodes[i - 1].end <= pre_start
+        t_pre = value_at(series, pre_start) if quiet else None
+        baseline = None if t_pre is None else (t0 - t_pre) / (ep.minutes / 60.0)
         after = [(t, v) for t, v in series if ep.end <= t <= limit]
         peak_time, peak = max(after, key=lambda tv: tv[1], default=(ep.end, t1))
         peak = max(peak, t1)
@@ -146,6 +161,7 @@ def analyse_responses(
                 overshoot=peak - t1,
                 minutes_to_peak=max((peak_time - ep.end).total_seconds() / 60.0, 0.0),
                 own_call=any(r.start < ep.end and r.end > ep.start for r in own_runs),
+                baseline_rate_per_h=baseline,
             )
         )
     return out

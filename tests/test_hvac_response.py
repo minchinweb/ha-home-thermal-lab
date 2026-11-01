@@ -65,3 +65,30 @@ def test_value_at_and_series():
         {"attributes": {}, "last_updated": "2025-01-01T00:05:00+00:00"},
     ]
     assert len(temperature_series(states)) == 1
+
+
+def test_baseline_drift_and_excess_rate():
+    # drifts down 0.2 C in the 10 minutes before a 10 minute run, then rises 0.5
+    series = [(at(0), 20.2), (at(10), 20.0), (at(20), 20.5)]
+    (r,) = analyse_responses([Run(at(10), at(20))], series)
+    assert r.baseline_rate_per_h == pytest.approx(-1.2)
+    assert r.rate_per_h == pytest.approx(3.0)
+    assert r.excess_rate_per_h == pytest.approx(4.2)
+
+
+def test_baseline_unknown_when_previous_episode_is_close():
+    series = [(at(0), 20.0), (at(30), 20.5)]
+    episodes = [Run(at(5), at(15)), Run(at(20), at(30))]
+    out = analyse_responses(episodes, series)
+    assert out[1].baseline_rate_per_h is None
+    assert out[1].excess_rate_per_h is None
+
+
+def test_solar_elevation():
+    from custom_components.house_thermal_lab.solar import solar_elevation_degrees
+
+    # Edmonton, summer solstice: about 60 degrees at noon, below -6 at midnight
+    noon = datetime(2025, 6, 21, 19, 0, tzinfo=UTC)
+    midnight = datetime(2025, 6, 21, 7, 0, tzinfo=UTC)
+    assert solar_elevation_degrees(noon, 53.5, -113.5) == pytest.approx(60.0, abs=2.0)
+    assert solar_elevation_degrees(midnight, 53.5, -113.5) < -6.0
