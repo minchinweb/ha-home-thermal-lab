@@ -10,6 +10,8 @@
 
 **Caveats:** AC electrical draw is not separately metered; derive runtime from call state.
 
+**Zone board:** the AC runs whenever any zone calls for cooling, and it alternates with heat when both are requested. See the zone-board note in 05.
+
 ## Results
 
 _none yet_

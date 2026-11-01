@@ -15,6 +15,25 @@
 
 **Caveats:** Zone valve leakage; unknown thermal mass C (fit jointly, or from cooldown periods).
 
+**Zone board.** A zone board sits upstream of the thermostats, so a zone's call is a request, not proof its own air is running:
+- With one heat call and one AC call at the same time, the board alternates between heat and AC.
+- With several heat calls (or several AC calls), all zones become active, not just the ones calling.
+- Fan calls only take effect when there is no heat or AC call, and then all zones are active.
+So the furnace is on whenever any zone calls for heat, and a zone's temperature can rise because of another zone's call. Analyse heating as the union of all zones' heat calls, and treat a zone that is not itself calling as a measure of leakage and spillover.
+
 ## Results
 
 First look (9 days, late October 2026; `scripts/hvac_overview.py`): z4 (office) heated 3.2 h/day in about 11 runs (median 9 min, longest 84 min) on every day. z2 (basement) heated 0.8 h/day in 6 runs (median 6 min). z1 and z3 never called for heat. No cooling. Every zone also shows long fan-only periods (5-14 h/day), including runs of 6-12 h, which will matter for 07 (fan flux).
+
+First response look (10 days, late October 2026; `scripts/hvac_response.py`, thermostat `current_temperature`, episodes of 20 minutes or more, 25-29 per zone). Episodes are the union of all zones' heat calls. Medians:
+
+| Zone | Own call | Episodes | Rise per episode | Rate while running | Keeps rising after end | Time to peak |
+|---|---|---|---|---|---|---|
+| z4 office | yes | 25 | 1.1 C | 1.5 C/h | 0.1 C | 3 min |
+| z2 basement | yes | 7 | 0.2 C | 0.3 C/h | 0.2 C | 12 min |
+| z2 basement | no | 18 | 0.7 C | 0.7 C/h | 0.6 C | 14 min |
+| z1 kitchen | no (never calls) | 25 | 2.0 C | 2.6 C/h | 0.1 C | 3 min |
+| z3 master | no (never calls) | 25 | 0.1 C | 0.1 C/h | 0.1 C | 9 min |
+
+Cautions: short episodes (the median is 9 minutes, about 16 a day) are within the thermostat's resolution (about 0.1 C), so only the 20-minute-plus episodes are usable. The kitchen warms by 2 C during long episodes although its thermostat never calls for heat. That is either air arriving through the zone board (several zones calling) or daytime solar gain through the south and west windows, and this data cannot separate them yet; it needs the solar term from 10. The rate is the room's rise per hour, not power in watts; converting needs the thermal mass.
+
