@@ -30,3 +30,15 @@ Full year 2025, by season (medians; "range" is the mean warmest-minus-coolest re
 By weather, Edmonton's range is 11.9 C on sunny days against 7.9 C on rainy ones, and Dieppe's is 9.1 C against 5.3 C. Snow days at Edmonton peak earlier (0.8 h after noon).
 
 Early reading: the sine fit is decent (RMSE about 1 C on a range of 5-12 C), the peak is reliably after solar noon rather than at it, and the lag varies by place, season and weather. Winter at Edmonton fits worst. Not yet compared with a skewed wave or a second harmonic.
+
+Own data, January-October 2026 (Home Assistant long-term statistics, hourly; Edmonton sensor `sensor.edmonton_temperature`, indoor sensors `sensor.z1..z4_temperature`). Fitted peak after solar noon, median hours, with the daily range in brackets:
+
+| Source | Winter | Spring | Summer | Autumn |
+|---|---|---|---|---|
+| Outdoor (Edmonton sensor) | 3.3 (9.1 C) | 3.0 (10.9) | 2.9 (10.0) | 2.8 (10.9) |
+| Open-Meteo (same place) | 3.7 (8.3 C) | 2.9 (10.1) | 2.6 (9.1) | 3.2 (9.2) |
+| Kitchen (z1) | 2.1 (4.8 C) | 2.6 (4.3) | 4.0 (3.8) | 3.5 (3.6) |
+| Master bedroom (z3) | 1.7 (1.7 C) | 3.9 (2.1) | 4.8 (2.6) | 6.2 (1.8) |
+
+The measured outdoor sensor agrees with Open-Meteo to within about 0.5 h on the peak, with a slightly larger range. Indoor rooms show a damped (1-5 C) and later wave (2-6 h after noon), more so in summer.
+

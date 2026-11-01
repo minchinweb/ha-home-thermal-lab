@@ -11,6 +11,9 @@ locations are used.
 Settings (HA_URL, HA_TOKEN, HA_ENTITY) are read from a git-ignored ``.env`` file
 (copy ``.env.example``) or from the environment.
 
+By default Home Assistant data comes from long-term statistics (hourly, kept
+indefinitely), falling back to recorder state history; see ``--ha-source``.
+
 To find sensor entity ids, run with ``--ha-list``. To add a Home Assistant
 sensor, set ``HA_URL``, ``HA_TOKEN`` (a long-lived access token) and ``HA_ENTITY``
 (or pass ``--ha-url`` and ``--ha-entity``, which may be repeated; HA_ENTITY
@@ -21,6 +24,7 @@ Assistant, and weather classes come from Open-Meteo for that position.
 from __future__ import annotations
 
 import argparse
+import asyncio
 from datetime import UTC, date, datetime, time
 import os
 from pathlib import Path
@@ -44,6 +48,7 @@ from custom_components.house_thermal_lab.ha_history import (
     fetch_sensor_history,
     list_temperature_sensors,
 )
+from custom_components.house_thermal_lab.ha_statistics import fetch_statistics_from_url
 from custom_components.house_thermal_lab.locations import (
     EXAMPLE_LOCATIONS,
     Location,
@@ -85,6 +90,14 @@ def main() -> None:
         "may hold several separated by commas)",
     )
     p.add_argument(
+        "--ha-source",
+        choices=("auto", "statistics", "history"),
+        default="auto",
+        help="long-term statistics (hourly, kept indefinitely), recorder state "
+        "history (as long as purge_keep_days), or statistics with history as "
+        "the fallback (default)",
+    )
+    p.add_argument(
         "--ha-list", action="store_true", help="list temperature sensors and exit"
     )
     args = p.parse_args()
@@ -121,9 +134,20 @@ def main() -> None:
         start = datetime.combine(args.start, time.min, tzinfo=UTC)
         end = datetime.combine(args.end, time.max, tzinfo=UTC)
         weather = fetch_hourly(home_location(lat, lon), args.start, args.end)
+        stats = {}
+        if args.ha_source in {"auto", "statistics"}:
+            stats = asyncio.run(
+                fetch_statistics_from_url(args.ha_url, token, entities, start, end)
+            )
         for entity in entities:
             here = home_location(lat, lon, entity)
-            sensor = fetch_sensor_history(args.ha_url, token, entity, start, end)
+            if entity in stats:
+                sensor = stats[entity]
+            elif args.ha_source == "statistics":
+                print(f"{entity}: no long-term statistics", file=sys.stderr)
+                continue
+            else:
+                sensor = fetch_sensor_history(args.ha_url, token, entity, start, end)
             results = analyse_with_external_weather(sensor, weather, here)
             if not results:
                 print(

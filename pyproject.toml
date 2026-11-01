@@ -12,7 +12,7 @@ dependencies = []
 [dependency-groups]
 # Plots and reports for the experiments (scripts only; the custom components
 # themselves use the standard library).
-analysis = ["matplotlib >= 3.9"]
+analysis = ["aiohttp >= 3.10", "matplotlib >= 3.9"]
 dev = [
   { include-group = "analysis" },
   "invoke >= 2.2",
