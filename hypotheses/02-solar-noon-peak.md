@@ -1,6 +1,6 @@
 # 02 Peak at solar noon, trough at solar midnight
 
-**Status:** untested
+**Status:** in progress
 
 **Claim:** Daily temperature peaks at solar noon and bottoms out at solar midnight.
 
@@ -16,4 +16,6 @@
 
 ## Results
 
-_none yet_
+Run with `python scripts/run_h01_h02.py START END [--location "name,lat,lon,kind"]`. Locations are configurable; day boundaries use local mean solar time.
+
+_No full-year results recorded yet. June 2025 smoke run: median fitted peak was 3.0 h after solar noon (Edmonton), 1.9 h (Dieppe) and 0.9 h (Tahiti), so the solar-noon peak looks refuted, and the lag varies by location._

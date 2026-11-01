@@ -1,19 +1,9 @@
 """Tests for the wave fit (run with ``python -m unittest`` or pytest)."""
 
-import importlib.util
 import math
-import pathlib
 import unittest
 
-_PATH = (
-    pathlib.Path(__file__).parent.parent
-    / "custom_components"
-    / "house_thermal_lab"
-    / "wave_fit.py"
-)
-_SPEC = importlib.util.spec_from_file_location("wave_fit", _PATH)
-wave_fit = importlib.util.module_from_spec(_SPEC)
-_SPEC.loader.exec_module(wave_fit)
+from custom_components.house_thermal_lab import wave_fit
 
 
 def _day(mean, amp, peak, step=1.0):

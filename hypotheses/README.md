@@ -9,8 +9,8 @@ Home Assistant, so they can be re-run later or by others.
 
 | # | Hypothesis | Stage | Status |
 |---|---|---|---|
-| [01](01-sine-wave.md) | Daily temperature is roughly sinusoidal | A. Validate the wave | untested |
-| [02](02-solar-noon-peak.md) | Peak at solar noon, trough at solar midnight | A | untested |
+| [01](01-sine-wave.md) | Daily temperature is roughly sinusoidal | A. Validate the wave | in progress |
+| [02](02-solar-noon-peak.md) | Peak at solar noon, trough at solar midnight | A | in progress |
 | [03](03-furnace-power.md) | Furnace heating power from room gradient | B. Characterise house | untested |
 | [04](04-ac-power.md) | AC cooling power from room gradient | B | untested |
 | [05](05-fan-flux.md) | Heat flux of running the furnace fan | B | untested |
