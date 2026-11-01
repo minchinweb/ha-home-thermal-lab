@@ -197,3 +197,59 @@ def list_temperature_sensors(
             continue
         found.append((entity_id, attrs.get("friendly_name", ""), value))
     return sorted(found)
+
+
+def fetch_states(
+    base_url: str,
+    token: str,
+    entity_id: str,
+    start: datetime,
+    end: datetime,
+    fetch: AuthFetcher = urllib_fetch_auth,
+    with_attributes: bool = False,
+) -> list[dict]:
+    """Fetch an entity's raw state history.
+
+    By default only the state and ``last_changed`` come back, which is small.
+    With ``with_attributes`` each row also has ``attributes`` and
+    ``last_updated`` (needed for attributes such as a climate entity's
+    ``hvac_action``), and the response is much larger.
+
+    Args:
+        base_url: Home Assistant URL.
+        token: Long-lived access token.
+        entity_id: Any entity, e.g. ``binary_sensor.z1_furnace_heating``.
+        start: Start of the period (timezone-aware).
+        end: End of the period (timezone-aware).
+        fetch: Function that fetches a URL as JSON (replaceable in tests).
+        with_attributes: Include attributes and ``last_updated``.
+
+    Returns:
+        State dicts, oldest first.
+    """
+    params = {"filter_entity_id": entity_id, "end_time": end.isoformat()}
+    if not with_attributes:
+        params |= {"minimal_response": "", "no_attributes": ""}
+    query = urllib.parse.urlencode(params)
+    url = (
+        f"{base_url.rstrip('/')}/api/history/period/"
+        f"{urllib.parse.quote(start.isoformat())}?{query}"
+    )
+    body = fetch(url, token)
+    return body[0] if body else []
+
+
+def fetch_time_zone(
+    base_url: str, token: str, fetch: AuthFetcher = urllib_fetch_auth
+) -> str:
+    """Read the home time zone name (e.g. ``America/Edmonton``) from ``/api/config``.
+
+    Args:
+        base_url: Home Assistant URL.
+        token: Long-lived access token.
+        fetch: Function that fetches a URL as JSON (replaceable in tests).
+
+    Returns:
+        The IANA time zone name.
+    """
+    return fetch(f"{base_url.rstrip('/')}/api/config", token)["time_zone"]

@@ -236,3 +236,52 @@ def test_list_includes_weather_entities():
     ]
     out = ha_history.list_temperature_sensors("http://ha", "t", lambda _u, _t: states)
     assert out == [("weather.home", "", "-2.4")]
+
+
+def test_runs_and_daily_use():
+    from zoneinfo import ZoneInfo
+
+    from custom_components.house_thermal_lab import hvac
+
+    states = [
+        {"state": "off", "last_changed": "2025-01-01T00:00:00+00:00"},
+        {"state": "on", "last_changed": "2025-01-01T06:30:00+00:00"},
+        {"state": "off", "last_changed": "2025-01-01T07:00:00+00:00"},
+        {"state": "on", "last_changed": "2025-01-01T08:00:00+00:00"},
+        {"state": "unavailable", "last_changed": "2025-01-01T08:20:00+00:00"},
+        {"state": "on", "last_changed": "2025-01-01T09:00:00+00:00"},
+    ]
+    until = datetime(2025, 1, 1, 10, tzinfo=UTC)
+    runs = hvac.runs_from_states(states, until)
+    assert [r.minutes for r in runs] == [30.0, 20.0, 60.0]
+    use = hvac.daily_use(
+        runs, ZoneInfo("America/Edmonton"), [date(2024, 12, 31), date(2025, 1, 1)]
+    )
+    # 06:30 UTC is 23:30 local on Dec 31: that run starts the previous day
+    assert use[0].runs == 1
+    assert use[0].hours == pytest.approx(0.5)
+    assert use[1].runs == 2
+    assert use[1].hours == pytest.approx(80 / 60)
+    summary = hvac.run_summary(runs, use)
+    assert summary["longest_run_min"] == 60.0
+    assert summary["days_with_run"] == 1.0
+
+
+def test_runs_from_climate_attribute():
+    from custom_components.house_thermal_lab import hvac
+
+    def row(action, when):
+        return {"attributes": {"hvac_action": action}, "last_updated": when}
+
+    states = [
+        row("idle", "2025-01-01T00:00:00+00:00"),
+        row("heating", "2025-01-01T01:00:00+00:00"),
+        row("heating", "2025-01-01T01:10:00+00:00"),  # attribute-only update
+        row("fan", "2025-01-01T01:40:00+00:00"),
+        row("idle", "2025-01-01T02:00:00+00:00"),
+    ]
+    until = datetime(2025, 1, 1, 3, tzinfo=UTC)
+    heating = hvac.runs_from_states(states, until, {"heating"}, "hvac_action")
+    fan = hvac.runs_from_states(states, until, {"fan"}, "hvac_action")
+    assert [r.minutes for r in heating] == [40.0]
+    assert [r.minutes for r in fan] == [20.0]
