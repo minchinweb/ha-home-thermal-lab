@@ -1,0 +1,11 @@
+{
+  "domain": "house_thermal_lab",
+  "name": "House Thermal Lab",
+  "version": "0.0.1",
+  "documentation": "https://github.com/MinchinWeb/ha-targeting-temperature-wave",
+  "codeowners": ["@MinchinWeb"],
+  "dependencies": ["recorder", "sun"],
+  "config_flow": false,
+  "iot_class": "calculated",
+  "requirements": []
+}
