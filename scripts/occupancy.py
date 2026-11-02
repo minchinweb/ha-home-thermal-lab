@@ -168,11 +168,21 @@ def main() -> None:
         f"{'day n':>7}{'b all day':>11}{'events':>8}{'event C/h':>11}"
     )
     for name, entity in ROOMS.items():
+        if name == "Office AQ":
+            continue  # same room as Office sensor; averaged into that row
         z = ZONE_OF_ROOM[name]
         if z not in occ:
             print(f"{name:<16}{z:>5}  no usable occupancy sensor")
             continue
         room = _bin_means(stats.get(entity, []), start, bins, width)
+        if name == "Office sensor":
+            other = _bin_means(stats.get(ROOMS["Office AQ"], []), start, bins, width)
+            both = np.vstack([room, other])
+            count = (~np.isnan(both)).sum(axis=0)
+            room = np.where(
+                count > 0, np.nansum(both, axis=0) / np.maximum(count, 1), np.nan
+            )
+            name = "Office (W+AQ)"
         y = np.full(bins, np.nan)
         y[:-1] = (room[1:] - room[:-1]) / hours
         diff = t_out - room

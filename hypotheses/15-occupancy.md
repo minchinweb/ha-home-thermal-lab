@@ -51,3 +51,5 @@ Extra warming `b` in C/h (own zone not calling for heat; * = beyond two standard
 - Kitchen: -0.17 C/h when occupied, the wrong sign. The kitchen is occupied at meals and in the evenings, when cooking, the dishwasher, doors and the range hood and the setback schedule change the heat balance, and the model has no term for them.
 - As a detector it is still weak (night AUC 0.47 to 0.62).
 - Conclusion: some sign of people warming small rooms (office, S basement), nothing reliable. The best next steps are the solar and furnace terms from 11 and 05 for daytime, the door contact (09) as a second label for the S basement bedroom, and a longer record (the recorder is already at 60 days).
+
+Correction: the office sensor and the office air-quality sensor are one room. They are now averaged into one "Office (W+AQ)" row: night +0.06 C/h (not significant), all day +0.09 C/h*, events -0.03 C/h, AUC 0.61. The earlier table counted this room twice.
