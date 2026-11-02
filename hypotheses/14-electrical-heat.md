@@ -25,5 +25,12 @@ Appliances and the stove proxy (`scripts/regress_power.py`, 15-minute bins, 10 d
 - After removing those, 15 unexplained bursts of 30-75 minutes at +1.2 to +2.3 kW remain in 10 days, starting around 12:00-15:00 (most), 17:00 and late evening. This is the stove proxy; it cannot be confirmed without a cooking log.
 - Against room temperatures, the stove proxy has no detectable effect on the kitchen (+0.06 C/h per kW now, +0.08 the bin after; neither significant), nor on any other room. Either the bursts are not the stove, the range hood removes the heat, or 15 bursts is too few against the much larger furnace-bleed signal.
 
-Live ground truth, 1 November 2026, 18:08 local: the owner turned a stove burner on and told us. Whole-house power (Eagle sensor, about 30-second readings) stepped from 1.16 to 2.30 kW at 18:08:01 (+1.1 kW), reached 4.2 kW at 18:14, then began cycling between about 1.1 kW and 3.0-3.3 kW every 30-60 seconds, the on/off cycling of an electric element holding temperature. The furnace was idle (only fan calls) so the kitchen was a clean test; it was cooling slowly (22.4 to 21.9 C over the previous 20 minutes). The bursts of +1.2 to +2.3 kW found in the history are consistent with this signature, which supports reading them as stove use.
+Live ground truth, 1 November 2026 (owner's account, power from the Eagle sensor at about 30-second readings). The electric kettle and the stove were started at about the same time, with the small front-right burner on high; the small rear-left burner was added at about 18:20.
+
+- 18:08: power stepped from 1.1 to 2.3 kW (+1.2 kW) and stayed there for six minutes. That is the kettle, a typical 1.2-1.5 kW load.
+- 18:14: it jumped to about 4.1 kW (kettle plus the burner at full power), then, as the kettle finished, fell to cycling between about 1.1 and 3.3 kW every 30-60 seconds: the burner on high is about +2.0 to +2.2 kW when on, switching on and off to hold its temperature.
+- 18:21: back up to 3.9 kW as the second burner joined.
+- The furnace was idle (only fan calls), so this is a clean test. Over the first 14 minutes of 2-3 kW extra electrical load the kitchen thermostat did not warm; it kept drifting down, 22.4 to 21.8 C since 17:58, in 0.06 C steps. Most of a stove's electrical power goes into the pot and its steam, and the range hood (if on) removes the rest, so the sensor may not see it quickly.
+
+The burst signature (+1.2 to +2.3 kW, 30-75 minutes) in the history matches this, which supports reading those bursts as stove use, though the kettle alone is also a possibility for the shorter ones.
 
