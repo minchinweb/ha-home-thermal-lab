@@ -1,19 +1,32 @@
 """Tests for learning a house's numbers from its history."""
 
 from datetime import UTC, datetime, timedelta
+import math
 import random
 
 import pytest
 
 from custom_components.home_thermal_lab.hvac import Run
 from custom_components.home_thermal_lab.learn import (
+    NoHeatFit,
+    Skill,
+    ZoneData,
     bin_fraction,
     bin_held,
     blower_kw,
     edge_steps,
+    fit_heat_rate,
     fit_no_heat,
+    fit_with_wall_lag,
+    grade,
+    idle_starts,
     lag,
     least_squares,
+    model_of,
+    problem,
+    refine_multistep,
+    simulate_from,
+    skill,
 )
 
 T0 = datetime(2026, 1, 1, tzinfo=UTC)
@@ -181,3 +194,132 @@ def test_fit_no_heat_without_wall_or_ground_leaves_them_zero():
     fit = fit_no_heat(room, outdoor, [0.0] * 100, [0.0] * 100, 0.25)
     assert fit is not None
     assert (fit.b, fit.w) == (0.0, 0.0)
+
+
+def _quantised_day(seed: int, n: int = 960, quantum: float = 0.1):
+    """A room that cools toward a swinging outdoors, read in ``quantum`` steps."""
+    from custom_components.home_thermal_lab.shadow import ZoneModel, step
+
+    rng = random.Random(seed)
+    model = ZoneModel(a=0.02, c=0.15)
+    outdoor = [-5.0 + 6 * math.sin(i / 96 * 2 * math.pi) for i in range(n)]
+    true = [21.0]
+    for i in range(n - 1):
+        true.append(step(true[i], outdoor[i], 0.0, model, 0.25))
+    room = [round((t + rng.gauss(0, 0.02)) / quantum) * quantum for t in true]
+    return model, room, outdoor
+
+
+def test_block_rates_beat_quantisation():
+    model, room, outdoor = _quantised_day(3)
+    n = len(room)
+    one = fit_no_heat(room, outdoor, [0.0] * n, [0.0] * n, 0.25)
+    block = fit_no_heat(room, outdoor, [0.0] * n, [0.0] * n, 0.25, block=4)
+    assert one is not None
+    assert block is not None
+    assert block.method == "block"
+    assert abs(block.a - model.a) <= abs(one.a - model.a) + 1e-4
+    assert block.r2 > one.r2
+
+
+def test_negative_sun_term_is_dropped():
+    rng = random.Random(4)
+    n = 300
+    outdoor = [rng.uniform(-10, 0) for _ in range(n)]
+    light = [max(0.0, rng.uniform(-100, 200)) for _ in range(n)]
+    room = [20.0]
+    for i in range(n - 1):
+        rate = 0.04 * (outdoor[i] - room[i]) + 0.3 - 0.002 * light[i]
+        room.append(room[i] + rate * 0.25)
+    fit = fit_no_heat(room, outdoor, light, [0.0] * n, 0.25)
+    assert fit is not None
+    assert fit.g == 0.0
+
+
+def test_problem_flags_unphysical_fits():
+    assert problem(None) == "too little idle data"
+    assert problem(NoHeatFit(-0.01, 0.1, 0.0, 100)) == "wrong sign"
+    assert problem(NoHeatFit(0.9, 0.1, 0.0, 100)) == "out of range"
+    assert problem(NoHeatFit(0.02, 0.1, 0.0, 100)) is None
+
+
+def test_wall_lag_is_chosen_by_the_fit():
+    rng = random.Random(5)
+    n = 800
+    hours = 0.25
+    outdoor = [rng.uniform(-10, 0) for _ in range(n)]
+    raw = [max(0.0, 400 * math.sin((i % 96) / 96 * 2 * math.pi)) for i in range(n)]
+    lagged = lag(raw, hours, 6.0)
+    room = [20.0]
+    for i in range(n - 1):
+        rate = 0.03 * (outdoor[i] - room[i]) + 0.1 + 0.002 * lagged[i]
+        room.append(room[i] + rate * hours)
+    fit, tau = fit_with_wall_lag(room, outdoor, [0.0] * n, [0.0] * n, hours, raw)
+    assert tau == 6.0
+    assert fit is not None
+    assert fit.w == pytest.approx(0.002, rel=1e-3)
+
+
+def _path_error(fit, data, steps=12, every=4):
+    total = 0.0
+    for i in idle_starts(data, steps, every):
+        path = simulate_from(model_of(fit), data, i, steps)
+        total += sum((path[k] - data.room[i + k]) ** 2 for k in range(1, steps + 1))
+    return total
+
+
+def test_skill_and_multistep_refinement():
+    # the true house has a slow mass behind the air, which the one-node model
+    # lacks: the rate fit is then a poor guide to the hours ahead
+    rng = random.Random(6)
+    n = 1344
+    outdoor = [-5.0 + 6 * math.sin(i / 96 * 2 * math.pi) for i in range(n)]
+    air, mass = [21.0], 21.0
+    for i in range(n - 1):
+        t = air[i]
+        air.append(t + 0.25 * (0.03 * (outdoor[i] - t) + 0.4 * (mass - t) + 0.2))
+        mass += 0.25 * 0.05 * (t - mass)
+    room = [round((t + rng.gauss(0, 0.02)) / 0.1) * 0.1 for t in air]
+    data = ZoneData(room, outdoor, [0.0] * n, [0.0] * n, 0.25)
+    first = fit_no_heat(room, outdoor, [0.0] * n, [0.0] * n, 0.25, block=4)
+    refined = refine_multistep(first, data)
+    assert refined.method == "multi-step"
+    assert _path_error(refined, data) < _path_error(first, data)
+    after = skill(model_of(refined), data)
+    assert after[12].model < after[12].hold
+    assert after[12].n > 100
+    assert set(after) == {4, 12}
+
+
+def test_refinement_leaves_unphysical_fits_alone():
+    _, room, outdoor = _quantised_day(7)
+    n = len(room)
+    data = ZoneData(room, outdoor, [0.0] * n, [0.0] * n, 0.25)
+    bad = NoHeatFit(-0.01, 0.1, 0.0, 500)
+    assert refine_multistep(bad, data) is bad
+
+
+def test_heat_rate_is_recovered_from_calls():
+    from custom_components.home_thermal_lab.shadow import ZoneModel, step
+
+    model = ZoneModel(a=0.02, c=0.0, h=2.0)
+    n = 400
+    outdoor = [-10.0] * n
+    heating = [1.0 if i % 20 in (0, 1) else 0.0 for i in range(n)]
+    room = [20.0]
+    for i in range(n - 1):
+        room.append(step(room[i], outdoor[i], 0.0, model, 0.25, heat=heating[i]))
+    data = ZoneData(room, outdoor, [0.0] * n, heating, 0.25)
+    h = fit_heat_rate(ZoneModel(a=0.02, c=0.0), data)
+    assert h == pytest.approx(2.0, rel=0.02)
+    assert fit_heat_rate(ZoneModel(a=0.02, c=0.0), data, min_calls=1000) == 0.0
+
+
+def test_grade_follows_skill_and_data():
+    good = NoHeatFit(0.02, 0.1, 0.0, 500)
+    assert grade(None, {}) == "none"
+    assert grade(NoHeatFit(-0.02, 0.1, 0.0, 500), {}) == "none"
+    assert grade(good, {}) == "none"
+    assert grade(good, {12: Skill(0.5, 0.4, 50)}) == "low"
+    assert grade(good, {12: Skill(0.2, 0.4, 50)}) == "high"
+    assert grade(NoHeatFit(0.02, 0.1, 0.0, 200), {12: Skill(0.2, 0.4, 50)}) == "medium"

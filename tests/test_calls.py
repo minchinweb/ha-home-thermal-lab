@@ -62,3 +62,24 @@ def test_response_lag_dip_rebound():
     assert s["low"]["calls"] == 1
     assert s["stepped"]["calls"] == 0
     assert s["low"]["median_rise"] == pytest.approx(0.8)
+
+
+def test_heat_setpoints_reads_changes_only():
+    from datetime import UTC, datetime
+
+    from custom_components.home_thermal_lab.calls import heat_setpoints
+
+    def row(minute, **attrs):
+        when = datetime(2026, 11, 2, 6, minute, tzinfo=UTC).isoformat()
+        return {"state": "heat", "last_updated": when, "attributes": attrs}
+
+    rows = [
+        row(10, temperature=21.0),
+        row(0, temperature=19.0),
+        row(20, temperature=21.0),
+        row(30, target_temp_low=20.5),
+        row(40),
+    ]
+    got = heat_setpoints(rows)
+    assert [v for _, v in got] == [19.0, 21.0, 20.5]
+    assert got[0][0].minute == 0

@@ -31,8 +31,13 @@ async def async_setup_entry(hass, entry) -> bool:
 
 
 async def async_unload_entry(hass, entry) -> bool:
-    """Remove the sensors of a config entry."""
-    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    """Remove the sensors of a config entry, and the sidebar panel."""
+    from .panel import async_remove_panel
+
+    unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
+    if unloaded:
+        async_remove_panel(hass)
+    return unloaded
 
 
 async def _reload(hass, entry) -> None:

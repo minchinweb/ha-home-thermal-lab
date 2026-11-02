@@ -47,6 +47,9 @@ from .orientation import choose_outline, fetch_outlines, wall_rotation
 
 _LOGGER = logging.getLogger(__name__)
 
+# the target wave (target.py); a zone without a mean targets its setpoint
+TARGET_KEYS = ("target_mean", "target_swing", "target_peak_hour", "target_band")
+
 _TEXT = selector.TextSelector()
 _NUMBER = selector.NumberSelector(
     selector.NumberSelectorConfig(mode=selector.NumberSelectorMode.BOX, step="any")
@@ -140,12 +143,15 @@ def _zone_schema(roof_labels: list[dict]) -> vol.Schema:
             vol.Optional("a"): _NUMBER,
             vol.Optional("c"): _NUMBER,
             vol.Optional("g"): _NUMBER,
+            vol.Optional("h"): _NUMBER,
             vol.Optional("tolerance"): _NUMBER,
             vol.Optional("max_dip"): _NUMBER,
+            vol.Optional("deadband"): _NUMBER,
             **_sun_fields(roof_labels),
             vol.Optional("sunlit_walls"): _FACES,
             vol.Optional("below_ground", default=False): selector.BooleanSelector(),
             vol.Optional("ground_entity"): _TEMPERATURE,
+            **{vol.Optional(k): _NUMBER for k in TARGET_KEYS},
         }
     )
 
@@ -229,11 +235,14 @@ def _zone_from_form(form: dict) -> dict:
     model = {k: form[k] for k in given}
     if model:
         model.update(_clean(form, ("g",)))
+    model.update(_clean(form, ("h",)))  # a heating rate can be pinned on its own
     out = {
         "name": form["name"],
         "climate_entity": form["climate_entity"],
         "model": model,
-        **_clean(form, ("room_entity", "tolerance", "max_dip")),
+        **_clean(
+            form, ("room_entity", "tolerance", "max_dip", "deadband", *TARGET_KEYS)
+        ),
         **_sun_from_form(form),
     }
     if form.get("sunlit_walls"):

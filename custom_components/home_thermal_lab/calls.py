@@ -208,3 +208,23 @@ def summarise(items: list[Response]) -> dict:
             ),
         }
     return out
+
+
+def heat_setpoints(states: list[dict]) -> list[tuple[datetime, float]]:
+    """The thermostat's heating setpoint changes, oldest first.
+
+    ``temperature``, or ``target_temp_low`` for a heat/cool thermostat; rows
+    without one (the thermostat off) are skipped.
+    """
+    out = []
+    last = None
+    for row in sorted(states, key=_when):
+        attrs = row.get("attributes", {})
+        value = attrs.get("temperature")
+        if value is None:
+            value = attrs.get("target_temp_low")
+        if value is None or value == last:
+            continue
+        out.append((_when(row), float(value)))
+        last = value
+    return out

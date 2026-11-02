@@ -24,7 +24,7 @@ Home Assistant, so they can be re-run later or by others.
 | [13](13-thermal-momentum.md) | Measure the house's thermal momentum (inertia, time constant) | B | in progress: tau about 54 h; furnace lag 6-12 min, overshoot 0.2 C |
 | [14](14-electrical-heat.md) | Electrical use becomes indoor heat | B | in progress: blower +0.2 kW when heating; small plug loads not resolvable |
 | [15](15-occupancy.md) | Occupancy from room temperature changes | B | three runs: the office signal is the computer, not body heat |
-| [16](16-predict-day.md) | Predict next-day house/room temperature | D. Predict and control | backtest: profile plus offset is best (about 0.42 C) |
+| [16](16-predict-day.md) | Predict next-day house/room temperature | D. Predict and control | revised: zone model with a simulated thermostat does not beat profile plus offset yet (0.46 against 0.33 C in z4); live forecasts now logged and scored |
 | [17](17-control.md) | Decide whether to run furnace/AC to avoid overshoot | D | shadow mode; sensors ready, not yet deployed |
 | [18](18-shower-heat.md) | Showers from bathroom humidity, and their heat | C | first run: showers detected; heat into the house not measurable |
 

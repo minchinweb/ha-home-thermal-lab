@@ -13,7 +13,10 @@ full example)::
         contributions: [...]  # what each effect added to a zone (chart)
 
 * **Shadow** (``zones``): ``skip`` or ``heat`` for a call starting now; the
-  history of the sensor is the shadow-mode log (hypothesis 17).
+  history of the sensor is the shadow-mode log (hypothesis 17). Each zone also
+  has a **Forecast** sensor (the room 3 hours ahead; its history is the archive
+  of forecasts as issued, hypothesis 16) and a **Target** sensor (the target
+  wave), all three sharing one ``ZoneBrain`` that learns the model.
 * **Call statistics** (``call_stats``): the number of heating calls in the last
   ``days``, with min, median and max length, rise, lag to the first rise, and
   the overshoot, dip and rebound after each call, split into low-stage and
@@ -31,12 +34,11 @@ logic it calls is.
 from __future__ import annotations
 
 import contextlib
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from datetime import UTC, datetime, timedelta
 from functools import partial
 import logging
 
-from homeassistant.components.recorder import get_instance, history
 from homeassistant.components.sensor import (
     PLATFORM_SCHEMA,
     RestoreSensor,
@@ -53,8 +55,14 @@ from homeassistant.helpers.event import (
 from homeassistant.util import dt as dt_util
 import voluptuous as vol
 
-from . import CALL_STATS, CONTRIBUTION, ENERGY, ZONE
-from .calls import calls_from_states, responses, summarise, temperature_series
+from . import CALL_STATS, CONTRIBUTION, DOMAIN, ENERGY, ZONE
+from .calls import (
+    calls_from_states,
+    heat_setpoints,
+    responses,
+    summarise,
+    temperature_series,
+)
 from .contributions import (
     Inputs,
     ZoneTerms,
@@ -75,22 +83,44 @@ from .ground import (
     DEFAULT_SWING,
     ground_temperature,
 )
+from .ha_rows import numbers as _numbers
+from .ha_rows import recorded as _recorded
 from .hvac import HIGH, runs_from_states, stage_runs
 from .hvac_response import merge_runs
 from .irradiance import fetch_irradiance, light_on_surfaces
 from .learn import (
     WALL_TAU_HOURS,
+    NoHeatFit,
+    ZoneData,
     bin_fraction,
     bin_held,
     blower_kw,
     edge_steps,
+    fit_heat_rate,
     fit_no_heat,
+    fit_with_wall_lag,
+    grade,
     lag,
+    model_of,
+    problem,
+    refine_multistep,
+    skill,
 )
 from .options import resolve_sun
+from .outlook import (
+    band_at,
+    build_outlook,
+    outlook_points,
+    schedule_by_slot,
+    setpoints_ahead,
+    slot_of,
+)
+from .panel import async_register_panel
 from .power import power_series
+from .scoring import apply_bias, issued_from_rows, outdoor_bias, score
 from .shadow import ZoneModel, decide
 from .solar import solar_azimuth_degrees, solar_elevation_degrees
+from .target import TargetWave
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -101,6 +131,12 @@ FORECAST_MAX_AGE = timedelta(hours=1)
 LEARN_EVERY = timedelta(hours=6)
 LEARN_BIN = timedelta(minutes=15)
 LEARN_DAYS = 14
+LEARN_BLOCK = 4  # rates over an hour, against the thermostat's 0.1 C steps
+WALL_TAUS = (1.5, 3.0, 6.0)  # sunlit-wall lags to try, hours
+FORECAST_STEPS = 96  # 24 hours
+LEADS = (1, 3, 6)  # hours; the forecast sensor's state is the 3 hour one
+SCORE_DAYS = 7
+BIAS_HOURS = 48  # Open-Meteo's past hours (past_days=2) against the sensor
 FACES = ["N", "E", "S", "W"]
 
 SUN_SCHEMA = {
@@ -133,6 +169,8 @@ ZONE_SCHEMA = vol.Schema(
                 vol.Optional("g", default=0.0): vol.Coerce(float),
                 vol.Optional("b", default=0.0): vol.Coerce(float),
                 vol.Optional("w", default=0.0): vol.Coerce(float),
+                # heating rate while the zone's call runs; learned when left out
+                vol.Optional("h"): vol.Coerce(float),
             }
         ),
         # a room (partly) below ground: its walls trade heat with the soil. Give a
@@ -142,6 +180,14 @@ ZONE_SCHEMA = vol.Schema(
         **GROUND_SCHEMA,
         vol.Optional("tolerance", default=0.5): vol.Coerce(float),
         vol.Optional("max_dip", default=0.5): vol.Coerce(float),
+        # the simulated thermostat of the forecast: calls start this far below
+        # the setpoint (measured: a median 0.05 to 0.07 C, hypothesis 17)
+        vol.Optional("deadband", default=0.1): vol.Coerce(float),
+        # the target wave (target.py); without a mean the target is the setpoint
+        vol.Optional("target_mean"): vol.Coerce(float),
+        vol.Optional("target_swing", default=0.0): vol.Coerce(float),
+        vol.Optional("target_peak_hour", default=15.0): vol.Coerce(float),
+        vol.Optional("target_band", default=0.5): vol.Coerce(float),
         **SUN_SCHEMA,
     }
 )
@@ -286,43 +332,6 @@ def _wall_light(lat: float, lon: float, zone: dict, reading, moment) -> float:
     )
 
 
-def _as_dict(state) -> dict:
-    return {
-        "state": state.state,
-        "last_changed": state.last_changed.isoformat(),
-        "last_updated": state.last_updated.isoformat(),
-        "attributes": dict(state.attributes),
-    }
-
-
-async def _recorded(hass, entity_ids: list[str], start: datetime, end: datetime):
-    """Every recorded state (attribute changes too) per entity, as dicts."""
-    found = await get_instance(hass).async_add_executor_job(
-        partial(
-            history.get_significant_states,
-            hass,
-            start,
-            end,
-            entity_ids,
-            significant_changes_only=False,
-            minimal_response=False,
-            no_attributes=False,
-        )
-    )
-    return {e: [_as_dict(s) for s in found.get(e, [])] for e in entity_ids}
-
-
-def _numbers(rows: list[dict]) -> list[tuple[datetime, float]]:
-    out = []
-    for r in rows:
-        try:
-            value = float(r["state"])
-        except (TypeError, ValueError):
-            continue
-        out.append((datetime.fromisoformat(r["last_changed"]).astimezone(UTC), value))
-    return sorted(out)
-
-
 def _learn_blower(rows, item, end, watts):
     """Blower powers (kW) from whole-house power and the thermostats (blocking)."""
     scale = 0.001 if watts else 1.0
@@ -339,8 +348,23 @@ def _learn_blower(rows, item, end, watts):
     return blower_kw(steps)
 
 
-def _fit_zone(zone, rows, irradiance, lat, lon, start, end):
-    """Fit a zone's no-heat model from recorded history (blocking)."""
+@dataclass
+class _Learned:
+    """What one learning pass found for a zone (built in the executor)."""
+
+    fit: NoHeatFit | None
+    problem: str | None
+    wall_tau: float
+    data: ZoneData
+
+
+def _fit_zone(zone, rows, irradiance, lat, lon, start, end) -> _Learned:
+    """Fit a zone's no-heat model from recorded history (blocking).
+
+    Hour-long block rates (``LEARN_BLOCK`` bins), then, if the fit is physical,
+    the multi-step refinement; with sunlit walls the wall lag is chosen from
+    ``WALL_TAUS`` by the fit.
+    """
     width = LEARN_BIN
     bins = int((end - start) / width)
     climate = rows[zone["climate_entity"]]
@@ -351,7 +375,7 @@ def _fit_zone(zone, rows, irradiance, lat, lon, start, end):
         runs_from_states(climate, end, {"heating"}, "hvac_action"), start, bins, width
     )
     by_end = {r.time: r for r in irradiance}
-    light, wall = [], []
+    light, raw_wall = [], []
     for i in range(bins):
         mid = start + (i + 0.5) * width
         reading = by_end.get(
@@ -360,10 +384,11 @@ def _fit_zone(zone, rows, irradiance, lat, lon, start, end):
         light.append(
             0.0 if reading is None else _surface_light(lat, lon, zone, reading, mid)
         )
-        wall.append(
+        raw_wall.append(
             0.0 if reading is None else _wall_light(lat, lon, zone, reading, mid)
         )
     hours = width.total_seconds() / 3600.0
+    room_bins = bin_held(room, start, bins, width)
     outdoor_bins = bin_held(outdoor, start, bins, width)
     ground = None
     if zone["below_ground"]:
@@ -371,20 +396,279 @@ def _fit_zone(zone, rows, irradiance, lat, lon, start, end):
             ground = bin_held(_numbers(rows[zone["ground_entity"]]), start, bins, width)
         else:  # no sensor: the annual ground wave
             ground = [_ground_at(zone, start + (i + 0.5) * width) for i in range(bins)]
-    fit = fit_no_heat(
-        bin_held(room, start, bins, width),
-        outdoor_bins,
-        light,
-        heating,
-        hours,
-        wall=lag(wall, hours, WALL_TAU_HOURS) if zone["sunlit_walls"] else None,
-        ground=ground,
+    args = (room_bins, outdoor_bins, light, heating, hours)
+    if zone["sunlit_walls"]:
+        fit, tau = fit_with_wall_lag(
+            *args, raw_wall, WALL_TAUS, ground=ground, block=LEARN_BLOCK
+        )
+        wall = lag(raw_wall, hours, tau)
+    else:
+        fit = fit_no_heat(*args, ground=ground, block=LEARN_BLOCK)
+        tau, wall = WALL_TAU_HOURS, None
+    data = ZoneData(room_bins, outdoor_bins, light, heating, hours, wall, ground)
+    reason = problem(fit)
+    if reason is None:
+        fit = refine_multistep(fit, data)
+    return _Learned(fit, reason, tau, data)
+
+
+def _measure(model: ZoneModel, data: ZoneData, learn_h: bool) -> tuple:
+    """Heating rate (if wanted) and skill of a model on the history (blocking)."""
+    h = fit_heat_rate(model, data) if learn_h else model.h
+    return h, skill(model, data, (4, 12))
+
+
+def _target_wave(zone: dict) -> TargetWave | None:
+    if zone.get("target_mean") is None:
+        return None
+    return TargetWave(
+        zone["target_mean"],
+        zone["target_swing"],
+        zone["target_peak_hour"],
+        zone["target_band"],
     )
-    return fit
+
+
+def _local_hour(moment: datetime) -> float:
+    local = dt_util.as_local(moment)
+    return local.hour + local.minute / 60.0
+
+
+class ZoneBrain:
+    """A zone's learned model, shared by its shadow, forecast and target sensors.
+
+    Every ``LEARN_EVERY`` it refits the no-heat model (unless one was given),
+    learns the heating rate ``h`` (unless given), measures the model against
+    holding the temperature, grades it, and measures the outdoor forecast's
+    bias against the outdoor sensor. The panel reads zones from
+    ``hass.data[DOMAIN]["zones"]``.
+    """
+
+    def __init__(self, hass, forecast: _Forecast, outdoor_entity: str, zone: dict):
+        self.hass = hass
+        self.forecast = forecast
+        self.outdoor_entity = outdoor_entity
+        self.zone = zone
+        self.key = zone["climate_entity"]
+        self.wave = _target_wave(zone)
+        model = zone["model"]
+        self.given = "a" in model and "c" in model
+        self.given_h = model.get("h")
+        self.model: ZoneModel | None = (
+            ZoneModel(
+                model["a"],
+                model["c"],
+                model.get("g", 0.0),
+                model.get("b", 0.0),
+                model.get("w", 0.0),
+                model.get("h") or 0.0,
+            )
+            if self.given
+            else None
+        )
+        self.note = "given" if self.given else "waiting to learn"
+        self.quality: dict = {"grade": "none"}
+        self.wall_tau = WALL_TAU_HOURS
+        self.bias = 0.0
+        self.bias_hours = 0
+        self.schedule: list[float | None] | None = None
+        self.entities: dict[str, str] = {}
+        self._listeners: list = []
+        self._users = 0
+        self._stop_timer = None
+
+    def listen(self, callback):
+        """Call ``callback()`` after each learning pass; returns the remover."""
+        self._listeners.append(callback)
+        return lambda: self._listeners.remove(callback)
+
+    def start(self):
+        """Use the brain from one more sensor; returns the function that stops it.
+
+        The first sensor added starts the learning (so it runs as long as any of
+        the zone's sensors is enabled); the last one removed stops it.
+        """
+        zones = self.hass.data.setdefault(DOMAIN, {}).setdefault("zones", {})
+        self._users += 1
+        if self._users == 1:
+            self._stop_timer = async_track_time_interval(
+                self.hass, self.learn, LEARN_EVERY
+            )
+            self.hass.async_create_task(self.learn())
+            zones[self.key] = self
+
+        def _stop():
+            self._users -= 1
+            if self._users == 0:
+                if self._stop_timer is not None:
+                    self._stop_timer()
+                    self._stop_timer = None
+                if zones.get(self.key) is self:
+                    zones.pop(self.key)
+
+        return _stop
+
+    async def learn(self, _now=None) -> None:
+        """One learning pass; failures keep what was there."""
+        zone = {**self.zone, "outdoor_entity": self.outdoor_entity}
+        climate_id = zone["climate_entity"]
+        room_id = zone.get("room_entity")
+        ids = [climate_id, self.outdoor_entity] + ([room_id] if room_id else [])
+        if zone["below_ground"] and zone.get("ground_entity"):
+            ids.append(zone["ground_entity"])
+        end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+        start = end - timedelta(days=LEARN_DAYS)
+        lat, lon = self.hass.config.latitude, self.hass.config.longitude
+        try:
+            rows = await _recorded(self.hass, ids, start, end)
+            irradiance = await self.hass.async_add_executor_job(
+                fetch_irradiance, lat, lon, LEARN_DAYS + 2
+            )
+            found = await self.hass.async_add_executor_job(
+                partial(_fit_zone, zone, rows, irradiance, lat, lon, start, end)
+            )
+        except Exception:  # noqa: BLE001 - try again at the next interval
+            _LOGGER.warning("Could not learn the model for %s", zone["name"])
+            return
+        self.wall_tau = found.wall_tau
+        fit = found.fit
+        if not self.given:
+            if found.problem is not None:
+                self.model = None
+                self.note = f"not used: {found.problem}"
+            else:
+                self.model = model_of(fit)
+                self.note = (
+                    f"learned ({fit.method}) from {fit.bins} idle bins of 15 minutes"
+                )
+        if self.model is not None:
+            if self.given_h is not None:
+                self.model = replace(self.model, h=self.given_h)
+            h, skills = await self.hass.async_add_executor_job(
+                _measure, self.model, found.data, self.given_h is None
+            )
+            self.model = replace(self.model, h=h)
+        else:
+            skills = {}
+        await self._update_bias(rows[self.outdoor_entity], end)
+        self.schedule = schedule_by_slot(
+            [(dt_util.as_local(t), v) for t, v in heat_setpoints(rows[climate_id])],
+            dt_util.as_local(datetime.now(UTC)),
+        )
+        self.quality = self._quality(fit, found, skills)
+        for callback in list(self._listeners):
+            await callback()
+
+    async def _update_bias(self, outdoor_rows: list[dict], end: datetime) -> None:
+        hours = await self.forecast.hours()
+        if not hours:
+            return
+        self.bias, self.bias_hours = outdoor_bias(
+            _numbers(outdoor_rows),
+            [(h.time, h.temperature) for h in hours],
+            end - timedelta(hours=BIAS_HOURS),
+            end,
+        )
+
+    def _quality(self, fit, found: _Learned, skills: dict) -> dict:
+        used = fit if not self.given else None
+        out = {
+            "grade": grade(used if used else _given_fit(self.model), skills),
+            "model": self.note,
+            "problem": None if self.given else found.problem,
+            "fitted_at": datetime.now(UTC).isoformat(),
+            "wall_tau": self.wall_tau if self.zone["sunlit_walls"] else None,
+            "h": round(self.model.h, 3) if self.model else None,
+            "outdoor_bias": round(self.bias, 2),
+            "bias_hours": self.bias_hours,
+        }
+        if fit is not None:
+            out |= {
+                "method": fit.method,
+                "bins": fit.bins,
+                "r2": round(fit.r2, 3),
+                "fitted": {
+                    k: round(getattr(fit, k), 6) for k in ("a", "c", "g", "w", "b")
+                },
+            }
+        for lead, label in ((4, "1h"), (12, "3h")):
+            if lead in skills:
+                out[f"error_{label}"] = round(skills[lead].model, 3)
+                out[f"hold_{label}"] = round(skills[lead].hold, 3)
+                out[f"starts_{label}"] = skills[lead].n
+        return out
+
+    def ground_now(self, now: datetime) -> float:
+        if self.model is None or not self.model.b:
+            return 0.0
+        ground = _state_number(self.hass, self.zone.get("ground_entity"))
+        return _ground_at(self.zone, now) if ground is None else ground
+
+    async def inputs(self, now: datetime, steps: int, outdoor_now: float | None):
+        """Outdoor (bias-corrected), light and lagged wall light per step ahead."""
+        hours = await self.forecast.hours()
+        by_end = {h.time: h for h in hours}
+        lat, lon = self.hass.config.latitude, self.hass.config.longitude
+        outdoor, light, wall = [], [], []
+        for k in range(steps):
+            moment = now + timedelta(hours=STEP_HOURS * (k + 0.5))
+            slot, lit = _light_at(self.hass, self.zone, by_end, moment)
+            if slot is None:
+                break
+            light.append(lit)
+            wall.append(_wall_light(lat, lon, self.zone, slot.light, moment))
+            outdoor.append(slot.temperature)
+        outdoor, shift = apply_bias(outdoor, self.bias, self.bias_hours)
+        if outdoor and outdoor_now is not None:
+            outdoor[0] = outdoor_now
+        return outdoor, light, lag(wall, STEP_HOURS, self.wall_tau), shift
+
+
+def _given_fit(model: ZoneModel | None) -> NoHeatFit | None:
+    """A typed-in model as a fit, for grading (counts as plenty of data)."""
+    if model is None:
+        return None
+    return NoHeatFit(model.a, model.c, model.g, 10_000, model.b, model.w)
+
+
+def _state_number(hass, entity_id: str | None) -> float | None:
+    state = hass.states.get(entity_id) if entity_id else None
+    try:
+        return float(state.state)
+    except (AttributeError, TypeError, ValueError):
+        return None
+
+
+def _zone_now(hass, zone: dict):
+    """(climate attributes, room temperature, heating setpoint) now."""
+    climate = hass.states.get(zone["climate_entity"])
+    if climate is None:
+        return None, None, None
+    attrs = climate.attributes
+    room = _state_number(hass, zone.get("room_entity"))
+    if room is None:
+        room = attrs.get("current_temperature")
+    setpoint = attrs.get("temperature")
+    if setpoint is None:
+        setpoint = attrs.get("target_temp_low")
+    return (
+        attrs,
+        None if room is None else float(room),
+        None if setpoint is None else float(setpoint),
+    )
+
+
+def _zone_entities(hass, forecast_cache, outdoor, zone: dict) -> list:
+    brain = ZoneBrain(hass, forecast_cache, outdoor, zone)
+    return [
+        ShadowSensor(brain),
+        ZoneForecastSensor(brain),
+        TargetSensor(brain),
+    ]
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
-    """Create one sensor per sub-entry of the config entry."""
+    """Create the sensors of each sub-entry of the config entry."""
     forecast_cache = _Forecast(hass)
     outdoor = entry.data.get("outdoor_entity")
     house = dict(entry.data)
@@ -393,14 +677,16 @@ async def async_setup_entry(hass, entry, async_add_entities):
         try:
             if kind == ZONE:
                 item = ZONE_SCHEMA(resolve_sun(dict(subentry.data), house))
-                entity = ShadowSensor(hass, forecast_cache, outdoor, item)
+                entities = _zone_entities(hass, forecast_cache, outdoor, item)
             elif kind == CALL_STATS:
-                entity = CallStatsSensor(hass, CALL_SCHEMA(dict(subentry.data)))
+                entities = [CallStatsSensor(hass, CALL_SCHEMA(dict(subentry.data)))]
             elif kind == ENERGY:
-                entity = FurnaceEnergySensor(hass, ENERGY_SCHEMA(dict(subentry.data)))
+                entities = [
+                    FurnaceEnergySensor(hass, ENERGY_SCHEMA(dict(subentry.data)))
+                ]
             elif kind == CONTRIBUTION:
                 item = CONTRIBUTION_SCHEMA(resolve_sun(dict(subentry.data), house))
-                entity = ContributionSensor(hass, forecast_cache, outdoor, item)
+                entities = [ContributionSensor(hass, forecast_cache, outdoor, item)]
             else:
                 continue
         except vol.Invalid as err:
@@ -413,7 +699,8 @@ async def async_setup_entry(hass, entry, async_add_entities):
                 subentry.title,
             )
             continue
-        async_add_entities([entity], config_subentry_id=subentry.subentry_id)
+        async_add_entities(entities, config_subentry_id=subentry.subentry_id)
+    await _register_panel(hass)
 
 
 async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
@@ -423,9 +710,9 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
     if (config["zones"] or config["contributions"]) and not outdoor:
         _LOGGER.error("outdoor_entity is needed for zones and contributions")
         return
-    entities: list[SensorEntity] = [
-        ShadowSensor(hass, forecast_cache, outdoor, zone) for zone in config["zones"]
-    ]
+    entities: list[SensorEntity] = []
+    for zone in config["zones"]:
+        entities += _zone_entities(hass, forecast_cache, outdoor, zone)
     entities += [CallStatsSensor(hass, item) for item in config["call_stats"]]
     entities += [FurnaceEnergySensor(hass, item) for item in config["energy"]]
     entities += [
@@ -433,72 +720,43 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
         for item in config["contributions"]
     ]
     async_add_entities(entities)
+    await _register_panel(hass)
+
+
+async def _register_panel(hass) -> None:
+    """Add the Thermal Lab panel; the sensors work without it."""
+    try:
+        await async_register_panel(hass)
+    except Exception:  # never block the sensors on the panel
+        _LOGGER.exception("Could not add the Thermal Lab panel")
 
 
 class ShadowSensor(SensorEntity):
-    """``skip`` or ``heat`` for a call starting now in one zone."""
+    """``skip`` or ``heat`` for a call starting now in one zone.
+
+    It also runs the zone's learning and shows how good the model is: the
+    ``grade`` (none, low, medium, high, as ClimateAdvisor's calibration label),
+    the fit method, bins, R2, the forecast error at 1 and 3 hours against holding
+    the temperature, the heating rate ``h``, the wall lag and the outdoor
+    forecast's bias.
+    """
 
     _attr_should_poll = False
 
-    def __init__(self, hass, forecast: _Forecast, outdoor_entity: str, zone: dict):
-        self._hass = hass
-        self._forecast = forecast
-        self._outdoor_entity = outdoor_entity
+    def __init__(self, brain: ZoneBrain):
+        self._brain = brain
+        self._hass = brain.hass
+        zone = brain.zone
         self._zone = zone
         self._attr_name = f"Shadow {zone['name']}"
         self._attr_unique_id = f"home_thermal_lab_shadow_{zone['climate_entity']}"
         self._attr_native_value = None
         self._attr_extra_state_attributes = {}
-        model = zone["model"]
-        self._learned = "a" not in model or "c" not in model
-        self._model = (
-            None
-            if self._learned
-            else ZoneModel(
-                model["a"],
-                model["c"],
-                model.get("g", 0.0),
-                model.get("b", 0.0),
-                model.get("w", 0.0),
-            )
-        )
-        self._model_note = "given" if self._model else "waiting to learn"
-
-    async def _learn(self, _now=None) -> None:
-        """Fit the zone's no-heat model on its recent idle history."""
-        zone = {**self._zone, "outdoor_entity": self._outdoor_entity}
-        climate_id = zone["climate_entity"]
-        room_id = zone.get("room_entity")
-        ids = [climate_id, self._outdoor_entity] + ([room_id] if room_id else [])
-        if zone["below_ground"] and zone.get("ground_entity"):
-            ids.append(zone["ground_entity"])
-        end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
-        start = end - timedelta(days=LEARN_DAYS)
-        lat, lon = self._hass.config.latitude, self._hass.config.longitude
-        try:
-            rows = await _recorded(self._hass, ids, start, end)
-            irradiance = await self._hass.async_add_executor_job(
-                fetch_irradiance, lat, lon, LEARN_DAYS + 2
-            )
-            fit = await self._hass.async_add_executor_job(
-                partial(_fit_zone, zone, rows, irradiance, lat, lon, start, end)
-            )
-        except Exception:  # noqa: BLE001 - try again at the next interval
-            _LOGGER.warning("Could not learn the model for %s", zone["name"])
-            return
-        if fit is None:
-            self._model_note = "not enough idle history yet"
-        else:
-            self._model = ZoneModel(fit.a, fit.c, fit.g, fit.b, fit.w)
-            self._model_note = f"learned from {fit.bins} idle bins of 15 minutes"
-        await self._refresh(None)
 
     async def async_added_to_hass(self) -> None:
-        if self._learned:
-            self.async_on_remove(
-                async_track_time_interval(self._hass, self._learn, LEARN_EVERY)
-            )
-            self._hass.async_create_task(self._learn())
+        self._brain.entities["shadow"] = self.entity_id
+        self.async_on_remove(self._brain.listen(self._learned))
+        self.async_on_remove(self._brain.start())
         self.async_on_remove(
             async_track_time_interval(self._hass, self._refresh, SCAN_INTERVAL)
         )
@@ -509,68 +767,36 @@ class ShadowSensor(SensorEntity):
         )
         await self._refresh(None)
 
-    def _number(self, entity_id: str | None) -> float | None:
-        state = self._hass.states.get(entity_id) if entity_id else None
-        try:
-            return float(state.state)
-        except (AttributeError, TypeError, ValueError):
-            return None
+    async def _learned(self) -> None:
+        await self._refresh(None)
 
     async def _refresh(self, _event) -> None:
+        brain = self._brain
         zone = self._zone
-        climate = self._hass.states.get(zone["climate_entity"])
-        if climate is None:
+        attrs, room, setpoint = _zone_now(self._hass, zone)
+        if attrs is None:
             return
-        attrs = climate.attributes
-        room = self._number(zone.get("room_entity"))
-        if room is None:
-            room = attrs.get("current_temperature")
-        setpoint = attrs.get("temperature")
-        if setpoint is None:
-            setpoint = attrs.get("target_temp_low")
-        outdoor_now = self._number(self._outdoor_entity)
-        hours = await self._forecast.hours()
-        now_utc = datetime.now(UTC)
-        ground = 0.0
-        if self._model is not None and self._model.b:
-            ground = self._number(zone.get("ground_entity"))
-            if ground is None:
-                ground = _ground_at(zone, now_utc)
-        if (
-            self._model is None
-            or room is None
-            or setpoint is None
-            or outdoor_now is None
-            or not hours
-        ):
-            self._attr_extra_state_attributes = {"model": self._model_note}
+        model = brain.model
+        outdoor_now = _state_number(self._hass, brain.outdoor_entity)
+        now = datetime.now(UTC)
+        quality = dict(brain.quality)
+        if model is None or room is None or setpoint is None or outdoor_now is None:
+            self._attr_extra_state_attributes = {"model": brain.note, **quality}
             self._attr_native_value = "unknown"
             self.async_write_ha_state()
             return
-
-        now = datetime.now(UTC)
-        by_end = {h.time: h for h in hours}
-        outdoor, light, wall = [], [], []
-        lat, lon = self._hass.config.latitude, self._hass.config.longitude
-        for k in range(LOOK_AHEAD_STEPS):
-            moment = now + timedelta(hours=STEP_HOURS * (k + 0.5))
-            slot, lit = _light_at(self._hass, zone, by_end, moment)
-            if slot is None:
-                break
-            light.append(lit)
-            wall.append(_wall_light(lat, lon, zone, slot.light, moment))
-            outdoor.append(outdoor_now if k == 0 else slot.temperature)
-        wall = lag(wall, STEP_HOURS, WALL_TAU_HOURS)
+        outdoor, light, wall, _ = await brain.inputs(now, LOOK_AHEAD_STEPS, outdoor_now)
         if not outdoor:
             self._attr_native_value = "unknown"
             self.async_write_ha_state()
             return
+        ground = brain.ground_now(now)
         decision = decide(
-            float(room),
-            float(setpoint),
+            room,
+            setpoint,
             outdoor,
             light,
-            self._model,
+            model,
             STEP_HOURS,
             zone["tolerance"],
             zone["max_dip"],
@@ -579,8 +805,8 @@ class ShadowSensor(SensorEntity):
         )
         self._attr_native_value = "skip" if decision.skip else "heat"
         self._attr_extra_state_attributes = {
-            "room": float(room),
-            "setpoint": float(setpoint),
+            "room": room,
+            "setpoint": setpoint,
             "outdoor": outdoor_now,
             "lowest_vs_setpoint": round(decision.lowest, 2),
             "shortfall_degree_hours": round(decision.shortfall, 2),
@@ -588,16 +814,206 @@ class ShadowSensor(SensorEntity):
             "thermostat_action": attrs.get("hvac_action"),
             "equipment_running": attrs.get("equipment_running"),
             "decided_at": now.isoformat(),
-            "model": self._model_note,
-            "a": round(self._model.a, 5),
-            "c": round(self._model.c, 5),
-            "g": round(self._model.g, 7),
+            **quality,
+            "model": brain.note,
+            "a": round(model.a, 5),
+            "c": round(model.c, 5),
+            "g": round(model.g, 7),
         }
         if zone["sunlit_walls"]:
-            self._attr_extra_state_attributes["w"] = round(self._model.w, 7)
+            self._attr_extra_state_attributes["w"] = round(model.w, 7)
         if zone["below_ground"]:
-            self._attr_extra_state_attributes["b"] = round(self._model.b, 5)
+            self._attr_extra_state_attributes["b"] = round(model.b, 5)
             self._attr_extra_state_attributes["ground"] = round(ground, 2)
+        self.async_write_ha_state()
+
+
+class ZoneForecastSensor(SensorEntity):
+    """The zone's room temperature forecast 3 hours ahead (hypothesis 16).
+
+    The recorder history of this sensor is the archive of forecasts as issued:
+    the state is the forecast for 3 hours on, ``predicted_1h`` and
+    ``predicted_6h`` the other leads, ``start`` the room temperature when it was
+    made. Every ``LEARN_EVERY`` the sensor scores its own last ``SCORE_DAYS``
+    days against the room (``error_1h`` and so on). ``points`` (not recorded)
+    is the full day ahead for the charts.
+    """
+
+    _attr_should_poll = False
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 2
+    _unrecorded_attributes = frozenset({"points"})
+
+    def __init__(self, brain: ZoneBrain):
+        self._brain = brain
+        self._hass = brain.hass
+        zone = brain.zone
+        self._attr_name = f"Forecast {zone['name']}"
+        self._attr_unique_id = f"home_thermal_lab_forecast_{zone['climate_entity']}"
+        self._scores: dict = {}
+
+    async def async_added_to_hass(self) -> None:
+        self._brain.entities["forecast"] = self.entity_id
+        self.async_on_remove(self._brain.listen(self._learned))
+        self.async_on_remove(self._brain.start())
+        self.async_on_remove(
+            async_track_time_interval(self._hass, self._refresh, SCAN_INTERVAL)
+        )
+        await self._refresh(None)
+
+    async def _learned(self) -> None:
+        await self._score()
+        await self._refresh(None)
+
+    async def _score(self) -> None:
+        """Score this sensor's recorded forecasts against the room."""
+        zone = self._brain.zone
+        room_id = zone.get("room_entity") or zone["climate_entity"]
+        end = datetime.now(UTC)
+        start = end - timedelta(days=SCORE_DAYS)
+        try:
+            rows = await _recorded(self._hass, [self.entity_id, room_id], start, end)
+        except Exception:  # noqa: BLE001 - keep the last scores
+            _LOGGER.warning("Could not score the forecast for %s", zone["name"])
+            return
+        actual = (
+            _numbers(rows[room_id])
+            if zone.get("room_entity")
+            else temperature_series(rows[room_id])
+        )
+        found = score(issued_from_rows(rows[self.entity_id]), actual, end)
+        self._scores = {
+            f"error_{lead:g}h": {
+                "mae": round(s.mae, 3),
+                "bias": round(s.bias, 3),
+                "rmse": round(s.rmse, 3),
+                "change_mae": None if s.change_mae is None else round(s.change_mae, 3),
+                "n": s.n,
+            }
+            for lead, s in found.items()
+        }
+
+    async def _refresh(self, _now) -> None:
+        brain = self._brain
+        zone = brain.zone
+        attrs, room, setpoint = _zone_now(self._hass, zone)
+        model = brain.model
+        if attrs is None or model is None or room is None:
+            self._attr_native_value = None
+            self._attr_extra_state_attributes = {"model": brain.note, **self._scores}
+            self.async_write_ha_state()
+            return
+        if setpoint is None:  # thermostat off: the room drifts with no heat
+            model = replace(model, h=0.0)
+        now = datetime.now(UTC).replace(second=0, microsecond=0)
+        outdoor_now = _state_number(self._hass, brain.outdoor_entity)
+        outdoor, light, wall, shift = await brain.inputs(
+            now, FORECAST_STEPS, outdoor_now
+        )
+        if not outdoor:
+            self._attr_native_value = None
+            self.async_write_ha_state()
+            return
+        step = timedelta(hours=STEP_HOURS)
+        times = [dt_util.as_local(now + k * step) for k in range(len(outdoor) + 1)]
+        plan = setpoints_ahead(
+            room if setpoint is None else setpoint,
+            None if setpoint is None else brain.schedule,
+            [slot_of(t) for t in times],
+        )
+        outlook = build_outlook(
+            now,
+            room,
+            model,
+            outdoor,
+            light,
+            STEP_HOURS,
+            plan,
+            [t.hour + t.minute / 60.0 for t in times],
+            zone["deadband"],
+            attrs.get("hvac_action") == "heating",
+            wall,
+            brain.ground_now(now),
+            brain.wave,
+            zone["tolerance"],
+        )
+        ahead = {lead: outlook.at(lead) for lead in LEADS}
+        self._attr_native_value = None if ahead[3] is None else round(ahead[3], 2)
+        self._attr_extra_state_attributes = {
+            "issued": now.isoformat(),
+            "start": round(room, 2),
+            "predicted_1h": None if ahead[1] is None else round(ahead[1], 2),
+            "predicted_6h": None if ahead[6] is None else round(ahead[6], 2),
+            "setpoint": setpoint,
+            "heating_rate": round(model.h, 3),
+            "outdoor_correction": round(shift, 2),
+            **self._scores,
+            "points": outlook_points(outlook, every=2),
+        }
+        self.async_write_ha_state()
+
+
+class TargetSensor(SensorEntity):
+    """The zone's target temperature now (the centre of the target band).
+
+    With ``target_mean`` set, the target wave (``target.py``); otherwise the
+    thermostat's setpoint. ``lower`` and ``upper`` are the band, recorded so a
+    chart can draw the band's history.
+    """
+
+    _attr_should_poll = False
+    _attr_device_class = SensorDeviceClass.TEMPERATURE
+    _attr_native_unit_of_measurement = UnitOfTemperature.CELSIUS
+    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_suggested_display_precision = 2
+    _attr_icon = "mdi:sine-wave"
+
+    def __init__(self, brain: ZoneBrain):
+        self._brain = brain
+        self._hass = brain.hass
+        zone = brain.zone
+        self._attr_name = f"Target {zone['name']}"
+        self._attr_unique_id = f"home_thermal_lab_target_{zone['climate_entity']}"
+
+    async def async_added_to_hass(self) -> None:
+        self._brain.entities["target"] = self.entity_id
+        self.async_on_remove(self._brain.start())
+        self.async_on_remove(
+            async_track_time_interval(self._hass, self._refresh, SCAN_INTERVAL)
+        )
+        self.async_on_remove(
+            async_track_state_change_event(
+                self._hass, [self._brain.zone["climate_entity"]], self._refresh
+            )
+        )
+        await self._refresh(None)
+
+    async def _refresh(self, _event) -> None:
+        zone = self._brain.zone
+        _, _, setpoint = _zone_now(self._hass, zone)
+        wave = self._brain.wave
+        if wave is None and setpoint is None:
+            self._attr_native_value = None
+            self.async_write_ha_state()
+            return
+        band = band_at(
+            wave, setpoint or 0.0, zone["tolerance"], _local_hour(datetime.now(UTC))
+        )
+        self._attr_native_value = round(band.centre, 2)
+        self._attr_extra_state_attributes = {
+            "lower": round(band.lower, 2),
+            "upper": round(band.upper, 2),
+            "source": "wave" if wave else "setpoint",
+        }
+        if wave:
+            self._attr_extra_state_attributes |= {
+                "mean": wave.mean,
+                "swing": wave.swing,
+                "peak_hour": wave.peak_hour,
+                "band": wave.band,
+            }
         self.async_write_ha_state()
 
 

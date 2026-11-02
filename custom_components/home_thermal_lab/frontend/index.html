@@ -1,0 +1,567 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Thermal Lab</title>
+<!--
+  The Home Thermal Lab panel. Served by Home Assistant from the integration's
+  frontend/ folder (see panel.py); Chart.js is vendored next to it (invoke vendor),
+  so nothing is fetched from the internet. Data comes over the parent page's
+  websocket connection: home_thermal_lab/zones and home_thermal_lab/zone.
+-->
+<style>
+  :root {
+    --bg: #fafafa; --card: #ffffff; --text: #212121; --muted: #727272;
+    --line: #e0e0e0; --accent: #03a9f4; --room: #ef6c00; --outdoor: #1e88e5;
+    --band: rgba(67, 160, 71, 0.16); --band-edge: rgba(67, 160, 71, 0.55);
+    --heat: #e53935; --setpoint: #8e8e8e; --chip: #eeeeee;
+    --good: #43a047; --fair: #f9a825; --poor: #e53935; --none: #9e9e9e;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #111111; --card: #1c1c1c; --text: #e1e1e1; --muted: #9b9b9b;
+      --line: #333333; --chip: #2a2a2a; --setpoint: #9e9e9e;
+      --band: rgba(102, 187, 106, 0.18); --band-edge: rgba(102, 187, 106, 0.6);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #111111; --card: #1c1c1c; --text: #e1e1e1; --muted: #9b9b9b;
+    --line: #333333; --chip: #2a2a2a; --setpoint: #9e9e9e;
+    --band: rgba(102, 187, 106, 0.18); --band-edge: rgba(102, 187, 106, 0.6);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.45 Roboto, "Segoe UI", system-ui, -apple-system, sans-serif;
+  }
+  main { max-width: 1100px; margin: 0 auto; padding: 16px; }
+  h1 { font-size: 22px; font-weight: 500; margin: 4px 0 12px; }
+  h2 {
+    font-size: 12px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--muted); margin: 0 0 12px;
+  }
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+    padding: 16px; margin-bottom: 16px;
+  }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+  .bar .spacer { flex: 1; }
+  .bar > .bar { min-width: 0; flex-wrap: wrap; }
+  button.chip {
+    border: 1px solid var(--line); background: var(--chip); color: var(--text);
+    border-radius: 16px; padding: 4px 12px; font: inherit; cursor: pointer;
+  }
+  button.chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(140px, 100%), 1fr)); gap: 10px; }
+  .tile { background: var(--chip); border-radius: 10px; padding: 10px 12px; min-height: 84px; }
+  .tile .label { font-size: 12px; color: var(--muted); }
+  .tile .value { font-size: 22px; font-weight: 500; margin-top: 2px; }
+  .tile .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .chart-main { position: relative; height: 360px; }
+  .chart-strip { position: relative; height: 54px; margin-top: 4px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 13px; }
+  .legend label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
+  .swatch { width: 18px; height: 0; border-top: 3px solid; display: inline-block; }
+  .swatch.dashed { border-top-style: dashed; }
+  .swatch.dotted { border-top-style: dotted; }
+  .swatch.box { height: 10px; border: 1px solid var(--band-edge); background: var(--band); }
+  .swatch.heat { height: 10px; border: 0; background: var(--heat); opacity: 0.7; }
+  .grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr)); gap: 16px; }
+  .grid2 > *, .card, .tile { min-width: 0; }
+  .panel { border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; }
+  .panel h3 { font-size: 15px; font-weight: 500; margin: 0 0 6px; display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .row { display: flex; justify-content: space-between; gap: 12px; padding: 3px 0; border-bottom: 1px dashed var(--line); }
+  .row:last-child { border-bottom: 0; }
+  .row .k { color: var(--muted); }
+  .row .v { text-align: right; font-variant-numeric: tabular-nums; min-width: 0; overflow-wrap: anywhere; }
+  .row .k { flex: 0 0 auto; max-width: 50%; }
+  .pill { font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 12px; color: #fff; white-space: nowrap; }
+  .pill.high { background: var(--good); } .pill.medium { background: var(--fair); color: #222; }
+  .pill.low { background: var(--poor); } .pill.none { background: var(--none); }
+  .hint { color: var(--muted); font-size: 12px; margin: 8px 0 0; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 4px 6px; border-bottom: 1px solid var(--line); }
+  th:first-child, td:first-child { text-align: left; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; }
+  .banner { background: #fff3e0; color: #6d4c00; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
+  .hidden { display: none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Thermal Lab</h1>
+  <div id="error" class="banner hidden"></div>
+
+  <div class="bar" id="zones" role="group" aria-label="Zone"></div>
+
+  <section class="card">
+    <h2>Now</h2>
+    <div class="tiles" id="tiles"></div>
+  </section>
+
+  <section class="card">
+    <div class="bar">
+      <h2 style="margin:0">Temperature</h2>
+      <span class="spacer"></span>
+      <div class="bar" id="ranges" role="group" aria-label="Range" style="margin:0"></div>
+    </div>
+    <div class="chart-main"><canvas id="main" aria-label="Room and outdoor temperature, target band and forecast"></canvas></div>
+    <div class="chart-strip"><canvas id="strip" aria-label="Heating calls, and the forecast furnace duty"></canvas></div>
+    <div class="legend" id="legend"></div>
+    <p class="hint">Dashed lines after the "now" mark are the forecast for the next day (the zone model with a simulated thermostat).
+      The dotted line is what the forecast said three hours earlier, laid over what happened. The red strip is the zone's heating calls,
+      then the forecast furnace duty.</p>
+  </section>
+
+  <section class="card">
+    <h2>Thermal model</h2>
+    <div class="grid2" id="model"></div>
+  </section>
+</main>
+
+<script src="chart.umd.min.js?v=4.4.1"></script>
+<script>
+"use strict";
+
+const RANGES = [["6h", 6], ["12h", 12], ["24h", 24], ["3d", 72], ["7d", 168], ["30d", 720]];
+const AHEAD_MS = 24 * 3600e3;
+const REFRESH_MS = 5 * 60e3;
+const state = { zones: [], zone: null, hours: 24, data: null, hidden: new Set() };
+let mainChart = null;
+let stripChart = null;
+
+function remember(key, value) {
+  try { localStorage.setItem("home_thermal_lab." + key, JSON.stringify(value)); } catch (e) { /* private mode */ }
+}
+function recall(key, fallback) {
+  try { const v = localStorage.getItem("home_thermal_lab." + key); return v === null ? fallback : JSON.parse(v); }
+  catch (e) { return fallback; }
+}
+
+/* Follow Home Assistant's theme when the parent page allows it. */
+function applyTheme() {
+  let parentStyle = null;
+  try { parentStyle = getComputedStyle(window.parent.document.documentElement); } catch (e) { return; }
+  const pick = (name) => parentStyle.getPropertyValue(name).trim();
+  const map = {
+    "--bg": "--primary-background-color", "--card": "--card-background-color",
+    "--text": "--primary-text-color", "--muted": "--secondary-text-color",
+    "--line": "--divider-color", "--accent": "--primary-color",
+    "--chip": "--secondary-background-color",
+  };
+  const root = document.documentElement;
+  for (const [ours, theirs] of Object.entries(map)) {
+    const value = pick(theirs);
+    if (value) root.style.setProperty(ours, value);
+  }
+  try {
+    const dark = window.parent.document.querySelector("home-assistant")?.hass?.themes?.darkMode;
+    if (dark !== undefined) root.dataset.theme = dark ? "dark" : "light";
+  } catch (e) { /* not available */ }
+}
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+async function connection() {
+  const parent = window.parent;
+  if (!parent || parent === window || !parent.hassConnection) {
+    throw new Error("Open this page from the Thermal Lab panel in Home Assistant's sidebar.");
+  }
+  const { conn } = await parent.hassConnection;
+  return conn;
+}
+async function ask(message) {
+  return (await connection()).sendMessagePromise(message);
+}
+
+function showError(text) {
+  const box = document.getElementById("error");
+  box.textContent = text || "";
+  box.classList.toggle("hidden", !text);
+}
+
+function el(tag, attrs = {}, ...children) {
+  const node = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === "class") node.className = v;
+    else if (k.startsWith("on")) node.addEventListener(k.slice(2), v);
+    else node.setAttribute(k, v);
+  }
+  for (const c of children) if (c !== null && c !== undefined) node.append(c);
+  return node;
+}
+
+const num = (v) => (v === null || v === undefined || v === "" || isNaN(Number(v)) ? null : Number(v));
+function fmt(v, digits = 1, unit = "") {
+  const n = num(v);
+  return n === null ? "–" : n.toFixed(digits) + unit;
+}
+function signed(v, digits = 2, unit = "") {
+  const n = num(v);
+  return n === null ? "–" : (n > 0 ? "+" : "") + n.toFixed(digits) + unit;
+}
+function ago(iso) {
+  if (!iso) return "–";
+  const minutes = Math.round((Date.now() - new Date(iso).getTime()) / 60e3);
+  if (minutes < 2) return "just now";
+  if (minutes < 120) return minutes + " min ago";
+  return Math.round(minutes / 60) + " h ago";
+}
+
+/* ---------- zones and ranges ---------- */
+
+function drawZones() {
+  const bar = document.getElementById("zones");
+  bar.replaceChildren(...state.zones.map((z) =>
+    el("button", {
+      class: "chip", type: "button", "aria-pressed": String(z.key === state.zone),
+      onclick: () => { state.zone = z.key; remember("zone", z.key); drawZones(); load(); },
+    }, z.name)));
+}
+function drawRanges() {
+  const bar = document.getElementById("ranges");
+  bar.replaceChildren(...RANGES.map(([label, hours]) =>
+    el("button", {
+      class: "chip", type: "button", "aria-pressed": String(hours === state.hours),
+      onclick: () => { state.hours = hours; remember("hours", hours); drawRanges(); load(); },
+    }, label)));
+}
+
+/* ---------- tiles ---------- */
+
+function tile(label, value, sub) {
+  return el("div", { class: "tile" },
+    el("div", { class: "label" }, label),
+    el("div", { class: "value" }, value),
+    sub ? el("div", { class: "sub" }, sub) : null);
+}
+function drawTiles(d) {
+  const s = d.status;
+  const three = s.scores && s.scores.error_3h;
+  const target = s.target_source === "wave" ? "target wave" : "thermostat setpoint";
+  const shadow = s.shadow === "skip" ? "Could skip" : s.shadow === "heat" ? "Needs heat" : "–";
+  document.getElementById("tiles").replaceChildren(
+    tile("Room", fmt(s.room, 1, " °C"), "outdoor " + fmt(s.outdoor, 1, " °C")),
+    tile("Target", fmt(s.target, 1, " °C"), `${fmt(s.lower, 1)}–${fmt(s.upper, 1)} °C, ${target}`),
+    tile("Thermostat", fmt(s.setpoint, 1, " °C"), s.action ? "now " + s.action : null),
+    tile("A call starting now", shadow, s.lowest_vs_setpoint === undefined || s.lowest_vs_setpoint === null
+      ? null : "lowest in 3 h: " + signed(s.lowest_vs_setpoint, 2, " °C") + " vs setpoint"),
+    tile("In 3 hours", fmt(s.forecast_3h, 1, " °C"),
+      num(s.outdoor_correction) ? "outdoor forecast corrected " + signed(s.outdoor_correction, 1, " °C") : "forecast"),
+    tile("3-hour forecast error", three ? fmt(three.mae, 2, " °C") : "–",
+      three ? `mean of ${three.n} over 7 days, bias ${signed(three.bias, 2)}` : "after a few hours of logging"),
+  );
+}
+
+/* ---------- charts ---------- */
+
+const xy = (points) => (points || []).map(([x, y]) => ({ x, y }));
+
+function bandPoints(d, key) {
+  return xy(d.history[key]).concat(xy(d.future[key]));
+}
+
+/* Heating calls as a 0/1 step, then the forecast duty. */
+function heatPoints(d) {
+  const out = [];
+  for (const [a, b] of d.history.heating) {
+    out.push({ x: a, y: 0 }, { x: a, y: 1 }, { x: b, y: 1 }, { x: b, y: 0 });
+  }
+  return out;
+}
+
+function niceStep(spanMs) {
+  const hour = 3600e3;
+  const steps = [1, 2, 3, 6, 12, 24, 48, 72, 168].map((h) => h * hour);
+  return steps.find((s) => spanMs / s <= 9) || 168 * hour;
+}
+function ticksFor(min, max) {
+  const step = niceStep(max - min);
+  const first = new Date(min);
+  first.setMinutes(0, 0, 0);
+  const stepHours = step / 3600e3;
+  if (stepHours >= 24) first.setHours(0);
+  else first.setHours(Math.floor(first.getHours() / stepHours) * stepHours);
+  const ticks = [];
+  for (let t = first.getTime(); t <= max; t += step) if (t >= min) ticks.push({ value: t });
+  return ticks;
+}
+function tickLabel(value, spanMs) {
+  const d = new Date(value);
+  if (spanMs <= 36 * 3600e3) return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (spanMs <= 8 * 24 * 3600e3) {
+    return d.getHours() === 0
+      ? d.toLocaleDateString([], { weekday: "short", day: "numeric" })
+      : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+  return d.toLocaleDateString([], { month: "short", day: "numeric" });
+}
+
+const nowLine = {
+  id: "nowLine",
+  afterDatasetsDraw(chart, _args, opts) {
+    const x = chart.scales.x.getPixelForValue(opts.now);
+    if (!(x >= chart.chartArea.left && x <= chart.chartArea.right)) return;
+    const ctx = chart.ctx;
+    ctx.save();
+    ctx.strokeStyle = css("--muted");
+    ctx.setLineDash([4, 4]);
+    ctx.beginPath();
+    ctx.moveTo(x, chart.chartArea.top);
+    ctx.lineTo(x, chart.chartArea.bottom);
+    ctx.stroke();
+    if (opts.label) {
+      ctx.setLineDash([]);
+      ctx.fillStyle = css("--muted");
+      ctx.font = "11px sans-serif";
+      ctx.textAlign = "center";
+      ctx.fillText("now", x, chart.chartArea.top - 4);
+    }
+    ctx.restore();
+  },
+};
+
+const AXIS_WIDTH = 58;
+
+function datasets(d) {
+  const room = css("--room");
+  const outdoor = css("--outdoor");
+  return [
+    { key: "band", label: "Target band", data: bandPoints(d, "lower"), borderWidth: 0, pointRadius: 0, fill: false, stepped: "after", borderColor: "transparent" },
+    { key: "band", label: "Target band (upper)", data: bandPoints(d, "upper"), borderWidth: 1, pointRadius: 0, fill: "-1", stepped: "after", borderColor: css("--band-edge"), backgroundColor: css("--band") },
+    { key: "setpoint", label: "Thermostat setpoint", data: xy(d.history.setpoint), borderWidth: 1.5, pointRadius: 0, stepped: "after", borderColor: css("--setpoint"), borderDash: [2, 3], spanGaps: false },
+    { key: "room", label: "Room", data: xy(d.history.room), borderWidth: 2, pointRadius: 0, borderColor: room, spanGaps: 30 * 60e3, stepped: "after" },
+    { key: "issued", label: "Forecast made 3 h before", data: xy(d.history.issued), borderWidth: 1.5, pointRadius: 0, borderColor: room, borderDash: [1, 3], spanGaps: 60 * 60e3 },
+    { key: "ahead", label: "Room forecast", data: xy(d.future.temp), borderWidth: 2, pointRadius: 0, borderColor: room, borderDash: [6, 4] },
+    { key: "outdoor", label: "Outdoor", data: xy(d.history.outdoor), borderWidth: 1.5, pointRadius: 0, borderColor: outdoor, spanGaps: 2 * 3600e3, yAxisID: "y2" },
+    { key: "outdoorAhead", label: "Outdoor forecast", data: xy(d.future.outdoor), borderWidth: 1.5, pointRadius: 0, borderColor: outdoor, borderDash: [6, 4], yAxisID: "y2" },
+  ].map((ds) => ({ ...ds, hidden: state.hidden.has(ds.key), tension: 0, parsing: false, normalized: true }));
+}
+
+function xScale(min, max, show) {
+  return {
+    type: "linear", min, max, display: show,
+    grid: { color: css("--line") },
+    afterBuildTicks: (scale) => { scale.ticks = ticksFor(min, max); },
+    ticks: { color: css("--muted"), maxRotation: 0, autoSkip: true, callback: (v) => tickLabel(v, max - min) },
+  };
+}
+
+function drawCharts(d) {
+  const min = d.start;
+  const max = d.now + AHEAD_MS;
+  const common = {
+    responsive: true, maintainAspectRatio: false, animation: false,
+    interaction: { mode: "nearest", axis: "x", intersect: false },
+  };
+  const tooltip = {
+    callbacks: {
+      title: (items) => items.length ? new Date(items[0].parsed.x).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "",
+      label: (item) => `${item.dataset.label}: ${item.parsed.y === null ? "–" : item.parsed.y.toFixed(2)} °C`,
+    },
+    filter: (item) => item.dataset.label !== "Target band (upper)",
+  };
+  const mainConfig = {
+    type: "line",
+    data: { datasets: datasets(d) },
+    options: {
+      ...common,
+      layout: { padding: { top: 14 } },
+      scales: {
+        x: xScale(min, max, true),
+        y: {
+          grid: { color: css("--line") }, ticks: { color: css("--room"), callback: (v) => v + "°" },
+          title: { display: true, text: "room", color: css("--room") },
+          afterFit: (scale) => { scale.width = AXIS_WIDTH; },
+        },
+        // Outdoor on its own axis: in winter it is 20 to 40 degrees below the
+        // room, and one axis would flatten the room's half-degree changes.
+        y2: {
+          position: "right", grid: { display: false },
+          ticks: { color: css("--outdoor"), callback: (v) => v + "°" },
+          title: { display: true, text: "outdoor", color: css("--outdoor") },
+          afterFit: (scale) => { scale.width = AXIS_WIDTH; },
+        },
+      },
+      plugins: {
+        legend: { display: false },
+        decimation: { enabled: true, algorithm: "lttb", samples: 600 },
+        tooltip,
+        nowLine: { now: d.now, label: true },
+      },
+    },
+    plugins: [nowLine],
+  };
+  const heat = css("--heat");
+  const stripConfig = {
+    type: "line",
+    data: {
+      datasets: [
+        { label: "Heating call", data: heatPoints(d), borderWidth: 0, pointRadius: 0, fill: "origin", backgroundColor: heat + "b3", parsing: false },
+        { label: "Forecast furnace duty", data: xy(d.future.heat), borderWidth: 0, pointRadius: 0, fill: "origin", stepped: "after", backgroundColor: heat + "55", parsing: false },
+      ],
+    },
+    options: {
+      ...common,
+      scales: {
+        x: xScale(min, max, false),
+        y: {
+          min: 0, max: 1, grid: { display: false },
+          ticks: { display: true, color: css("--muted"), callback: (v) => (v === 1 ? "heat" : "") },
+          afterFit: (scale) => { scale.width = AXIS_WIDTH; },
+        },
+        y2: {
+          position: "right", min: 0, max: 1, grid: { display: false }, ticks: { display: false },
+          afterFit: (scale) => { scale.width = AXIS_WIDTH; },
+        },
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: { callbacks: { label: (item) => `${item.dataset.label}: ${Math.round(item.parsed.y * 100)}%`,
+          title: (items) => items.length ? new Date(items[0].parsed.x).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "" } },
+        nowLine: { now: d.now, label: false },
+      },
+    },
+    plugins: [nowLine],
+  };
+  if (mainChart) mainChart.destroy();
+  if (stripChart) stripChart.destroy();
+  mainChart = new Chart(document.getElementById("main"), mainConfig);
+  stripChart = new Chart(document.getElementById("strip"), stripConfig);
+  drawLegend();
+}
+
+function drawLegend() {
+  const items = [
+    ["room", "Room", "", css("--room")],
+    ["ahead", "Room forecast", "dashed", css("--room")],
+    ["issued", "Forecast made 3 h before", "dotted", css("--room")],
+    ["outdoor", "Outdoor", "", css("--outdoor")],
+    ["outdoorAhead", "Outdoor forecast", "dashed", css("--outdoor")],
+    ["setpoint", "Thermostat setpoint", "dotted", css("--setpoint")],
+    ["band", "Target band", "box", null],
+  ];
+  const legend = document.getElementById("legend");
+  legend.replaceChildren(...items.map(([key, label, style, color]) => {
+    const box = el("input", { type: "checkbox" });
+    box.checked = !state.hidden.has(key);
+    box.addEventListener("change", () => {
+      if (box.checked) state.hidden.delete(key); else state.hidden.add(key);
+      remember("hidden", [...state.hidden]);
+      for (const ds of mainChart.data.datasets) if (ds.key === key) ds.hidden = !box.checked;
+      mainChart.update();
+    });
+    const swatch = el("span", { class: "swatch " + style });
+    if (color) swatch.style.borderTopColor = color;
+    return el("label", {}, box, swatch, label);
+  }), el("label", {}, el("span", { class: "swatch heat" }), "Heating call / forecast duty"));
+}
+
+/* ---------- model card ---------- */
+
+function row(key, value) {
+  return el("div", { class: "row" }, el("span", { class: "k" }, key), el("span", { class: "v" }, value));
+}
+const GRADE = { high: "Strong", medium: "Fair", low: "Weak", none: "None" };
+const PROBLEM = {
+  "wrong sign": "The fit says the room warms toward a colder outdoors: something else (other zones, people) drives it. Not used.",
+  "out of range": "The fitted loss rate is implausibly fast. Not used.",
+  "too little idle data": "Not enough furnace-off history yet (a few days are needed).",
+};
+
+function drawModel(d) {
+  const m = d.model;
+  const t = m.terms;
+  const house = [
+    el("h3", {}, "House response", el("span", { class: "pill " + (m.grade || "none") }, "Calibration: " + (GRADE[m.grade] || "None"))),
+    row("Model", m.note || "–"),
+  ];
+  if (m.problem) house.push(el("p", { class: "hint" }, PROBLEM[m.problem] || m.problem));
+  if (t) {
+    house.push(
+      row("Heat loss rate a", `${fmt(t.a, 4)} /h (time constant ${t.a > 0 ? Math.round(1 / t.a) + " h" : "–"})`),
+      row("Rest of the house c", fmt(t.c, 3, " °C/h")),
+      row("Sun through glass g", fmt(t.g * 100, 3, " °C/h per 100 W/m²")),
+    );
+    if (m.has_walls) house.push(row("Sunlit walls w", `${fmt(t.w * 100, 3, " °C/h per 100 W/m²")}, lag ${fmt(m.wall_tau, 1, " h")}`));
+    if (m.below_ground) house.push(row("Ground b", fmt(t.b, 4, " /h")));
+    house.push(row("Heating rate h", t.h > 0 ? fmt(t.h, 2, " °C per hour of call") : "not learned yet"));
+  }
+  if (m.method) house.push(row("Fit", `${m.method}, ${m.bins} idle 15-min bins, R² ${fmt(m.r2, 2)}`));
+  house.push(row("Last fitted", ago(m.fitted_at)));
+  if (m.wave) {
+    house.push(row("Target wave", `${fmt(m.wave.mean, 1)} ± ${fmt(m.wave.swing, 1)} °C, warmest ${fmt(m.wave.peak_hour, 0)}:00, band ±${fmt(m.wave.band, 1)}`));
+  }
+
+  const scores = d.status.scores || {};
+  const leads = Object.keys(scores).sort((a, b) => parseFloat(a.slice(6)) - parseFloat(b.slice(6)));
+  const forecast = [
+    el("h3", {}, "How well it forecasts"),
+    row("1 h ahead on idle history", m.error_1h === undefined ? "–" : `${fmt(m.error_1h, 2)} °C (holding: ${fmt(m.hold_1h, 2)})`),
+    row("3 h ahead on idle history", m.error_3h === undefined ? "–" : `${fmt(m.error_3h, 2)} °C (holding: ${fmt(m.hold_3h, 2)})`),
+    row("Outdoor forecast bias", m.bias_hours ? `${signed(m.outdoor_bias, 2, " °C")} over ${m.bias_hours} h` : "–"),
+  ];
+  if (leads.length) {
+    forecast.push(el("p", { class: "hint" }, "Live forecasts as issued, scored against the room over the last 7 days. Change: the error in the predicted change from the start, which leaves out any error in the starting reading."));
+    forecast.push(el("div", { class: "table-wrap" }, el("table", {},
+      el("thead", {}, el("tr", {}, ...["Lead", "MAE", "RMSE", "Bias", "Change", "n"].map((h) => el("th", {}, h)))),
+      el("tbody", {}, ...leads.map((k) => {
+        const s = scores[k];
+        return el("tr", {}, el("td", {}, k.slice(6)), el("td", {}, fmt(s.mae, 2)), el("td", {}, fmt(s.rmse, 2)),
+          el("td", {}, signed(s.bias, 2)), el("td", {}, fmt(s.change_mae, 2)), el("td", {}, String(s.n)));
+      })))));
+  } else {
+    forecast.push(el("p", { class: "hint" }, "Live scores appear once the forecast sensor has a few hours of history."));
+  }
+  forecast.push(el("p", { class: "hint" }, "Idle history: the model's no-heat path from every furnace-off moment in the last 14 days, against simply holding the temperature."));
+  document.getElementById("model").replaceChildren(
+    el("div", { class: "panel" }, ...house),
+    el("div", { class: "panel" }, ...forecast));
+}
+
+/* ---------- loading ---------- */
+
+let loading = 0;
+async function load() {
+  if (!state.zone) return;
+  const ticket = ++loading;
+  try {
+    const d = await ask({ type: "home_thermal_lab/zone", zone: state.zone, hours: state.hours });
+    if (ticket !== loading) return;
+    state.data = d;
+    showError("");
+    drawTiles(d);
+    drawCharts(d);
+    drawModel(d);
+  } catch (err) {
+    showError("Could not load the zone: " + (err && (err.message || err.code) || err));
+  }
+}
+
+async function start() {
+  applyTheme();
+  state.hours = recall("hours", 24);
+  state.hidden = new Set(recall("hidden", []));
+  drawRanges();
+  try {
+    state.zones = await ask({ type: "home_thermal_lab/zones" });
+  } catch (err) {
+    showError(err && err.message ? err.message : "Could not reach Home Assistant.");
+    return;
+  }
+  if (!state.zones.length) {
+    showError("No zones yet: add a shadow zone on the Home Thermal Lab integration's page.");
+    return;
+  }
+  const saved = recall("zone", null);
+  state.zone = state.zones.some((z) => z.key === saved) ? saved : state.zones[0].key;
+  drawZones();
+  await load();
+  setInterval(load, REFRESH_MS);
+}
+
+start();
+</script>
+</body>
+</html>

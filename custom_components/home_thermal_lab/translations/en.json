@@ -170,7 +170,7 @@
       "step": {
         "user": {
           "title": "Shadow zone (with sun)",
-          "description": "Says whether a heating call starting now could be skipped, counting the sun on this room's windows and roofs (hypothesis 17). Nothing is switched. With a and c left empty, the model is learned from the recorder and refreshed every 6 hours; the sensor's attributes show what it learned.",
+          "description": "Says whether a heating call starting now could be skipped, counting the sun on this room's windows and roofs (hypothesis 17), and forecasts the room for the next day with a simulated thermostat (hypothesis 16). Nothing is switched. With a and c left empty, the model is learned from the recorder and refreshed every 6 hours; the shadow sensor's attributes show what it learned and how well it forecasts. Each zone also gets a Forecast and a Target sensor, and appears in the Thermal Lab panel.",
           "data": {
             "name": "Name",
             "climate_entity": "Thermostat",
@@ -185,7 +185,13 @@
             "shade_below": "Shaded below sun elevation (degrees), optional",
             "sunlit_walls": "Sunlit walls without windows",
             "below_ground": "Below ground (basement)",
-            "ground_entity": "Ground temperature sensor"
+            "ground_entity": "Ground temperature sensor",
+            "h": "Heating rate h (degrees per hour of call), optional",
+            "deadband": "Thermostat deadband (degrees)",
+            "target_mean": "Target wave: daily mean (degrees), optional",
+            "target_swing": "Target wave: swing (degrees either side of the mean)",
+            "target_peak_hour": "Target wave: warmest hour (local clock)",
+            "target_band": "Target wave: comfort band (degrees either side)"
           },
           "data_description": {
             "room_entity": "Used instead of the thermostat's own reading when set.",
@@ -199,12 +205,18 @@
             "g": "Only used with a and c.",
             "sunlit_walls": "Faces of solid wall the sun hits. Learned separately from the windows: sun on a wall warms it slowly.",
             "below_ground": "Tick for a room whose walls are in the soil. The model then also learns how fast the room trades heat with the ground.",
-            "ground_entity": "Optional soil or ground temperature. Leave empty to use the annual ground wave set on the integration."
+            "ground_entity": "Optional soil or ground temperature. Leave empty to use the annual ground wave set on the integration.",
+            "h": "How fast the room warms while the furnace runs for this zone. Leave empty to learn it from the calls in the recorder.",
+            "deadband": "How far below the setpoint a call starts, in the forecast's simulated thermostat (default 0.1; measured calls start a median 0.05 to 0.07 below).",
+            "target_mean": "Leave empty to target the thermostat's setpoint instead of a daily wave.",
+            "target_swing": "Default 0: a flat target.",
+            "target_peak_hour": "Default 15 (3 pm): the outdoor wave peaks 1 to 3 hours after solar noon (hypothesis 02).",
+            "target_band": "Default 0.5."
           }
         },
         "reconfigure": {
           "title": "Shadow zone (with sun)",
-          "description": "Says whether a heating call starting now could be skipped, counting the sun on this room's windows and roofs (hypothesis 17). Nothing is switched. With a and c left empty, the model is learned from the recorder and refreshed every 6 hours; the sensor's attributes show what it learned.",
+          "description": "Says whether a heating call starting now could be skipped, counting the sun on this room's windows and roofs (hypothesis 17), and forecasts the room for the next day with a simulated thermostat (hypothesis 16). Nothing is switched. With a and c left empty, the model is learned from the recorder and refreshed every 6 hours; the shadow sensor's attributes show what it learned and how well it forecasts. Each zone also gets a Forecast and a Target sensor, and appears in the Thermal Lab panel.",
           "data": {
             "name": "Name",
             "climate_entity": "Thermostat",
@@ -219,7 +231,13 @@
             "shade_below": "Shaded below sun elevation (degrees), optional",
             "sunlit_walls": "Sunlit walls without windows",
             "below_ground": "Below ground (basement)",
-            "ground_entity": "Ground temperature sensor"
+            "ground_entity": "Ground temperature sensor",
+            "h": "Heating rate h (degrees per hour of call), optional",
+            "deadband": "Thermostat deadband (degrees)",
+            "target_mean": "Target wave: daily mean (degrees), optional",
+            "target_swing": "Target wave: swing (degrees either side of the mean)",
+            "target_peak_hour": "Target wave: warmest hour (local clock)",
+            "target_band": "Target wave: comfort band (degrees either side)"
           },
           "data_description": {
             "room_entity": "Used instead of the thermostat's own reading when set.",
@@ -233,7 +251,13 @@
             "g": "Only used with a and c.",
             "sunlit_walls": "Faces of solid wall the sun hits. Learned separately from the windows: sun on a wall warms it slowly.",
             "below_ground": "Tick for a room whose walls are in the soil. The model then also learns how fast the room trades heat with the ground.",
-            "ground_entity": "Optional soil or ground temperature. Leave empty to use the annual ground wave set on the integration."
+            "ground_entity": "Optional soil or ground temperature. Leave empty to use the annual ground wave set on the integration.",
+            "h": "How fast the room warms while the furnace runs for this zone. Leave empty to learn it from the calls in the recorder.",
+            "deadband": "How far below the setpoint a call starts, in the forecast's simulated thermostat (default 0.1; measured calls start a median 0.05 to 0.07 below).",
+            "target_mean": "Leave empty to target the thermostat's setpoint instead of a daily wave.",
+            "target_swing": "Default 0: a flat target.",
+            "target_peak_hour": "Default 15 (3 pm): the outdoor wave peaks 1 to 3 hours after solar noon (hypothesis 02).",
+            "target_band": "Default 0.5."
           }
         }
       },

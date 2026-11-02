@@ -1,0 +1,167 @@
+# A dashboard view for one zone, built from standard cards and apexcharts-card
+# (HACS). The Thermal Lab panel in the sidebar shows the same and more without
+# any setup; this is for putting a zone on your own dashboards.
+#
+# Paste into a dashboard's raw configuration editor (as one entry under
+# `views:`), then replace the entity ids:
+#   climate.z4                  the zone's thermostat
+#   sensor.z4_temperature       the room temperature sensor
+#   sensor.edmonton_temperature the outdoor sensor
+#   *_z4_office                 the zone's sensors (Shadow, Forecast, Target)
+title: Z4 office
+path: z4-office
+cards:
+  # --- Now -----------------------------------------------------------------
+  - type: grid
+    columns: 3
+    square: false
+    cards:
+      - type: tile
+        entity: sensor.z4_temperature
+        name: Room
+      - type: tile
+        entity: sensor.target_z4_office
+        name: Target
+      - type: tile
+        entity: sensor.forecast_z4_office
+        name: In 3 hours
+      - type: tile
+        entity: sensor.shadow_z4_office
+        name: A call starting now
+      - type: tile
+        entity: climate.z4
+        name: Thermostat
+      - type: tile
+        entity: sensor.edmonton_temperature
+        name: Outdoor
+
+  # --- Temperature: the last day, and the forecast for the next -----------------
+  - type: custom:apexcharts-card
+    header:
+      show: true
+      title: Z4 office (C)
+    graph_span: 48h
+    span:
+      offset: +24h
+    now:
+      show: true
+      label: now
+    yaxis:
+      - decimals: 1
+    series:
+      - entity: sensor.z4_temperature
+        name: Room
+        color: "#ef6c00"
+        stroke_width: 2
+      # The forecast sensor's state is its forecast for 3 hours on; shifted
+      # back 3 hours it lands on the time it was made for, so it can be laid
+      # over what happened (ClimateAdvisor's dashed "predicted" line).
+      - entity: sensor.forecast_z4_office
+        name: Forecast made 3 h before
+        color: "#ef6c00"
+        stroke_width: 1
+        stroke_dash: 2
+        offset: -3h
+      - entity: sensor.forecast_z4_office
+        name: Room forecast
+        color: "#ef6c00"
+        stroke_width: 2
+        stroke_dash: 6
+        data_generator: |
+          return entity.attributes.points.map(p => [new Date(p.t).getTime(), p.temp]);
+      - entity: sensor.edmonton_temperature
+        name: Outdoor
+        color: "#1e88e5"
+        stroke_width: 2
+      - entity: sensor.forecast_z4_office
+        name: Outdoor forecast
+        color: "#1e88e5"
+        stroke_width: 2
+        stroke_dash: 6
+        data_generator: |
+          return entity.attributes.points.map(p => [new Date(p.t).getTime(), p.outdoor]);
+      - entity: climate.z4
+        attribute: temperature
+        name: Setpoint
+        color: "#8e8e8e"
+        curve: stepline
+        stroke_width: 1
+        stroke_dash: 3
+      - &band
+        entity: sensor.target_z4_office
+        attribute: lower
+        name: Target band
+        color: "#43a047"
+        curve: stepline
+        stroke_width: 1
+      - <<: *band
+        attribute: upper
+        name: Target band (top)
+      - &band_ahead
+        entity: sensor.forecast_z4_office
+        name: Target band ahead
+        color: "#43a047"
+        curve: stepline
+        stroke_width: 1
+        stroke_dash: 4
+        data_generator: |
+          return entity.attributes.points.map(p => [new Date(p.t).getTime(), p.lower]);
+      - <<: *band_ahead
+        name: Target band ahead (top)
+        data_generator: |
+          return entity.attributes.points.map(p => [new Date(p.t).getTime(), p.upper]);
+
+  # --- Furnace: the calls so far, and the forecast duty ---------------------------
+  - type: custom:apexcharts-card
+    header:
+      show: true
+      title: Furnace (share of each half hour)
+    graph_span: 48h
+    span:
+      offset: +24h
+    now:
+      show: true
+    yaxis:
+      - min: 0
+        max: 1
+        decimals: 1
+    series:
+      - entity: sensor.forecast_z4_office
+        name: Forecast duty
+        type: column
+        color: "#e53935"
+        data_generator: |
+          return entity.attributes.points.map(p => [new Date(p.t).getTime(), p.heat]);
+
+  # A history graph draws the thermostat with its heating periods shaded, and
+  # the shadow sensor's skip/heat as a timeline.
+  - type: history-graph
+    title: Calls and the shadow decision
+    hours_to_show: 24
+    entities:
+      - entity: climate.z4
+      - entity: sensor.shadow_z4_office
+
+  # --- The model ------------------------------------------------------------------
+  - type: markdown
+    title: Thermal model
+    content: |
+      {% set s = 'sensor.shadow_z4_office' %}
+      {% set f = 'sensor.forecast_z4_office' %}
+      **Calibration:** {{ state_attr(s, 'grade') }} · {{ state_attr(s, 'model') }}
+      {% if state_attr(s, 'problem') %}
+      **Not used:** {{ state_attr(s, 'problem') }}
+      {% endif %}
+
+      | | |
+      |---|---|
+      | Heat loss rate a | {{ state_attr(s, 'a') }} /h{% if (state_attr(s, 'a') or 0) > 0 %} (time constant {{ (1 / state_attr(s, 'a')) | round(0) }} h){% endif %} |
+      | Rest of the house c | {{ state_attr(s, 'c') }} °C/h |
+      | Sun through glass g | {{ state_attr(s, 'g') }} °C/h per W/m² |
+      | Heating rate h | {{ state_attr(s, 'h') }} °C per hour of call |
+      | Fit | {{ state_attr(s, 'method') }}, {{ state_attr(s, 'bins') }} bins, R² {{ state_attr(s, 'r2') }} |
+      | 1 h ahead (idle history) | {{ state_attr(s, 'error_1h') }} °C (holding {{ state_attr(s, 'hold_1h') }}) |
+      | 3 h ahead (idle history) | {{ state_attr(s, 'error_3h') }} °C (holding {{ state_attr(s, 'hold_3h') }}) |
+      | Outdoor forecast bias | {{ state_attr(s, 'outdoor_bias') }} °C over {{ state_attr(s, 'bias_hours') }} h |
+      {% set e = state_attr(f, 'error_3h') %}
+      {% if e %}| Live 3 h forecast (7 days) | MAE {{ e.mae }}, bias {{ e.bias }}, n {{ e.n }} |{% endif %}

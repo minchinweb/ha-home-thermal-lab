@@ -56,14 +56,25 @@ with the buttons in this order:
      to be clear; the fewer fan-only edges lost to heating calls, the better.
    - Gas: leave the power sensor empty, set the unit to **BTU/h** and type the
      furnace input (80,000 for the high stage, about 65% of that for low).
-3. **Add shadow zone (with sun)**: one per zone. Leave **a** and **c** empty and the
-   integration fits the zone's no-heat model on the last 14 days of idle
-   history (the room temperature, the outdoor sensor and the sun on its
-   windows), retries every 6 hours, and shows the result in the `a`, `c`, `g`
-   and `model` attributes. Type them in to pin the numbers instead.
+3. **Add shadow zone (with sun)**: one per zone. It makes three sensors (shadow,
+   forecast and target, below) and puts the zone in the **Thermal Lab** panel.
+   Leave **a** and **c** empty and the integration fits the zone's no-heat
+   model on the last 14 days of idle history (the room temperature, the outdoor
+   sensor and the sun on its windows), retries every 6 hours, and shows the
+   result in the `a`, `c`, `g` and `model` attributes. Type them in to pin the
+   numbers instead. The fit takes its rates over hour-long blocks (a thermostat
+   that reports in 0.1 C steps hides a 15 minute change), drops a sun, wall or
+   ground term that comes out negative, then refines the terms on 3 hour
+   simulated paths. A fit with the wrong sign (the room warming toward a
+   colder outdoors, as in a zone whose thermostat is off and that the rest of
+   the house drives) or an implausible loss rate is not used: the `problem`
+   attribute says why.
+   - **Heating rate h** is learned from the zone's calls (what the room gained
+     beyond the no-heat model, per hour of call) unless you type it in.
    - **Window faces** are the faces with glass (the `g` term). **Sunlit walls
      without windows** are faces of solid wall the sun hits; they get their own
-     gain `w`, with a 3 hour lag because a wall soaks up the sun slowly.
+     gain `w`, lagged because a wall soaks up the sun slowly (the lag, 1.5, 3
+     or 6 hours, is chosen by the fit).
    - Tick **Below ground** for a basement room: the model adds `b`, how fast the
      room trades heat with the soil. The soil is not the air: at basement depth it
      follows the air's annual wave with a smaller swing and a lag of about 70 days
@@ -101,10 +112,18 @@ sensor:
         room_entity: sensor.z4_temperature
         model: {a: 0.0106, c: 0.0032, g: 0.000229}   # leave out to learn it
         windows: [E]
-        # sunlit_walls: [S]            # solid walls the sun hits (own gain w, 3 h lag)
+        # sunlit_walls: [S]            # solid walls the sun hits (own gain w, lagged)
         # below_ground: true          # basement room; ground_entity: sensor.soil_temp (optional)
         rotation: 10.4
         shade_below: 18
+        # The forecast's simulated thermostat: calls start this far below the
+        # setpoint (default 0.1). Add h: to the model to pin the heating rate.
+        deadband: 0.1
+        # Target wave (target.py): leave target_mean out to target the setpoint.
+        target_mean: 21.0
+        target_swing: 0.5        # degrees either side of the mean
+        target_peak_hour: 15     # local clock hour of the warmest target
+        target_band: 0.5         # comfort band either side
 
     # Heating-call statistics per zone (05, 13): state = calls in `days`;
     # attributes `low` and `stepped` hold min / median / max minutes, rise,
@@ -150,6 +169,65 @@ individual device, the gas one as gas consumption. Both are models, not meters.
 
 After some days, `scripts/shadow_compare.py --zone z4=sensor.shadow_z4_office`
 compares the shadow log with the calls the thermostat made.
+
+## Zone sensors
+
+Each shadow zone has three sensors:
+
+- **Shadow** (`sensor.shadow_<zone>`): `skip` or `heat` for a call starting now
+  (hypothesis 17). It also shows how far to trust the model, as
+  ClimateAdvisor's calibration label does: `grade` (`none`, `low`, `medium`,
+  `high`: whether the model beats simply holding the temperature 3 hours ahead
+  on the idle history, and on how much data), `method`, `bins`, `r2`,
+  `error_1h`/`error_3h` against `hold_1h`/`hold_3h`, the heating rate `h`, the
+  wall lag, the outdoor forecast's bias and any `problem`.
+- **Forecast** (`sensor.forecast_<zone>`): the room temperature 3 hours ahead
+  (hypothesis 16). The zone model runs forward 24 hours with the outdoor
+  forecast and the sun on the room, and with the thermostat simulated as an
+  on/off heater (heating rate `h`; heat below the setpoint minus the deadband,
+  off at the setpoint). The thermostat's program is taken to repeat
+  yesterday's: the current setpoint holds until yesterday's setpoints changed
+  at that time of day. The outdoor forecast is shifted by its bias against
+  your outdoor sensor over the last 48 hours (at least 0.3 C, at most 4 C).
+  The sensor's history is the archive of forecasts as issued: `predicted_1h`,
+  the state (3 h) and `predicted_6h`, with the `start` temperature. Every 6
+  hours it scores its last 7 days against the room: `error_1h`, `error_3h` and
+  `error_6h` hold the mean absolute error, RMSE, bias and the error in the
+  predicted change (`change_mae`) with the count. `points` (not recorded) is
+  the day ahead for charts: `temp`, `outdoor`, `heat` (furnace duty), and the
+  target band `lower` and `upper`, every 30 minutes.
+- **Target** (`sensor.target_<zone>`): where the zone should be now, with the
+  band in `lower` and `upper`. With `target_mean` set it is the target wave
+  `mean + swing * cos(2 pi (hour - peak_hour) / 24)`; otherwise the
+  thermostat's setpoint with the tolerance below it.
+
+## Thermal Lab panel
+
+The integration adds **Thermal Lab** to the sidebar: a page per zone with
+tiles for now (room, target, thermostat, the shadow decision, the forecast in
+3 hours and its live error), a chart of the room, outdoor (on its own axis),
+setpoint and target band over 6 hours to 30 days with the forecast for the
+next day after "now", the forecast made 3 hours earlier laid over what
+happened, a strip of heating calls and forecast furnace duty, and a card with
+the model, its grade and how well it forecasts. It follows the Home Assistant
+theme and works on a phone.
+
+The page and Chart.js are served by Home Assistant from the integration's
+`frontend/` folder, so opening the panel loads nothing from the internet;
+the data comes over the page's own Home Assistant connection. Chart.js is
+pinned (version and SHA-256) in `frontend/vendor.json` and committed;
+`uv run invoke vendor` fetches it again and checks the hash (see Development).
+
+## Dashboard cards
+
+For a zone on your own dashboards, `homeassistant/thermal_lab_dashboard.yaml`
+is a view built from standard cards and
+[apexcharts-card](https://github.com/RomRider/apexcharts-card): the tiles, the
+room and outdoor with the forecast and the target band (the forecast sensor
+shifted back 3 hours lays each forecast on the time it was made for), the
+forecast furnace duty, a history graph of the thermostat and the shadow
+decision, and a markdown card with the model. Paste it into a dashboard's raw
+configuration editor and replace the entity ids.
 
 ## Contribution chart
 
@@ -221,4 +299,20 @@ one `line` series returning `[time, p.temp]`. Both cards are untested.
 uv sync
 uv run invoke check     # lint, formatting and tests
 uv run invoke format    # apply fixes
+uv run invoke vendor    # fetch the panel's pinned Chart.js and check its hash
 ```
+
+To upgrade Chart.js, change the version and URL in
+`custom_components/home_thermal_lab/frontend/vendor.json`, run `invoke vendor`
+(it reports the new hash and refuses the file), check and pin the hash, run it
+again, and commit the file. A test checks the committed file against the pin.
+
+## Credits
+
+- Several ideas come from [ClimateAdvisor](https://github.com/gunkl/ClimateAdvisor)
+  (MIT): rates over hour-long blocks and rejecting unphysical fits, the heating
+  rate learned from calls, a simulated thermostat in the forecast, logging
+  forecasts as issued and scoring them, the outdoor forecast's bias, a
+  calibration grade, and the layout of the panel. The code here is our own.
+- [Chart.js](https://www.chartjs.org/) (MIT) draws the panel; it is vendored in
+  `frontend/`.

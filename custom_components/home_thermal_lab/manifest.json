@@ -6,8 +6,10 @@
   ],
   "config_flow": true,
   "dependencies": [
+    "frontend",
     "http",
-    "recorder"
+    "recorder",
+    "websocket_api"
   ],
   "documentation": "https://github.com/minchinweb/ha-home-thermal-lab",
   "integration_type": "service",
