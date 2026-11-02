@@ -50,6 +50,7 @@ from homeassistant.helpers.event import (
     async_track_state_change_event,
     async_track_time_interval,
 )
+from homeassistant.util import dt as dt_util
 import voluptuous as vol
 
 from . import CALL_STATS, CONTRIBUTION, ENERGY, ZONE
@@ -68,6 +69,12 @@ from .contributions import (
 )
 from .energy import MODES, Meter, furnace_mode
 from .forecast import ForecastHour, fetch_forecast
+from .ground import (
+    DEFAULT_COLDEST_DAY,
+    DEFAULT_MEAN,
+    DEFAULT_SWING,
+    ground_temperature,
+)
 from .hvac import HIGH, runs_from_states, stage_runs
 from .hvac_response import merge_runs
 from .irradiance import fetch_irradiance, light_on_surfaces
@@ -107,6 +114,12 @@ SUN_SCHEMA = {
     vol.Optional("shade_below", default=0.0): vol.Coerce(float),
 }
 
+GROUND_SCHEMA = {
+    vol.Optional("ground_mean", default=DEFAULT_MEAN): vol.Coerce(float),
+    vol.Optional("ground_swing", default=DEFAULT_SWING): vol.Coerce(float),
+    vol.Optional("ground_coldest_day", default=DEFAULT_COLDEST_DAY): vol.Coerce(float),
+}
+
 ZONE_SCHEMA = vol.Schema(
     {
         vol.Required("name"): cv.string,
@@ -123,9 +136,10 @@ ZONE_SCHEMA = vol.Schema(
             }
         ),
         # a room (partly) below ground: its walls trade heat with the soil. Give a
-        # ground temperature sensor, or leave it out to use the recent outdoor mean.
+        # ground temperature sensor, or leave it out to use the annual ground wave.
         vol.Optional("below_ground", default=False): cv.boolean,
         vol.Optional("ground_entity"): cv.entity_id,
+        **GROUND_SCHEMA,
         vol.Optional("tolerance", default=0.5): vol.Coerce(float),
         vol.Optional("max_dip", default=0.5): vol.Coerce(float),
         **SUN_SCHEMA,
@@ -171,6 +185,7 @@ CONTRIBUTION_SCHEMA = vol.Schema(
                 vol.Optional("h", default=0.0): vol.Coerce(float),
                 vol.Optional("x", default=0.0): vol.Coerce(float),
                 vol.Optional("p", default=0.0): vol.Coerce(float),
+                vol.Optional("w", default=0.0): vol.Coerce(float),
             }
         ),
         vol.Optional("hours_back", default=24): vol.All(
@@ -246,6 +261,16 @@ def _surface_light(lat: float, lon: float, zone: dict, reading, moment) -> float
         [(f, t) for f, t in zone["roofs"]],
         zone["rotation"],
         shaded,
+    )
+
+
+def _ground_at(zone: dict, moment: datetime) -> float:
+    """The ground wave for a zone at a moment (local time)."""
+    return ground_temperature(
+        dt_util.as_local(moment),
+        zone["ground_mean"],
+        zone["ground_swing"],
+        zone["ground_coldest_day"],
     )
 
 
@@ -340,15 +365,12 @@ def _fit_zone(zone, rows, irradiance, lat, lon, start, end):
         )
     hours = width.total_seconds() / 3600.0
     outdoor_bins = bin_held(outdoor, start, bins, width)
-    ground, ground_ref = None, None
+    ground = None
     if zone["below_ground"]:
         if zone.get("ground_entity"):
             ground = bin_held(_numbers(rows[zone["ground_entity"]]), start, bins, width)
-        else:  # no sensor: the soil sits near the recent average outdoor temperature
-            known = [t for t in outdoor_bins if t is not None]
-            if known:
-                ground_ref = sum(known) / len(known)
-                ground = [ground_ref] * bins
+        else:  # no sensor: the annual ground wave
+            ground = [_ground_at(zone, start + (i + 0.5) * width) for i in range(bins)]
     fit = fit_no_heat(
         bin_held(room, start, bins, width),
         outdoor_bins,
@@ -358,7 +380,7 @@ def _fit_zone(zone, rows, irradiance, lat, lon, start, end):
         wall=lag(wall, hours, WALL_TAU_HOURS) if zone["sunlit_walls"] else None,
         ground=ground,
     )
-    return None if fit is None else replace(fit, ground=ground_ref)
+    return fit
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -440,7 +462,6 @@ class ShadowSensor(SensorEntity):
                 model.get("w", 0.0),
             )
         )
-        self._ground_ref: float | None = None  # estimated by the fit, no sensor
         self._model_note = "given" if self._model else "waiting to learn"
 
     async def _learn(self, _now=None) -> None:
@@ -469,7 +490,6 @@ class ShadowSensor(SensorEntity):
             self._model_note = "not enough idle history yet"
         else:
             self._model = ZoneModel(fit.a, fit.c, fit.g, fit.b, fit.w)
-            self._ground_ref = fit.ground
             self._model_note = f"learned from {fit.bins} idle bins of 15 minutes"
         await self._refresh(None)
 
@@ -510,14 +530,14 @@ class ShadowSensor(SensorEntity):
             setpoint = attrs.get("target_temp_low")
         outdoor_now = self._number(self._outdoor_entity)
         hours = await self._forecast.hours()
+        now_utc = datetime.now(UTC)
         ground = 0.0
         if self._model is not None and self._model.b:
             ground = self._number(zone.get("ground_entity"))
             if ground is None:
-                ground = self._ground_ref
+                ground = _ground_at(zone, now_utc)
         if (
             self._model is None
-            or ground is None
             or room is None
             or setpoint is None
             or outdoor_now is None
@@ -750,6 +770,22 @@ class ContributionSensor(SensorEntity):
         )
         await self._refresh(None)
 
+    def _raw_wall(self, item: dict, by_end: dict, moment: datetime) -> float:
+        """Light on the room's sunlit solid walls at a moment, or 0."""
+        hour_end = moment.replace(minute=0, second=0, microsecond=0) + timedelta(
+            hours=1
+        )
+        slot = by_end.get(hour_end)
+        if slot is None:
+            return 0.0
+        return _wall_light(
+            self._hass.config.latitude,
+            self._hass.config.longitude,
+            item,
+            slot.light,
+            moment,
+        )
+
     async def _refresh(self, _now) -> None:
         item = self._item
         step = timedelta(hours=STEP_HOURS)
@@ -798,14 +834,23 @@ class ContributionSensor(SensorEntity):
             for e, watts in item["lights"].items()
         ]
         steps: list[Inputs | None] = []
+        raw_wall: list[float] = []
         for i in range(back):
             if outdoor[i] is None:
                 steps.append(None)
+                raw_wall.append(0.0)
                 continue
-            _, lit = _light_at(self._hass, item, by_end, times[i] + step / 2)
+            moment = times[i] + step / 2
+            _, lit = _light_at(self._hass, item, by_end, moment)
+            raw_wall.append(self._raw_wall(item, by_end, moment))
             kw = sum((p[i] or 0.0) for p in plugs) / 1000.0
             kw += sum((lamp[i] or 0.0) for lamp in lamps)
             steps.append(Inputs(outdoor[i], lit, own[i], other[i], kw))
+        walls = lag(raw_wall, STEP_HOURS, WALL_TAU_HOURS)
+        steps = [
+            None if s is None else replace(s, wall_light=walls[i])
+            for i, s in enumerate(steps)
+        ]
         model = ZoneTerms(**item["terms"])
         past = split_history(model, temps, steps, STEP_HOURS)
 
@@ -818,16 +863,24 @@ class ContributionSensor(SensorEntity):
         attrs = climate.attributes if climate else {}
         setpoint = attrs.get("temperature") or attrs.get("target_temp_low")
         future_steps = []
+        future_wall = []
         outdoor_now = outdoor[-1]
         for k in range(ahead):
             moment = now + (k + 0.5) * step
             slot, lit = _light_at(self._hass, item, by_end, moment)
             if slot is None:
                 break
+            future_wall.append(self._raw_wall(item, by_end, moment))
             temp_out = (
                 outdoor_now if k == 0 and outdoor_now is not None else slot.temperature
             )
             future_steps.append(Inputs(temp_out, lit))
+        future_walls = lag(
+            future_wall, STEP_HOURS, WALL_TAU_HOURS, walls[-1] if walls else None
+        )
+        future_steps = [
+            replace(s, wall_light=future_walls[k]) for k, s in enumerate(future_steps)
+        ]
         temps_ahead, future = forecast(
             model,
             current,
@@ -845,6 +898,7 @@ class ContributionSensor(SensorEntity):
                 "outdoor",
                 "house",
                 "sun",
+                "walls",
                 "furnace",
                 "crossover",
                 "appliances",

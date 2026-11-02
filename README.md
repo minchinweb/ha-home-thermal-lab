@@ -65,11 +65,15 @@ with the buttons in this order:
      without windows** are faces of solid wall the sun hits; they get their own
      gain `w`, with a 3 hour lag because a wall soaks up the sun slowly.
    - Tick **Below ground** for a basement room: the model adds `b`, how fast the
-     room trades heat with the soil, against a ground temperature sensor (or,
-     if you give none, the average outdoor temperature of the last 14 days).
-   - The contribution chart does not use sunlit walls or the ground yet.
+     room trades heat with the soil. The soil is not the air: at basement depth it
+     follows the air's annual wave with a smaller swing and a lag of about 70 days
+     (hypothesis 03). Give a ground temperature sensor if you have one; if not, the
+     ground is the wave `mean - swing * cos(2 pi (day - coldest day) / 365)` with the
+     house's **ground temperature** settings (defaults 5.7, 5.6 and day 95, from
+     Regina at 1.8 m; refit with `scripts/ground_temperature.py` for your site).
 4. **Add contribution chart**: one per zone. Its terms still come from
-   `scripts/fit_contributions.py`.
+   `scripts/fit_contributions.py`. It has its own `walls` band for **sunlit walls**
+   (fill in `w`); it does not use the ground yet.
 
 Each is a sub-entry; the pencil icon edits it and the sensor reloads on save.
 The forms take the same settings as the YAML below, with these differences:

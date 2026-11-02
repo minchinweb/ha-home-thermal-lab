@@ -5,6 +5,7 @@ A zone's temperature change is split into the terms the hypotheses measure::
     dT/dt = a * (outdoor - T)        "outdoor"     envelope loss (04, 13)
           + c                        "house"       the rest of the house (10)
           + g * light                "sun"         light on windows and roof (11)
+          + w * wall_light           "walls"       lagged light on sunlit solid walls
           + h * own_heat             "furnace"     the zone's own calls (05)
           + x * other_heat           "crossover"   other zones' calls (06)
           + p * plug_kw              "appliances"  metered plugs (14)
@@ -31,7 +32,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-TERMS = ("outdoor", "house", "sun", "furnace", "crossover", "appliances")
+TERMS = ("outdoor", "house", "sun", "walls", "furnace", "crossover", "appliances")
 
 
 @dataclass(frozen=True)
@@ -44,6 +45,7 @@ class ZoneTerms:
     h: float = 0.0
     x: float = 0.0
     p: float = 0.0
+    w: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -55,6 +57,7 @@ class Inputs:
     own_heat: float = 0.0
     other_heat: float = 0.0
     plug_kw: float = 0.0
+    wall_light: float = 0.0
 
 
 def rates(model: ZoneTerms, room: float, step: Inputs) -> dict[str, float]:
@@ -63,6 +66,7 @@ def rates(model: ZoneTerms, room: float, step: Inputs) -> dict[str, float]:
         "outdoor": model.a * (step.outdoor - room),
         "house": model.c,
         "sun": model.g * step.light,
+        "walls": model.w * step.wall_light,
         "furnace": model.h * step.own_heat,
         "crossover": model.x * step.other_heat,
         "appliances": model.p * step.plug_kw,
@@ -140,6 +144,7 @@ def forecast(
                 1.0 if heating else 0.0,
                 step.other_heat,
                 step.plug_kw,
+                step.wall_light,
             )
         r = rates(model, room, step)
         for term, rate in r.items():

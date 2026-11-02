@@ -13,6 +13,8 @@ import math
 FACES = ("N", "E", "S", "W")
 KW_MODES = ("off", "fan", "heat_low", "heat_high", "cool")
 POWER_UNITS = ("kW", "BTU/h")
+# the house's ground-temperature wave, shared by its below-ground rooms
+GROUND_KEYS = ("ground_mean", "ground_swing", "ground_coldest_day")
 BTU_H_TO_KW = 0.00029307
 TON_TO_KW = 12000 * BTU_H_TO_KW  # a ton of cooling is 12,000 BTU/h
 
@@ -185,6 +187,9 @@ def resolve_sun(data: dict, house: dict) -> dict:
     out["roofs"] = roofs
     if house.get("rotation") is not None:
         out["rotation"] = house["rotation"]
+    for key in GROUND_KEYS:
+        if key not in out and house.get(key) is not None:
+            out[key] = house[key]
     if "shade_below" not in out and house.get("shade_below") is not None:
         out["shade_below"] = house["shade_below"]
     return out

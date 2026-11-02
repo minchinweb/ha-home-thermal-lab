@@ -143,6 +143,9 @@ def test_lag_smooths_a_step():
     assert out[1] == pytest.approx(10 * (1 - 2.718281828**-1))
     assert out[1] < out[2] < out[3] < 10.0
     assert lag([], 1.0, 1.0) == []
+    assert lag([10.0], 1.0, 1.0, start=0.0)[0] == pytest.approx(
+        10 * (1 - 2.718281828**-1)
+    )
     assert lag([5.0, 5.0], 1.0, 3.0) == [5.0, 5.0]
 
 
@@ -177,4 +180,4 @@ def test_fit_no_heat_without_wall_or_ground_leaves_them_zero():
     outdoor = [float(i % 7) for i in range(100)]
     fit = fit_no_heat(room, outdoor, [0.0] * 100, [0.0] * 100, 0.25)
     assert fit is not None
-    assert (fit.b, fit.w, fit.ground) == (0.0, 0.0, None)
+    assert (fit.b, fit.w) == (0.0, 0.0)

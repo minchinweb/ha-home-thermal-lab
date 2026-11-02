@@ -27,14 +27,24 @@ Series = list[tuple[datetime, float]]
 WALL_TAU_HOURS = 3.0  # a sunlit wall soaks up the sun and gives it up slowly
 
 
-def lag(values: list[float], step_hours: float, tau_hours: float) -> list[float]:
-    """Smooth a series as a wall would: first-order lag, starting at its first value."""
+def lag(
+    values: list[float],
+    step_hours: float,
+    tau_hours: float,
+    start: float | None = None,
+) -> list[float]:
+    """Smooth a series as a wall would: a first-order lag.
+
+    It starts from ``start``, or from the first value when that is None.
+    """
     if not values:
         return []
     alpha = 1.0 - math.exp(-step_hours / tau_hours)
-    out = [values[0]]
-    for value in values[1:]:
-        out.append(out[-1] + alpha * (value - out[-1]))
+    held = values[0] if start is None else start
+    out = []
+    for value in values:
+        held += alpha * (value - held)
+        out.append(held)
     return out
 
 
@@ -119,8 +129,6 @@ class NoHeatFit:
         bins: Idle bins used.
         b: Coupling to the ground, per hour (0 for a room above ground).
         w: Warming per W/m2 of (lagged) light on sunlit solid walls, C per hour.
-        ground: The fixed ground temperature the fit assumed, when it was
-            estimated rather than read from a sensor.
     """
 
     a: float
@@ -129,7 +137,6 @@ class NoHeatFit:
     bins: int
     b: float = 0.0
     w: float = 0.0
-    ground: float | None = None
 
 
 def fit_no_heat(

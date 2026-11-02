@@ -69,3 +69,14 @@ def test_chart_points_thins_and_marks_forecast():
     )
     assert [p.get("forecast", 0) for p in pts] == [0, 0, 1, 1]
     assert pts[1]["t"] == now.isoformat()
+
+
+def test_wall_light_is_its_own_term_and_the_stack_still_adds_up():
+    model = ZoneTerms(a=0.02, c=0.0, w=0.01)
+    steps = [Inputs(0.0, 0.0, wall_light=100.0)] * 2
+    past = history(model, [20.0, 20.5, 21.0], steps, 1.0)
+    assert past[0]["walls"] == pytest.approx(-2.0)
+    # the stack added to the current temperature gives the measured one
+    assert 21.0 + sum(past[0].values()) == pytest.approx(20.0)
+    _, cum = forecast(model, 20.0, [Inputs(20.0, 0.0, wall_light=100.0)] * 2, 1.0)
+    assert cum[-1]["walls"] == pytest.approx(2.0)

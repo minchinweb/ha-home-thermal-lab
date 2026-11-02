@@ -9,14 +9,20 @@
           "rotation": "House rotation (degrees)",
           "shade_below": "Shaded below sun elevation (degrees)",
           "roofs": "Roofs (face and pitch)",
-          "preview": "Redraw the map (does not save)"
+          "preview": "Redraw the map (does not save)",
+          "ground_mean": "Ground temperature: yearly mean (C)",
+          "ground_swing": "Ground temperature: swing (C)",
+          "ground_coldest_day": "Ground temperature: coldest day of the year"
         },
         "data_description": {
           "outdoor_entity": "Used by the shadow zone and the contribution chart.",
           "rotation": "Degrees the house is turned clockwise from true north: the measured value is filled in. Set once here, for every room.",
           "shade_below": "Treat the south-east to south-west sun as blocked below this elevation (trees, neighbours). A room can set its own.",
           "roofs": "Each roof of the house with windows or skylights: face and pitch, with a name you choose, for example: Front=S 30, Back=W 4:12, Garage=W 8:12. The pitch is in degrees or as rise:run. Rooms refer to a roof by its name, so you can change a pitch later and every room keeps its link. Without a name a roof is called after its face (West, West 2); the form then shows the names. If you rename a roof (keep its face), the rooms that use it follow the new name. Deleting a roof unlinks them.",
-          "preview": "Tick and press Submit to redraw the map with the rotation typed above. Nothing is saved until you submit with this unticked."
+          "preview": "Tick and press Submit to redraw the map with the rotation typed above. Nothing is saved until you submit with this unticked.",
+          "ground_mean": "For below-ground rooms without a ground sensor. Leave empty for the defaults (5.7, 5.6 and 95), measured at 1.8 m in Regina (hypothesis 03).",
+          "ground_swing": "Half the gap between the warmest and coldest ground. About 0.4 of the air's swing at basement depth.",
+          "ground_coldest_day": "Day of the year (1 to 365) the ground is coldest: roughly 70 days after the coldest air at basement depth."
         }
       },
       "reconfigure": {
@@ -26,7 +32,10 @@
           "rotation": "House rotation (degrees)",
           "shade_below": "Shaded below sun elevation (degrees)",
           "roofs": "Roofs (face and pitch)",
-          "preview": "Redraw the map (does not save)"
+          "preview": "Redraw the map (does not save)",
+          "ground_mean": "Ground temperature: yearly mean (C)",
+          "ground_swing": "Ground temperature: swing (C)",
+          "ground_coldest_day": "Ground temperature: coldest day of the year"
         },
         "description": "Change the outdoor sensor, the house rotation or the roofs. Rooms pick up the change.\n\n{map}",
         "data_description": {
@@ -34,7 +43,10 @@
           "rotation": "Degrees the house is turned clockwise from true north: the measured value is filled in. Set once here, for every room.",
           "shade_below": "Treat the south-east to south-west sun as blocked below this elevation (trees, neighbours). A room can set its own.",
           "roofs": "Each roof of the house with windows or skylights: face and pitch, with a name you choose, for example: Front=S 30, Back=W 4:12, Garage=W 8:12. The pitch is in degrees or as rise:run. Rooms refer to a roof by its name, so you can change a pitch later and every room keeps its link. Without a name a roof is called after its face (West, West 2); the form then shows the names. If you rename a roof (keep its face), the rooms that use it follow the new name. Deleting a roof unlinks them.",
-          "preview": "Tick and press Submit to redraw the map with the rotation typed above. Nothing is saved until you submit with this unticked."
+          "preview": "Tick and press Submit to redraw the map with the rotation typed above. Nothing is saved until you submit with this unticked.",
+          "ground_mean": "For below-ground rooms without a ground sensor. Leave empty for the defaults (5.7, 5.6 and 95), measured at 1.8 m in Regina (hypothesis 03).",
+          "ground_swing": "Half the gap between the warmest and coldest ground. About 0.4 of the air's swing at basement depth.",
+          "ground_coldest_day": "Day of the year (1 to 365) the ground is coldest: roughly 70 days after the coldest air at basement depth."
         }
       }
     },
@@ -187,7 +199,7 @@
             "g": "Only used with a and c.",
             "sunlit_walls": "Faces of solid wall the sun hits. Learned separately from the windows: sun on a wall warms it slowly.",
             "below_ground": "Tick for a room whose walls are in the soil. The model then also learns how fast the room trades heat with the ground.",
-            "ground_entity": "Optional soil or ground temperature. Leave empty to use the average outdoor temperature of the last two weeks."
+            "ground_entity": "Optional soil or ground temperature. Leave empty to use the annual ground wave set on the integration."
           }
         },
         "reconfigure": {
@@ -221,7 +233,7 @@
             "g": "Only used with a and c.",
             "sunlit_walls": "Faces of solid wall the sun hits. Learned separately from the windows: sun on a wall warms it slowly.",
             "below_ground": "Tick for a room whose walls are in the soil. The model then also learns how fast the room trades heat with the ground.",
-            "ground_entity": "Optional soil or ground temperature. Leave empty to use the average outdoor temperature of the last two weeks."
+            "ground_entity": "Optional soil or ground temperature. Leave empty to use the annual ground wave set on the integration."
           }
         }
       },
@@ -260,7 +272,9 @@
             "deadband": "Thermostat deadband (degrees)",
             "windows": "Window faces",
             "roofs": "Roofs with windows in this room",
-            "shade_below": "Shaded below sun elevation (degrees), optional"
+            "shade_below": "Shaded below sun elevation (degrees), optional",
+            "sunlit_walls": "Sunlit walls without windows",
+            "w": "w: walls, C/h per W/m2 of lagged wall light"
           },
           "data_description": {
             "other_climate_entities": "Their heat calls feed the crossover term.",
@@ -269,7 +283,8 @@
             "a": "Fit the terms with scripts/fit_contributions.py.",
             "windows": "Faces that have windows letting the sun in (the glass term).",
             "roofs": "Tick the house's roofs (set on the integration) that have windows or skylights in this room.",
-            "shade_below": "Leave empty to use the house value."
+            "shade_below": "Leave empty to use the house value.",
+            "sunlit_walls": "Faces of solid wall the sun hits (the 'walls' term, lagged 3 hours)."
           }
         },
         "reconfigure": {
@@ -293,7 +308,9 @@
             "deadband": "Thermostat deadband (degrees)",
             "windows": "Window faces",
             "roofs": "Roofs with windows in this room",
-            "shade_below": "Shaded below sun elevation (degrees), optional"
+            "shade_below": "Shaded below sun elevation (degrees), optional",
+            "sunlit_walls": "Sunlit walls without windows",
+            "w": "w: walls, C/h per W/m2 of lagged wall light"
           },
           "data_description": {
             "other_climate_entities": "Their heat calls feed the crossover term.",
@@ -302,7 +319,8 @@
             "a": "Fit the terms with scripts/fit_contributions.py.",
             "windows": "Faces that have windows letting the sun in (the glass term).",
             "roofs": "Tick the house's roofs (set on the integration) that have windows or skylights in this room.",
-            "shade_below": "Leave empty to use the house value."
+            "shade_below": "Leave empty to use the house value.",
+            "sunlit_walls": "Faces of solid wall the sun hits (the 'walls' term, lagged 3 hours)."
           }
         }
       },

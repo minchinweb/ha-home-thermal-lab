@@ -30,6 +30,7 @@ from . import CALL_STATS, CONTRIBUTION, DOMAIN, ENERGY, ZONE
 from .map_view import OutlineMapView
 from .options import (
     FACES,
+    GROUND_KEYS,
     KW_MODES,
     POWER_UNITS,
     FieldError,
@@ -103,6 +104,9 @@ def _house_schema() -> vol.Schema:
             vol.Optional("rotation"): _NUMBER,
             vol.Optional("shade_below"): _NUMBER,
             vol.Optional("roofs"): _TEXT,
+            vol.Optional("ground_mean"): _NUMBER,
+            vol.Optional("ground_swing"): _NUMBER,
+            vol.Optional("ground_coldest_day"): _NUMBER,
             # a form has no extra buttons: ticking this and submitting redraws
             vol.Optional("preview", default=False): selector.BooleanSelector(),
         }
@@ -113,14 +117,14 @@ def _house_from_form(form: dict) -> dict:
     data = {}
     if form.get("outdoor_entity"):
         data["outdoor_entity"] = form["outdoor_entity"]
-    data.update(_clean(form, ("rotation", "shade_below")))
+    data.update(_clean(form, ("rotation", "shade_below", *GROUND_KEYS)))
     if form.get("roofs"):
         data["roofs"] = parse_roofs(form["roofs"])
     return data
 
 
 def _house_to_form(data: dict) -> dict:
-    keys = ("outdoor_entity", "rotation", "shade_below")
+    keys = ("outdoor_entity", "rotation", "shade_below", *GROUND_KEYS)
     out = {k: data[k] for k in keys if k in data}
     if data.get("roofs"):
         out["roofs"] = format_roofs(data["roofs"])
@@ -183,6 +187,7 @@ def _contribution_schema(roof_labels: list[dict]) -> vol.Schema:
             vol.Required("a"): _NUMBER,
             vol.Required("c"): _NUMBER,
             vol.Optional("g"): _NUMBER,
+            vol.Optional("w"): _NUMBER,
             vol.Optional("h"): _NUMBER,
             vol.Optional("x"): _NUMBER,
             vol.Optional("p"): _NUMBER,
@@ -190,6 +195,7 @@ def _contribution_schema(roof_labels: list[dict]) -> vol.Schema:
             vol.Optional("hours_ahead"): _NUMBER,
             vol.Optional("deadband"): _NUMBER,
             **_sun_fields(roof_labels),
+            vol.Optional("sunlit_walls"): _FACES,
         }
     )
 
@@ -276,11 +282,13 @@ def _contribution_from_form(form: dict) -> dict:
         "terms": {
             "a": form["a"],
             "c": form["c"],
-            **_clean(form, ("g", "h", "x", "p")),
+            **_clean(form, ("g", "w", "h", "x", "p")),
         },
         **_clean(form, ("room_entity", "deadband")),
         **_sun_from_form(form),
     }
+    if form.get("sunlit_walls"):
+        data["sunlit_walls"] = list(form["sunlit_walls"])
     for key in ("other_climate_entities", "plug_entities"):
         if form.get(key):
             data[key] = list(form[key])
