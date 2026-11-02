@@ -3,6 +3,7 @@ Changelog
 
 .. release:: unreleased
 
+  - :feature:`-` Shadow-mode furnace controller: which calls could have been skipped, with a no-heat forecast check (hypothesis 17).
   - :feature:`-` Next-day room temperature backtest against persistence, yesterday and profile baselines, with outdoor and sun terms (hypothesis 16).
   - :feature:`-` Horizon-profile (shading) fit per room with leave-one-day-out validation.
   - :feature:`-` Per-room window and roof solar model with clear-sky term, tilted-plane irradiance and house rotation from OpenStreetMap.
