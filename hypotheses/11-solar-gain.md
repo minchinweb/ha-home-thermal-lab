@@ -190,6 +190,23 @@ Z4 did not call after 13:15, and Z2 made only short calls (a quarter of the time
 - One afternoon, 19 usable bins: the cooling-law term cannot be fitted from it (it comes out positive), so it is fixed.
 - Photos at 16:54 (sun at 231, 7 high) show two bright rectangles on the east wall above the desk, split by a dark bar: the patio door's two panes and centre frame, thrown north-east. The kitchen thermostat is on that wall, just north of them. Earlier in the afternoon, with the sun further south, the patches fall further north, nearer the thermostat; a rough trace puts the lit band below the thermostat's height, but not by much. Sun on the wall just under or beside the thermostat would raise its reading more than the room's air. That the gain matches physics argues against a large sensor effect, but a look at where the patches fall around 15:30 to 16:30 on the next clear day would settle it.
 
+#### Master bedroom on the same day: blinds closed, then open (times in UTC-6)
+
+The question was whether the attic's south window (48 x 55 in) shows a gain. Z3 did not call all day. The comparison room is the N bedroom: same attic and roof, north window. Rates are fitted in 15-minute bins; the sun terms are clear-sky-model light on the S wall (vertical) and the W roof face (45 degrees), without the house's or trees' shading.
+
+The blinds (all three cover entities agree, except where noted) were open to 96% from 07:17, closed at 10:11 by the "Nighttime" button, and opened to 96% at 14:14 by the "Daytime" button. They were not closed all afternoon. `cover.master_bedroom_blinds_2` reports 40% after 14:14 while the other two report 96%. The blinds' battery is at 12%. The register fan ran 12:04 to 14:14 and switched off with the blinds.
+
+| Period | Master | N bedroom | Master minus N bedroom | S wall | W roof | Outdoor |
+|---|---|---|---|---|---|---|
+| 10:10 to 14:14, blinds closed | +0.17 C/h | +0.29 | -0.12 | 628 W/m2 | 109 | -0.4 C |
+| 12:00 to 14:14, blinds closed | +0.39 | +0.37 | +0.02 | 726 | 150 | 1.7 |
+| 14:14 to 17:00, blinds open | +0.33 | +0.12 | +0.22 | 606 | 343 | 7.8 |
+
+- With the blinds closed, the south window shows no gain: the master tracked the N bedroom. The rise from noon to 14:00 (18.1 to 18.8 C) happened in both rooms and comes from the roof and the outdoor air (-2 to +4 C).
+- With the blinds open, the master pulled ahead of the N bedroom by about 0.2 to 0.3 C/h and reached 20.1 C by 16:52 (N bedroom 19.9). That fits physics: about 1.7 m2 at 70% through the glass passes about 700 W at 600 W/m2. At the kitchen's 0.5 C/h per kW, that is about 0.35 C/h.
+- This cannot yet be put on the window. Three things changed together at 14:14: the blinds opened, the register fan stopped, and the sun moved onto the west roof face (about three times the light). The 14-day fit gives the master a larger west-roof term than the N bedroom (+1.46 against +0.42 mC/h per W/m2). That difference alone would explain about 0.2 C/h, though those roof terms are uncertain.
+- Next: leave the blinds closed through one clear afternoon and compare it with this one, or open them at noon with the fan's automation decoupled from the blinds.
+
 ### Horizon fit with bleed and partial transmission (`scripts/horizon_profile.py --days 15`, 18 October to 2 November 2026)
 
 Every model now has the other zones' calls as terms, the cooling law included. The kitchen roof is now 18.8 degrees (about 4:12), measured from the ceiling, which falls from 12.5 ft to 8 ft across the 13.25 ft east-west span, in place of the 3:12 (14 degrees) used before. The change moves the kitchen's numbers by less than 0.01 C/h. A new "partial" model lets a fitted share of blocked beam through (0 to 90% in steps of 10). The same terms were added to `scripts/solar_windows.py`.
