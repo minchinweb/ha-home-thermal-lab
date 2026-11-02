@@ -105,7 +105,7 @@ def main() -> None:
     p.add_argument("--bin", type=int, default=15, help="minutes")
     p.add_argument("--furnace-btu", type=float, default=None, help="high-stage input")
     p.add_argument("--afue", type=float, default=0.95)
-    p.add_argument("--low-fraction", type=float, default=0.5, help="low / high input")
+    p.add_argument("--low-fraction", type=float, default=0.65, help="low / high input")
     p.add_argument("--ha-url", default=os.environ.get("HA_URL"))
     args = p.parse_args()
 
