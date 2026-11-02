@@ -168,6 +168,7 @@ async def ws_zone(hass, connection, msg) -> None:
                 "action": shadow_attrs.get("thermostat_action"),
                 "forecast_3h": _state(hass, ent.get("forecast")),
                 "outdoor_correction": forecast_attrs.get("outdoor_correction"),
+                "method": forecast_attrs.get("method"),
                 "scores": {
                     k: v for k, v in forecast_attrs.items() if k.startswith("error_")
                 },
@@ -185,6 +186,9 @@ async def ws_zone(hass, connection, msg) -> None:
                     "w": model.w,
                     "b": model.b,
                     "h": model.h,
+                    "n": model.n,
+                    "x": model.x,
+                    "lag": model.lag,
                 },
                 "has_walls": bool(zone["sunlit_walls"]),
                 "below_ground": bool(zone["below_ground"]),

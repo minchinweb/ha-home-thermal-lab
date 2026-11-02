@@ -11,11 +11,13 @@ from custom_components.home_thermal_lab.irradiance import (
     light_on_surfaces,
 )
 from custom_components.home_thermal_lab.shadow import (
+    HouseZone,
     Thermostat,
     ZoneModel,
     decide,
     simulate,
     simulate_heated,
+    simulate_house,
     step,
 )
 
@@ -129,3 +131,80 @@ def test_thermostat_holds_the_setpoint_over_a_cold_day():
     assert max(path) <= 21.0 + 1e-9
     # long run duty matches the loss: a * (21 + 20) / h
     assert sum(duty[8:]) / len(duty[8:]) == pytest.approx(0.02 * 41 / 1.5, rel=0.1)
+
+
+def test_neighbour_term_pulls_room_toward_the_house():
+    model = ZoneModel(a=0.0, c=0.0, n=0.2)
+    after = step(18.0, -20.0, 0.0, model, 50.0, neighbour=21.0)
+    assert after == pytest.approx(21.0, abs=1e-3)
+    leak = ZoneModel(a=0.0, c=0.0, n=0.2, x=1.0)
+    assert step(21.0, -20.0, 0.0, leak, 0.25, neighbour=21.0, other=1.0) > 21.0
+
+
+def test_house_heats_an_unheated_zone_through_its_neighbour():
+    hours = 0.25
+    steps = 96
+    heated = HouseZone(
+        ZoneModel(a=0.03, c=0.0, h=2.0, n=0.1),
+        20.0,
+        [0.0] * steps,
+        Thermostat([21.0] * steps, 0.2),
+        neighbours=(1,),
+    )
+    open_room = HouseZone(
+        ZoneModel(a=0.03, c=0.0, n=0.3, x=0.5),
+        20.0,
+        [0.0] * steps,
+        Thermostat([-50.0] * steps, 0.2),
+        neighbours=(0,),
+        others=(0,),
+    )
+    (hot, duty), (cold, idle) = simulate_house(
+        [heated, open_room], [-10.0] * steps, hours
+    )
+    assert sum(duty) > 0
+    assert sum(idle) == 0
+    alone = simulate_heated(
+        20.0,
+        [-10.0] * steps,
+        [0.0] * steps,
+        ZoneModel(a=0.03, c=0.0),
+        hours,
+        Thermostat([-50.0] * steps),
+    )[0]
+    assert cold[-1] > alone[-1] + 5.0
+    assert max(hot) <= 21.0 + 1e-9
+
+
+def test_house_of_one_matches_simulate_heated():
+    model = ZoneModel(a=0.02, c=0.1, h=2.0)
+    stat = Thermostat([21.0] * 32, 0.3)
+    zone = HouseZone(model, 20.0, [0.0] * 32, stat)
+    [(path, duty)] = simulate_house([zone], [-5.0] * 32, 0.25)
+    want = simulate_heated(20.0, [-5.0] * 32, [0.0] * 32, model, 0.25, stat)
+    assert path == pytest.approx(want[0])
+    assert duty == pytest.approx(want[1])
+
+
+def test_furnace_lag_overshoots_and_starts_late():
+    quick = ZoneModel(a=0.02, c=0.0, h=4.0)
+    slow = ZoneModel(a=0.02, c=0.0, h=4.0, lag=0.3)
+    stat = Thermostat([21.0] * 16, 0.2)
+    fast_path, fast_duty = simulate_heated(
+        20.5, [0.0] * 16, [0.0] * 16, quick, 0.25, stat
+    )
+    slow_path, slow_duty = simulate_heated(
+        20.5, [0.0] * 16, [0.0] * 16, slow, 0.25, stat
+    )
+    assert max(fast_path) <= 21.0 + 1e-9
+    assert max(slow_path) > 21.05  # heat still arriving after the call
+    assert slow_path[1] < fast_path[1]  # and arriving late at first
+    assert sum(slow_duty) >= sum(fast_duty)
+
+
+def test_decide_with_neighbours():
+    model = ZoneModel(a=0.0, c=0.0, n=0.5)
+    warm = decide(20.0, 20.0, [-10.0] * 8, [0.0] * 8, model, neighbour=[21.0] * 8)
+    cold = decide(20.0, 20.0, [-10.0] * 8, [0.0] * 8, model, neighbour=[15.0] * 8)
+    assert warm.skip
+    assert not cold.skip

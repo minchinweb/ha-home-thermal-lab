@@ -163,6 +163,37 @@ def build_outlook(
     temps, duty = simulate_heated(
         room, outdoor, light, model, step_hours, stat, wall, ground
     )
+    return outlook_from_path(
+        now, temps, duty, outdoor, plan, local_hours, step_hours, wave, tolerance
+    )
+
+
+def outlook_from_path(
+    now: datetime,
+    temps: list[float],
+    duty: list[float],
+    outdoor: list[float],
+    plan: list[float],
+    local_hours: list[float],
+    step_hours: float,
+    wave: TargetWave | None = None,
+    tolerance: float = 0.5,
+) -> Outlook:
+    """An outlook from a forecast made elsewhere (``house.forecast_house``).
+
+    Args:
+        now: Start time.
+        temps: Room temperature at each step boundary (now first).
+        duty: Share of each step the furnace runs.
+        outdoor: Outdoor temperature over each step.
+        plan: Heating setpoint per step.
+        local_hours: Local clock hour at each point (one more than steps).
+        step_hours: Step length.
+        wave: The target wave, if configured.
+        tolerance: Band below the setpoint when there is no wave.
+    """
+    steps = len(outdoor)
+    plan = plan or [0.0]
     step = timedelta(hours=step_hours)
     times = [now + k * step for k in range(steps + 1)]
     return Outlook(

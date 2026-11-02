@@ -110,7 +110,7 @@
     <div class="chart-main"><canvas id="main" aria-label="Room and outdoor temperature, target band and forecast"></canvas></div>
     <div class="chart-strip"><canvas id="strip" aria-label="Heating calls, and the forecast furnace duty"></canvas></div>
     <div class="legend" id="legend"></div>
-    <p class="hint">Dashed lines after the "now" mark are the forecast for the next day (the zone model with a simulated thermostat).
+    <p class="hint">Dashed lines after the "now" mark are the forecast for the next day (the usual day plus what the zone model, with the thermostat and the neighbouring zones simulated, says differs today).
       The dotted line is what the forecast said three hours earlier, laid over what happened. The red strip is the zone's heating calls,
       then the forecast furnace duty.</p>
   </section>
@@ -464,8 +464,13 @@ function row(key, value) {
   return el("div", { class: "row" }, el("span", { class: "k" }, key), el("span", { class: "v" }, value));
 }
 const GRADE = { high: "Strong", medium: "Fair", low: "Weak", none: "None" };
+const METHOD = {
+  hybrid: "the usual day (last 7 days) plus what the model says differs today",
+  model: "the model, with the thermostat simulated",
+  profile: "the usual day only (no usable model)",
+};
 const PROBLEM = {
-  "wrong sign": "The fit says the room warms toward a colder outdoors: something else (other zones, people) drives it. Not used.",
+  "wrong sign": "The fit says the room warms toward a colder outdoors, even with its neighbours' temperature and calls: something else (people, cooking) drives it. Not used; the forecast is the usual day only.",
   "out of range": "The fitted loss rate is implausibly fast. Not used.",
   "too little idle data": "Not enough furnace-off history yet (a few days are needed).",
 };
@@ -486,7 +491,15 @@ function drawModel(d) {
     );
     if (m.has_walls) house.push(row("Sunlit walls w", `${fmt(t.w * 100, 3, " °C/h per 100 W/m²")}, lag ${fmt(m.wall_tau, 1, " h")}`));
     if (m.below_ground) house.push(row("Ground b", fmt(t.b, 4, " /h")));
+    if (m.neighbours && m.neighbours.length && (t.n > 0 || t.x > 0)) {
+      house.push(
+        row("Neighbours", m.neighbours.join(", ")),
+        row("From the neighbours n", `${fmt(t.n, 4)} /h toward their temperature`),
+        row("Their heating calls x", fmt(t.x, 2, " °C per hour of their calls")),
+      );
+    }
     house.push(row("Heating rate h", t.h > 0 ? fmt(t.h, 2, " °C per hour of call") : "not learned yet"));
+    if (t.h > 0) house.push(row("Furnace lag", t.lag > 0 ? fmt(t.lag * 60, 0, " min") : "none (heat arrives at once)"));
   }
   if (m.method) house.push(row("Fit", `${m.method}, ${m.bins} idle 15-min bins, R² ${fmt(m.r2, 2)}`));
   house.push(row("Last fitted", ago(m.fitted_at)));
@@ -501,6 +514,7 @@ function drawModel(d) {
     row("1 h ahead on idle history", m.error_1h === undefined ? "–" : `${fmt(m.error_1h, 2)} °C (holding: ${fmt(m.hold_1h, 2)})`),
     row("3 h ahead on idle history", m.error_3h === undefined ? "–" : `${fmt(m.error_3h, 2)} °C (holding: ${fmt(m.hold_3h, 2)})`),
     row("Outdoor forecast bias", m.bias_hours ? `${signed(m.outdoor_bias, 2, " °C")} over ${m.bias_hours} h` : "–"),
+    row("Day-ahead forecast", METHOD[d.status.method] || "–"),
   ];
   if (leads.length) {
     forecast.push(el("p", { class: "hint" }, "Live forecasts as issued, scored against the room over the last 7 days. Change: the error in the predicted change from the start, which leaves out any error in the starting reading."));

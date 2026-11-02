@@ -191,7 +191,8 @@
             "target_mean": "Target wave: daily mean (degrees), optional",
             "target_swing": "Target wave: swing (degrees either side of the mean)",
             "target_peak_hour": "Target wave: warmest hour (local clock)",
-            "target_band": "Target wave: comfort band (degrees either side)"
+            "target_band": "Target wave: comfort band (degrees either side)",
+            "neighbours": "Neighbouring zones (thermostats), optional"
           },
           "data_description": {
             "room_entity": "Used instead of the thermostat's own reading when set.",
@@ -211,7 +212,8 @@
             "target_mean": "Leave empty to target the thermostat's setpoint instead of a daily wave.",
             "target_swing": "Default 0: a flat target.",
             "target_peak_hour": "Default 15 (3 pm): the outdoor wave peaks 1 to 3 hours after solar noon (hypothesis 02).",
-            "target_band": "Default 0.5."
+            "target_band": "Default 0.5.",
+            "neighbours": "Zones whose temperature and heating calls warm this one, for its learned model and forecast. Leave empty: the zone that heats most is every other zone's neighbour, and all the others are its."
           }
         },
         "reconfigure": {
@@ -237,7 +239,8 @@
             "target_mean": "Target wave: daily mean (degrees), optional",
             "target_swing": "Target wave: swing (degrees either side of the mean)",
             "target_peak_hour": "Target wave: warmest hour (local clock)",
-            "target_band": "Target wave: comfort band (degrees either side)"
+            "target_band": "Target wave: comfort band (degrees either side)",
+            "neighbours": "Neighbouring zones (thermostats), optional"
           },
           "data_description": {
             "room_entity": "Used instead of the thermostat's own reading when set.",
@@ -257,7 +260,8 @@
             "target_mean": "Leave empty to target the thermostat's setpoint instead of a daily wave.",
             "target_swing": "Default 0: a flat target.",
             "target_peak_hour": "Default 15 (3 pm): the outdoor wave peaks 1 to 3 hours after solar noon (hypothesis 02).",
-            "target_band": "Default 0.5."
+            "target_band": "Default 0.5.",
+            "neighbours": "Zones whose temperature and heating calls warm this one, for its learned model and forecast. Leave empty: the zone that heats most is every other zone's neighbour, and all the others are its."
           }
         }
       },

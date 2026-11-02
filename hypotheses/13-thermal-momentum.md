@@ -47,3 +47,14 @@ From the thermostat's own reading (about 0.06 C steps), per call; overshoot, dip
 - Lag: heat reaches the z4 thermostat about 6 to 12 minutes after a call starts, and the median z4 low-stage call lasts only 9 minutes. 17 of 114 z4 calls ended before the reading moved at all. Most short calls stop just as the warm air arrives, and the room keeps rising about 0.2 C after the furnace stops. z2's thermostat responds in 3 minutes.
 - After a call: the overshoot (+0.2 to +0.45 C) comes first, then the reading falls back below the end value (-0.1 to -0.2 C) within 30 to 50 minutes. A rebound as surfaces give heat back is not visible at the thermostat's 0.06 C resolution (median 0 to +0.1 C). The dip may be ordinary cooling rather than the loss of forced warm air; separating them needs the room sensors at finer resolution or longer gaps between calls.
 - For control (17): the 6 to 12 minute lag plus about 0.2 C of overshoot is the momentum to anticipate. A controller that stops calls about 0.2 C early would land near the setpoint.
+
+### The furnace's delivery lag in the forecast (`scripts/predict_rc.py`, 2 November 2026)
+
+The zone model gained a delivery lag (`ZoneModel.lag`): the heat reaching the room follows the call through a first-order lag, so it starts late and keeps arriving after the call stops, the start lag and overshoot above. `learn.fit_furnace_lag` tries 0, 6, 12, 21 and 30 minutes on 6 hour paths of the last 7 days with the thermostat simulated (recorded setpoints, neighbours as measured):
+
+| Zone | none | 6 min | 12 min | 21 min | 30 min |
+|---|---|---|---|---|---|
+| z2 basement | 0.29 | 0.32 | 0.33 | 0.37 | 0.40 |
+| z4 office | 0.46 | 0.48 | 0.49 | 0.51 | 0.53 |
+
+RMSE (C). **Not supported at this resolution:** any lag makes the paths worse. In 15 minute bins of the room sensors, the calls (median 9 minutes in z4) and their overshoot are mostly inside one bin, and a lag mainly lengthens the simulated calls. The integration still learns the lag (`furnace_lag` on the shadow sensor), so a zone where it helps will use it.

@@ -180,12 +180,19 @@ Each shadow zone has three sensors:
   `high`: whether the model beats simply holding the temperature 3 hours ahead
   on the idle history, and on how much data), `method`, `bins`, `r2`,
   `error_1h`/`error_3h` against `hold_1h`/`hold_3h`, the heating rate `h`, the
-  wall lag, the outdoor forecast's bias and any `problem`.
+  furnace's delivery lag (`furnace_lag`), the wall lag, the zones coupled into
+  the model (`neighbours`), the outdoor forecast's bias and any `problem`.
 - **Forecast** (`sensor.forecast_<zone>`): the room temperature 3 hours ahead
-  (hypothesis 16). The zone model runs forward 24 hours with the outdoor
-  forecast and the sun on the room, and with the thermostat simulated as an
-  on/off heater (heating rate `h`; heat below the setpoint minus the deadband,
-  off at the setpoint). The thermostat's program is taken to repeat
+  (hypothesis 16). All the zones run forward 24 hours together, with the
+  outdoor forecast and the sun on each room, each zone's thermostat simulated
+  as an on/off heater (heating rate `h`; heat below the setpoint minus the
+  deadband, off at the setpoint), and each zone fed its neighbours' forecast
+  temperature and calls. Where there is history, the forecast (`method:
+  hybrid`) is the usual day (the mean of the last 7 days at each quarter-hour,
+  plus today's gap fading away) plus what the model says differs today: the
+  simulation with the day's forecast and setpoints minus the simulation with
+  the usual day's. A zone with no usable model gets the usual day alone
+  (`method: profile`). The thermostat's program is taken to repeat
   yesterday's: the current setpoint holds until yesterday's setpoints changed
   at that time of day. The outdoor forecast is shifted by its bias against
   your outdoor sensor over the last 48 hours (at least 0.3 C, at most 4 C).
@@ -196,6 +203,16 @@ Each shadow zone has three sensors:
   predicted change (`change_mae`) with the count. `points` (not recorded) is
   the day ahead for charts: `temp`, `outdoor`, `heat` (furnace duty), and the
   target band `lower` and `upper`, every 30 minutes.
+
+In an open house a zone whose thermostat rarely calls is warmed mostly by the
+zones that do, and a model of the zone alone fits the wrong way round (its room
+"warms toward a colder outdoors"). So every zone is also fitted with two more
+terms: `n (neighbour - T)`, the pull toward its neighbours' temperature, and
+`x other`, warming while their calls run; the fit with them is used when it is
+physical and forecasts better. By default the zone that heats most is every
+other zone's neighbour, and all the others are its; set `neighbours` (a list
+of thermostats) on a zone to choose.
+
 - **Target** (`sensor.target_<zone>`): where the zone should be now, with the
   band in `lower` and `upper`. With `target_mean` set it is the target wave
   `mean + swing * cos(2 pi (hour - peak_hour) / 24)`; otherwise the

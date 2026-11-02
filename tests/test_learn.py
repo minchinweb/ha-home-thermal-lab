@@ -241,6 +241,9 @@ def test_problem_flags_unphysical_fits():
     assert problem(NoHeatFit(-0.01, 0.1, 0.0, 100)) == "wrong sign"
     assert problem(NoHeatFit(0.9, 0.1, 0.0, 100)) == "out of range"
     assert problem(NoHeatFit(0.02, 0.1, 0.0, 100)) is None
+    assert problem(NoHeatFit(0.0, 0.1, 0.0, 100)) == "wrong sign"
+    assert problem(NoHeatFit(0.0, 0.1, 0.0, 100, n=0.1)) is None
+    assert problem(NoHeatFit(0.02, 0.1, 0.0, 100, n=0.9)) == "out of range"
 
 
 def test_wall_lag_is_chosen_by_the_fit():
@@ -323,3 +326,100 @@ def test_grade_follows_skill_and_data():
     assert grade(good, {12: Skill(0.5, 0.4, 50)}) == "low"
     assert grade(good, {12: Skill(0.2, 0.4, 50)}) == "high"
     assert grade(NoHeatFit(0.02, 0.1, 0.0, 200), {12: Skill(0.2, 0.4, 50)}) == "medium"
+
+
+def _open_zone(a: float, seed: int = 5, n: int = 1200):
+    """A zone with its thermostat off, warmed by a heated neighbour."""
+    from custom_components.home_thermal_lab.shadow import ZoneModel, step
+
+    rng = random.Random(seed)
+    model = ZoneModel(a=a, c=0.05, n=0.15, x=0.6)
+    outdoor = [-8.0 + 6 * math.sin(i / 96 * 2 * math.pi) for i in range(n)]
+    calls = [1.0 if (i % 16) < 4 + (i // 96) % 3 else 0.0 for i in range(n)]
+    house = [20.5 + 0.8 * math.sin(i / 96 * 2 * math.pi + 1) for i in range(n)]
+    room = [20.0]
+    for i in range(n - 1):
+        room.append(
+            step(
+                room[i],
+                outdoor[i],
+                0.0,
+                model,
+                0.25,
+                neighbour=house[i],
+                other=calls[i],
+            )
+            + rng.gauss(0, 0.005)
+        )
+    return model, room, outdoor, house, calls
+
+
+def test_neighbour_terms_are_learned():
+    model, room, outdoor, house, calls = _open_zone(0.02)
+    n = len(room)
+    plain = fit_no_heat(room, outdoor, [0.0] * n, [0.0] * n, 0.25)
+    fit = fit_no_heat(
+        room, outdoor, [0.0] * n, [0.0] * n, 0.25, neighbour=house, other=calls
+    )
+    assert fit is not None
+    assert fit.n == pytest.approx(model.n, rel=0.15)
+    assert fit.x == pytest.approx(model.x, rel=0.15)
+    assert fit.a == pytest.approx(model.a, abs=0.01)
+    assert problem(fit) is None
+    assert plain is not None
+    assert model_of(fit).n == fit.n
+
+
+def test_interior_zone_drops_a():
+    _, room, outdoor, house, calls = _open_zone(0.0, seed=6)
+    n = len(room)
+    fit = fit_no_heat(
+        room, outdoor, [0.0] * n, [0.0] * n, 0.25, neighbour=house, other=calls
+    )
+    assert fit is not None
+    assert fit.a >= 0.0
+    assert fit.n > 0.1
+    assert problem(fit) is None
+
+
+def test_refine_keeps_neighbour_terms():
+    _, room, outdoor, house, calls = _open_zone(0.02, seed=7)
+    n = len(room)
+    data = ZoneData(
+        room, outdoor, [0.0] * n, [0.0] * n, 0.25, neighbour=house, other=calls
+    )
+    first = fit_no_heat(
+        room, outdoor, [0.0] * n, [0.0] * n, 0.25, block=4, neighbour=house, other=calls
+    )
+    refined = refine_multistep(first, data)
+    assert refined.n > 0
+    assert refined.x > 0
+    assert problem(refined) is None
+    path = simulate_from(model_of(refined), data, 10, 12)
+    assert abs(path[-1] - room[22]) < 0.1
+
+
+def test_furnace_lag_is_found():
+    from custom_components.home_thermal_lab.learn import fit_furnace_lag
+    from custom_components.home_thermal_lab.shadow import (
+        Thermostat,
+        ZoneModel,
+        simulate_heated,
+    )
+
+    n = 960
+    outdoor = [-10.0 + 5 * math.sin(i / 96 * 2 * math.pi) for i in range(n)]
+    setpoint = [21.0 if (i % 96) > 24 else 19.0 for i in range(n)]
+    true = ZoneModel(a=0.03, c=0.0, h=3.0, lag=0.35)
+    room, duty = simulate_heated(
+        20.0, outdoor, [0.0] * n, true, 0.25, Thermostat(setpoint, 0.1)
+    )
+    data = ZoneData(room[:n], outdoor, [0.0] * n, duty, 0.25, setpoint=setpoint)
+    lag_h, err = fit_furnace_lag(ZoneModel(a=0.03, c=0.0, h=3.0), data)
+    assert lag_h == 0.35
+    from custom_components.home_thermal_lab.learn import heated_error, heated_starts
+
+    starts = heated_starts(data, 24, 8)
+    no_lag = heated_error(ZoneModel(a=0.03, c=0.0, h=3.0), data, starts, 24, 0.1)
+    assert err < 0.5 * no_lag
+    assert fit_furnace_lag(ZoneModel(a=0.03, c=0.0), data) == (0.0, None)

@@ -24,7 +24,7 @@ import math
 import statistics
 
 from .hvac import Run
-from .shadow import ZoneModel, step
+from .shadow import ZoneModel, heated_step, step
 
 Series = list[tuple[datetime, float]]
 
@@ -136,6 +136,8 @@ class NoHeatFit:
         r2: Share of the variance in the (block) rates the fit explains.
         method: ``one-step`` (rates over single bins), ``block`` (rates over
             blocks of bins) or ``multi-step`` (refined on simulated paths).
+        n: Coupling to the neighbouring zones' mean temperature, per hour.
+        x: Warming per hour of other zones' furnace calls, C per hour.
     """
 
     a: float
@@ -146,6 +148,8 @@ class NoHeatFit:
     w: float = 0.0
     r2: float = 0.0
     method: str = "one-step"
+    n: float = 0.0
+    x: float = 0.0
 
 
 # A plausible cooling rate: at 0 or below heat flows the wrong way; above 0.5
@@ -162,8 +166,11 @@ def _block_rows(
     wall: list[float] | None,
     ground: list | None,
     block: int,
-) -> list[tuple[float, float, float, float, float]]:
-    """(outdoor - room, rate, light, wall light, ground - room) per idle block."""
+    neighbour: list | None = None,
+    other: list[float] | None = None,
+) -> list[tuple[float, ...]]:
+    """Per idle block: (outdoor - room, rate, light, wall light, ground - room,
+    neighbour - room, other zones' calls)."""
     rows = []
     i = 0
     n = len(room)
@@ -175,6 +182,7 @@ def _block_rows(
             or any(heating[j] > 0 for j in span)
             or (i > 0 and heating[i - 1] > 0)
             or (ground is not None and any(ground[j] is None for j in span))
+            or (neighbour is not None and any(neighbour[j] is None for j in span))
         ):
             i += 1
             continue
@@ -188,6 +196,10 @@ def _block_rows(
                 0.0
                 if ground is None
                 else sum(ground[j] for j in span) / block - mean_room,
+                0.0
+                if neighbour is None
+                else sum(neighbour[j] for j in span) / block - mean_room,
+                0.0 if other is None else sum(other[j] for j in span) / block,
             )
         )
         i += block
@@ -204,6 +216,8 @@ def fit_no_heat(
     wall: list[float] | None = None,
     ground: list | None = None,
     block: int = 1,
+    neighbour: list | None = None,
+    other: list[float] | None = None,
 ) -> NoHeatFit | None:
     """Fit the no-heat model on idle bins.
 
@@ -212,8 +226,11 @@ def fit_no_heat(
     readings into hour blocks: a thermostat that reports in 0.1 C steps hides a
     0.02 C change over 15 minutes, but much less of a 0.08 C change over an hour.
 
-    A sun, wall or ground term that comes out negative is not physical; it is
-    dropped and the rest refitted.
+    A sun, wall, ground, neighbour or leak term that comes out negative is not
+    physical; it is dropped and the rest refitted.
+
+    Idle means the zone's own furnace call is off; other zones may be heating
+    (the ``other`` term, when given, measures what that brings in).
 
     Args:
         room: Room temperature per bin (None when unknown).
@@ -226,11 +243,17 @@ def fit_no_heat(
         ground: Ground temperature per bin (None when unknown), for a room
             below ground.
         block: Bins per rate.
+        neighbour: Mean temperature of the neighbouring zones per bin (None
+            when unknown), for the ``n`` term.
+        other: Share of each bin other zones' furnace calls ran (summed over
+            them), for the ``x`` term.
 
     Returns:
         The fit, or None if there is too little idle data.
     """
-    rows = _block_rows(room, outdoor, light, heating, hours, wall, ground, block)
+    rows = _block_rows(
+        room, outdoor, light, heating, hours, wall, ground, block, neighbour, other
+    )
     if len(rows) * block < min_bins:
         return None
     y = [r[1] for r in rows]
@@ -238,22 +261,35 @@ def fit_no_heat(
         "g": any(r[2] > 0 for r in rows),
         "w": any(r[3] > 0 for r in rows),
         "b": ground is not None,
+        "n": neighbour is not None,
+        "x": any(r[6] > 0 for r in rows),
     }
-    index = {"g": 2, "w": 3, "b": 4}
+    index = {"a": 0, "g": 2, "w": 3, "b": 4, "n": 5, "x": 6}
+    with_a = True
     while True:
         names = [k for k, on in wanted.items() if on]
-        cols = [[r[0] for r in rows], [1.0] * len(rows)]
+        cols = [[r[0] for r in rows]] if with_a else []
+        cols.append([1.0] * len(rows))
         cols += [[r[index[k]] for r in rows] for k in names]
         beta = least_squares(cols, y)
         if beta is None:
             return None
+        if not with_a:
+            beta = [0.0, *beta]
         got = dict(zip(names, beta[2:], strict=True))
         negative = [k for k, v in got.items() if v < 0]
-        if not negative:
+        if negative:
+            wanted[negative[0]] = False
+        elif beta[0] < 0 and with_a and got.get("n", 0.0) > 0:
+            # An interior zone: no measurable loss to outdoors of its own.
+            with_a = False
+        else:
             break
-        wanted[negative[0]] = False
     fitted = [
-        sum(b * col[j] for b, col in zip(beta, cols, strict=True))
+        sum(
+            b * col[j]
+            for b, col in zip(beta if with_a else beta[1:], cols, strict=True)
+        )
         for j in range(len(y))
     ]
     mean_y = sum(y) / len(y)
@@ -268,6 +304,8 @@ def fit_no_heat(
         got.get("w", 0.0),
         r2=1.0 - sse / total if total > 0 else 0.0,
         method="one-step" if block == 1 else "block",
+        n=got.get("n", 0.0),
+        x=got.get("x", 0.0),
     )
 
 
@@ -275,15 +313,17 @@ def problem(fit: NoHeatFit | None) -> str | None:
     """Why a fit cannot be used (as ClimateAdvisor rejects its fits), or None.
 
     ``too little idle data`` when there is no fit; ``wrong sign`` when the room
-    would warm toward a colder outdoors (a <= 0, as fitted for zones whose
-    thermostat is off and that are driven by the rest of the house); ``out of
-    range`` when a or b is implausibly large.
+    would warm toward a colder outdoors (a < 0, as fitted without the
+    neighbour term for zones whose thermostat is off and that are driven by the
+    rest of the house) or is coupled to nothing (a + b + n = 0); ``out of
+    range`` when a, b or n is implausibly large. An interior zone, coupled to
+    the house but not measurably to outdoors (a = 0, n > 0), is fine.
     """
     if fit is None:
         return "too little idle data"
-    if fit.a <= 0:
+    if fit.a < 0 or fit.a + fit.b + fit.n <= 0:
         return "wrong sign"
-    if fit.a > A_MAX or fit.b > A_MAX:
+    if fit.a > A_MAX or fit.b > A_MAX or fit.n > A_MAX:
         return "out of range"
     return None
 
@@ -332,6 +372,10 @@ class ZoneData:
         hours: Bin width in hours.
         wall: Lagged light on sunlit solid walls per bin, if any.
         ground: Ground temperature per bin, for a room below ground.
+        neighbour: Mean temperature of the neighbouring zones per bin.
+        other: Share of each bin other zones' furnace calls ran.
+        setpoint: The heating setpoint per bin (None when the thermostat is off
+            or unknown), for the checks that simulate the thermostat.
     """
 
     room: list
@@ -341,11 +385,25 @@ class ZoneData:
     hours: float
     wall: list[float] | None = None
     ground: list | None = None
+    neighbour: list | None = None
+    other: list[float] | None = None
+    setpoint: list | None = None
+
+    def drivers(self, j: int) -> dict:
+        """The keyword drivers of ``shadow.step`` over bin ``j``."""
+        return {
+            "wall": 0.0 if self.wall is None else self.wall[j],
+            "ground": 0.0 if self.ground is None else self.ground[j],
+            "neighbour": 0.0 if self.neighbour is None else self.neighbour[j],
+            "other": 0.0 if self.other is None else self.other[j],
+        }
 
 
 def _usable(data: ZoneData, j: int) -> bool:
-    return data.outdoor[j] is not None and (
-        data.ground is None or data.ground[j] is not None
+    return (
+        data.outdoor[j] is not None
+        and (data.ground is None or data.ground[j] is not None)
+        and (data.neighbour is None or data.neighbour[j] is not None)
     )
 
 
@@ -374,8 +432,7 @@ def simulate_from(model: ZoneModel, data: ZoneData, i: int, steps: int) -> list:
                 data.light[j],
                 model,
                 data.hours,
-                0.0 if data.wall is None else data.wall[j],
-                0.0 if data.ground is None else data.ground[j],
+                **data.drivers(j),
             )
         )
     return path
@@ -424,7 +481,7 @@ def skill(
 
 def model_of(fit: NoHeatFit, h: float = 0.0) -> ZoneModel:
     """The simulation model for a fit (with a heating rate, if known)."""
-    return ZoneModel(fit.a, fit.c, fit.g, fit.b, fit.w, h)
+    return ZoneModel(fit.a, fit.c, fit.g, fit.b, fit.w, h, fit.n, fit.x)
 
 
 def refine_multistep(
@@ -440,9 +497,11 @@ def refine_multistep(
     shadow controller and the day forecast need is the error hours ahead.
     Starting from the fit, a damped Gauss-Newton search (Levenberg-Marquardt)
     adjusts the terms to minimise the squared error of the no-heat path at every
-    lead up to ``steps`` bins, from idle starts ``every`` bins apart. A step that
-    would make a term unphysical (a <= 0 or above ``A_MAX``, or a negative sun,
-    wall or ground term) is refused, so an unphysical fit is returned as it is.
+    lead up to ``steps`` bins, from idle starts ``every`` bins apart (the
+    neighbours' temperatures and calls as measured). A step that would make a
+    term unphysical (a <= 0, a or n above ``A_MAX``, or a negative sun, wall,
+    ground, neighbour or leak term) is refused, so an unphysical fit is returned
+    as it is.
 
     Returns the refined fit (``method="multi-step"``), or the fit unchanged if
     there are too few starts or nothing improves.
@@ -457,6 +516,10 @@ def refine_multistep(
         names.append("w")
     if data.ground is not None:
         names.append("b")
+    if data.neighbour is not None:
+        names.append("n")
+    if data.other is not None and any(v > 0 for v in data.other):
+        names.append("x")
     theta = [getattr(fit, k) for k in names]
 
     def residuals(values: list[float]) -> list[float]:
@@ -472,8 +535,11 @@ def refine_multistep(
 
     def physical(values: list[float]) -> bool:
         got = dict(zip(names, values, strict=True))
-        return 0 < got["a"] <= A_MAX and all(
-            got.get(k, 0.0) >= 0 for k in ("g", "w", "b")
+        return (
+            0 <= got["a"] <= A_MAX
+            and got["a"] + got.get("b", 0.0) + got.get("n", 0.0) > 0
+            and got.get("n", 0.0) <= A_MAX
+            and all(got.get(k, 0.0) >= 0 for k in ("g", "w", "b", "n", "x"))
         )
 
     if not physical(theta):
@@ -528,6 +594,8 @@ def refine_multistep(
         got.get("w", 0.0),
         r2=fit.r2,
         method="multi-step",
+        n=got.get("n", 0.0),
+        x=got.get("x", 0.0),
     )
 
 
@@ -578,13 +646,7 @@ def fit_heat_rate(model: ZoneModel, data: ZoneData, min_calls: int = 5) -> float
         t = data.room[i]
         for j in span:
             t = step(
-                t,
-                data.outdoor[j],
-                data.light[j],
-                model,
-                data.hours,
-                0.0 if data.wall is None else data.wall[j],
-                0.0 if data.ground is None else data.ground[j],
+                t, data.outdoor[j], data.light[j], model, data.hours, **data.drivers(j)
             )
         gained += data.room[end] - t
         on_hours += sum(data.heating[j] for j in span) * data.hours
@@ -593,6 +655,100 @@ def fit_heat_rate(model: ZoneModel, data: ZoneData, min_calls: int = 5) -> float
     if calls < min_calls or on_hours <= 0:
         return 0.0
     return max(gained / on_hours, 0.0)
+
+
+FURNACE_LAGS = (0.0, 0.1, 0.2, 0.35, 0.5)  # hours
+
+
+def heated_starts(data: ZoneData, steps: int, every: int) -> list[int]:
+    """Bins from which the drivers and setpoint are known for ``steps`` bins."""
+    if data.setpoint is None:
+        return []
+    out = []
+    for i in range(1, len(data.room) - steps, every):
+        if data.room[i] is None:
+            continue
+        span = range(i, i + steps)
+        if all(_usable(data, j) and data.setpoint[j] is not None for j in span):
+            out.append(i)
+    return out
+
+
+def heated_error(
+    model: ZoneModel,
+    data: ZoneData,
+    starts: list[int],
+    steps: int,
+    deadband: float,
+) -> float | None:
+    """RMSE of the model's paths with the thermostat simulated, over ``steps``.
+
+    From each start the recorded setpoints drive the simulated thermostat
+    (calling at the start if the zone was), with the neighbours as measured.
+    """
+    total = 0.0
+    count = 0
+    for i in starts:
+        room = data.room[i]
+        heating = data.heating[i - 1] > 0
+        pipe = model.h if heating else 0.0
+        for j in range(i, i + steps):
+            d = data.drivers(j)
+            room, _, heating, pipe = heated_step(
+                room,
+                heating,
+                data.setpoint[j],
+                deadband,
+                model,
+                data.hours,
+                data.outdoor[j],
+                data.light[j],
+                d["wall"],
+                d["ground"],
+                d["neighbour"],
+                d["other"],
+                pipe,
+            )
+            actual = data.room[j + 1]
+            if actual is not None:
+                total += (room - actual) ** 2
+                count += 1
+    return math.sqrt(total / count) if count else None
+
+
+def fit_furnace_lag(
+    model: ZoneModel,
+    data: ZoneData,
+    deadband: float = 0.1,
+    lags: tuple[float, ...] = FURNACE_LAGS,
+    steps: int = 24,
+    every: int = 8,
+) -> tuple[float, float | None]:
+    """The furnace delivery lag (hours) whose heated paths fit history best.
+
+    Hypothesis 13 measured a 6 to 12 minute start lag and 0.2 to 0.45 C of
+    overshoot after a call; an instant furnace in the simulation stops exactly
+    at the setpoint. Each lag in ``lags`` is tried on 6 hour paths with the
+    thermostat simulated (``heated_error``). Returns the lag and its error, or
+    ``(0.0, None)`` when the zone cannot heat or has no setpoint history.
+    """
+    if model.h <= 0:
+        return 0.0, None
+    starts = heated_starts(data, steps, every)
+    if len(starts) < 10:
+        return 0.0, None
+    best: tuple[float, float | None] = (0.0, None)
+    for value in lags:
+        err = heated_error(
+            ZoneModel(**{**model.__dict__, "lag": value}),
+            data,
+            starts,
+            steps,
+            deadband,
+        )
+        if err is not None and (best[1] is None or err < best[1]):
+            best = (value, err)
+    return best
 
 
 def grade(fit: NoHeatFit | None, skills: dict[int, Skill], lead: int = 12) -> str:

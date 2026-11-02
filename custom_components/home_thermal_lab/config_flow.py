@@ -147,6 +147,7 @@ def _zone_schema(roof_labels: list[dict]) -> vol.Schema:
             vol.Optional("tolerance"): _NUMBER,
             vol.Optional("max_dip"): _NUMBER,
             vol.Optional("deadband"): _NUMBER,
+            vol.Optional("neighbours"): _CLIMATES,
             **_sun_fields(roof_labels),
             vol.Optional("sunlit_walls"): _FACES,
             vol.Optional("below_ground", default=False): selector.BooleanSelector(),
@@ -247,6 +248,8 @@ def _zone_from_form(form: dict) -> dict:
     }
     if form.get("sunlit_walls"):
         out["sunlit_walls"] = list(form["sunlit_walls"])
+    if form.get("neighbours"):
+        out["neighbours"] = list(form["neighbours"])
     if form.get("below_ground"):
         out["below_ground"] = True
         out.update(_clean(form, ("ground_entity",)))
