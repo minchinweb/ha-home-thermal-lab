@@ -3,6 +3,7 @@ Changelog
 
 .. release:: unreleased
 
+  - :feature:`-` Set up from the web interface: the integration holds the outdoor sensor, and each sensor (shadow zone, heating-call statistics, furnace energy, contribution chart) is added as a sub-entry. YAML still works. Needs Home Assistant 2025.3.
   - :feature:`-` Renamed: repository ``ha-home-thermal-lab``, integration domain ``home_thermal_lab`` (was ``house_thermal_lab``); household names replaced by room labels, with real entity ids in ``.env`` (``HA_ENTITY_ALIASES``).
   - :feature:`-` No-fan nights experiment (Home Assistant automations, hypotheses 08 and 10), detected in the fan mixing script.
   - :feature:`-` Office lights on a dimmer as a modelled load (scripts and the contribution sensor's ``lights`` option); HACS "add repository" button in the README.

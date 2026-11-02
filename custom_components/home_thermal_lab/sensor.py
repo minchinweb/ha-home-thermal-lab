@@ -1,7 +1,8 @@
 """Home Thermal Lab sensors. Nothing here switches anything.
 
-Four kinds, all configured under one ``sensor:`` platform entry (see the README
-for a full example)::
+Four kinds, added as sub-entries in the web interface (``config_flow.py``) or
+configured under one ``sensor:`` platform entry in YAML (see the README for a
+full example)::
 
     sensor:
       - platform: home_thermal_lab
@@ -50,6 +51,7 @@ from homeassistant.helpers.event import (
 )
 import voluptuous as vol
 
+from . import CALL_STATS, CONTRIBUTION, ENERGY, ZONE
 from .calls import calls_from_states, responses, summarise, temperature_series
 from .contributions import (
     Inputs,
@@ -249,8 +251,40 @@ def _numbers(rows: list[dict]) -> list[tuple[datetime, float]]:
     return sorted(out)
 
 
+async def async_setup_entry(hass, entry, async_add_entities):
+    """Create one sensor per sub-entry of the config entry."""
+    forecast_cache = _Forecast(hass)
+    outdoor = entry.data.get("outdoor_entity")
+    for subentry in entry.subentries.values():
+        kind = subentry.subentry_type
+        try:
+            if kind == ZONE:
+                item = ZONE_SCHEMA(dict(subentry.data))
+                entity = ShadowSensor(hass, forecast_cache, outdoor, item)
+            elif kind == CALL_STATS:
+                entity = CallStatsSensor(hass, CALL_SCHEMA(dict(subentry.data)))
+            elif kind == ENERGY:
+                entity = FurnaceEnergySensor(hass, ENERGY_SCHEMA(dict(subentry.data)))
+            elif kind == CONTRIBUTION:
+                item = CONTRIBUTION_SCHEMA(dict(subentry.data))
+                entity = ContributionSensor(hass, forecast_cache, outdoor, item)
+            else:
+                continue
+        except vol.Invalid as err:
+            _LOGGER.error("Skipping %r: %s", subentry.title, err)
+            continue
+        if kind in (ZONE, CONTRIBUTION) and not outdoor:
+            _LOGGER.error(
+                "Skipping %r: set the outdoor sensor in the integration's "
+                "Reconfigure first",
+                subentry.title,
+            )
+            continue
+        async_add_entities([entity], config_subentry_id=subentry.subentry_id)
+
+
 async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
-    """Create the configured sensors."""
+    """Create the sensors configured in YAML."""
     forecast_cache = _Forecast(hass)
     outdoor = config.get("outdoor_entity")
     if (config["zones"] or config["contributions"]) and not outdoor:

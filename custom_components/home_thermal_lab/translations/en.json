@@ -1,0 +1,273 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Home Thermal Lab",
+        "description": "Pick the outdoor temperature sensor used by the shadow controller and the contribution chart. Add the sensors afterwards from the integration's page.",
+        "data": {
+          "outdoor_entity": "Outdoor temperature sensor"
+        }
+      },
+      "reconfigure": {
+        "title": "Home Thermal Lab",
+        "data": {
+          "outdoor_entity": "Outdoor temperature sensor"
+        }
+      }
+    },
+    "abort": {
+      "single_instance_allowed": "Home Thermal Lab is already set up.",
+      "reconfigure_successful": "Saved."
+    }
+  },
+  "config_subentries": {
+    "zone": {
+      "entry_type": "Shadow zone",
+      "initiate_flow": {
+        "user": "Add shadow zone",
+        "reconfigure": "Reconfigure"
+      },
+      "step": {
+        "user": {
+          "title": "Shadow zone",
+          "description": "Says whether a heating call starting now could be skipped (hypothesis 17). Nothing is switched.",
+          "data": {
+            "name": "Name",
+            "climate_entity": "Thermostat",
+            "room_entity": "Room temperature sensor",
+            "a": "Loss rate a (per hour)",
+            "c": "Heating rate c (degrees per hour)",
+            "g": "Sun gain g",
+            "tolerance": "Tolerance (degrees)",
+            "max_dip": "Largest allowed dip (degrees)",
+            "walls": "Sunlit walls (windows face)",
+            "roofs": "Roof windows or skylights",
+            "rotation": "House rotation (degrees)",
+            "shade_below": "Shaded below sun elevation (degrees)"
+          },
+          "data_description": {
+            "room_entity": "Used instead of the thermostat's own reading when set.",
+            "a": "Fit with scripts/shadow_control.py.",
+            "c": "Fit with scripts/shadow_control.py.",
+            "tolerance": "How far below the setpoint the room may drift.",
+            "max_dip": "Skip a heating call only if the room stays within this of the setpoint.",
+            "walls": "Faces with windows that let the sun in.",
+            "roofs": "Face and pitch in degrees, comma separated, for example: S 30, W 30.",
+            "rotation": "Degrees the house is turned from true north (see scripts/house_orientation.py).",
+            "shade_below": "Treat the south-east to south-west sun as blocked below this elevation (trees, neighbours)."
+          }
+        },
+        "reconfigure": {
+          "title": "Shadow zone",
+          "description": "Says whether a heating call starting now could be skipped (hypothesis 17). Nothing is switched.",
+          "data": {
+            "name": "Name",
+            "climate_entity": "Thermostat",
+            "room_entity": "Room temperature sensor",
+            "a": "Loss rate a (per hour)",
+            "c": "Heating rate c (degrees per hour)",
+            "g": "Sun gain g",
+            "tolerance": "Tolerance (degrees)",
+            "max_dip": "Largest allowed dip (degrees)",
+            "walls": "Sunlit walls (windows face)",
+            "roofs": "Roof windows or skylights",
+            "rotation": "House rotation (degrees)",
+            "shade_below": "Shaded below sun elevation (degrees)"
+          },
+          "data_description": {
+            "room_entity": "Used instead of the thermostat's own reading when set.",
+            "a": "Fit with scripts/shadow_control.py.",
+            "c": "Fit with scripts/shadow_control.py.",
+            "tolerance": "How far below the setpoint the room may drift.",
+            "max_dip": "Skip a heating call only if the room stays within this of the setpoint.",
+            "walls": "Faces with windows that let the sun in.",
+            "roofs": "Face and pitch in degrees, comma separated, for example: S 30, W 30.",
+            "rotation": "Degrees the house is turned from true north (see scripts/house_orientation.py).",
+            "shade_below": "Treat the south-east to south-west sun as blocked below this elevation (trees, neighbours)."
+          }
+        }
+      },
+      "error": {
+        "invalid_roofs": "Write roofs as face and pitch, for example: S 30, W 30.",
+        "invalid_lights": "Write lights as light.id=watts, for example: light.office=105."
+      },
+      "abort": {
+        "reconfigure_successful": "Saved."
+      }
+    },
+    "call_stats": {
+      "entry_type": "Heating-call statistics",
+      "initiate_flow": {
+        "user": "Add heating-call statistics",
+        "reconfigure": "Reconfigure"
+      },
+      "step": {
+        "user": {
+          "title": "Heating-call statistics",
+          "description": "Length, rise, lag, overshoot, dip and rebound of one zone's heating calls.",
+          "data": {
+            "name": "Name",
+            "climate_entity": "Thermostat",
+            "days": "Days of history (1-60)",
+            "after_minutes": "Minutes to follow each call"
+          },
+          "data_description": {}
+        },
+        "reconfigure": {
+          "title": "Heating-call statistics",
+          "description": "Length, rise, lag, overshoot, dip and rebound of one zone's heating calls.",
+          "data": {
+            "name": "Name",
+            "climate_entity": "Thermostat",
+            "days": "Days of history (1-60)",
+            "after_minutes": "Minutes to follow each call"
+          },
+          "data_description": {}
+        }
+      },
+      "error": {
+        "invalid_roofs": "Write roofs as face and pitch, for example: S 30, W 30.",
+        "invalid_lights": "Write lights as light.id=watts, for example: light.office=105."
+      },
+      "abort": {
+        "reconfigure_successful": "Saved."
+      }
+    },
+    "energy": {
+      "entry_type": "Furnace energy",
+      "initiate_flow": {
+        "user": "Add furnace energy",
+        "reconfigure": "Reconfigure"
+      },
+      "step": {
+        "user": {
+          "title": "Furnace energy",
+          "description": "A modelled energy meter (kWh) for the energy dashboard, from the furnace state and a power for each state.",
+          "data": {
+            "name": "Name",
+            "climate_entities": "Thermostats (all zones)",
+            "off": "Off (kW)",
+            "fan": "Fan only (kW)",
+            "heat_low": "Heat, low stage (kW)",
+            "heat_high": "Heat, high stage (kW)",
+            "cool": "Cooling (kW)"
+          },
+          "data_description": {
+            "climate_entities": "Every zone's thermostat; the furnace state is read from all of them.",
+            "fan": "Leave a state blank for zero."
+          }
+        },
+        "reconfigure": {
+          "title": "Furnace energy",
+          "description": "A modelled energy meter (kWh) for the energy dashboard, from the furnace state and a power for each state.",
+          "data": {
+            "name": "Name",
+            "climate_entities": "Thermostats (all zones)",
+            "off": "Off (kW)",
+            "fan": "Fan only (kW)",
+            "heat_low": "Heat, low stage (kW)",
+            "heat_high": "Heat, high stage (kW)",
+            "cool": "Cooling (kW)"
+          },
+          "data_description": {
+            "climate_entities": "Every zone's thermostat; the furnace state is read from all of them.",
+            "fan": "Leave a state blank for zero."
+          }
+        }
+      },
+      "error": {
+        "invalid_roofs": "Write roofs as face and pitch, for example: S 30, W 30.",
+        "invalid_lights": "Write lights as light.id=watts, for example: light.office=105."
+      },
+      "abort": {
+        "reconfigure_successful": "Saved."
+      }
+    },
+    "contribution": {
+      "entry_type": "Contribution chart",
+      "initiate_flow": {
+        "user": "Add contribution chart",
+        "reconfigure": "Reconfigure"
+      },
+      "step": {
+        "user": {
+          "title": "Contribution chart",
+          "description": "Splits one zone's temperature into what moved it, past and forecast.",
+          "data": {
+            "name": "Name",
+            "climate_entity": "Thermostat",
+            "room_entity": "Room temperature sensor",
+            "other_climate_entities": "Other zones' thermostats",
+            "plug_entities": "Plug power sensors (W)",
+            "lights": "Dimmed lights",
+            "a": "Loss rate a",
+            "c": "Constant c",
+            "g": "Sun gain g",
+            "h": "Furnace heat h",
+            "x": "Crossover x",
+            "p": "Appliance heat p",
+            "hours_back": "Hours back (1-72)",
+            "hours_ahead": "Hours ahead (1-48)",
+            "deadband": "Thermostat deadband (degrees)",
+            "walls": "Sunlit walls (windows face)",
+            "roofs": "Roof windows or skylights",
+            "rotation": "House rotation (degrees)",
+            "shade_below": "Shaded below sun elevation (degrees)"
+          },
+          "data_description": {
+            "other_climate_entities": "Their heat calls feed the crossover term.",
+            "plug_entities": "Their power is turned into heat.",
+            "lights": "Light entity and watts at full brightness, for example: light.office_main_lights=105.",
+            "a": "Fit the terms with scripts/fit_contributions.py.",
+            "walls": "Faces with windows that let the sun in.",
+            "roofs": "Face and pitch in degrees, comma separated, for example: S 30, W 30.",
+            "rotation": "Degrees the house is turned from true north (see scripts/house_orientation.py).",
+            "shade_below": "Treat the south-east to south-west sun as blocked below this elevation (trees, neighbours)."
+          }
+        },
+        "reconfigure": {
+          "title": "Contribution chart",
+          "description": "Splits one zone's temperature into what moved it, past and forecast.",
+          "data": {
+            "name": "Name",
+            "climate_entity": "Thermostat",
+            "room_entity": "Room temperature sensor",
+            "other_climate_entities": "Other zones' thermostats",
+            "plug_entities": "Plug power sensors (W)",
+            "lights": "Dimmed lights",
+            "a": "Loss rate a",
+            "c": "Constant c",
+            "g": "Sun gain g",
+            "h": "Furnace heat h",
+            "x": "Crossover x",
+            "p": "Appliance heat p",
+            "hours_back": "Hours back (1-72)",
+            "hours_ahead": "Hours ahead (1-48)",
+            "deadband": "Thermostat deadband (degrees)",
+            "walls": "Sunlit walls (windows face)",
+            "roofs": "Roof windows or skylights",
+            "rotation": "House rotation (degrees)",
+            "shade_below": "Shaded below sun elevation (degrees)"
+          },
+          "data_description": {
+            "other_climate_entities": "Their heat calls feed the crossover term.",
+            "plug_entities": "Their power is turned into heat.",
+            "lights": "Light entity and watts at full brightness, for example: light.office_main_lights=105.",
+            "a": "Fit the terms with scripts/fit_contributions.py.",
+            "walls": "Faces with windows that let the sun in.",
+            "roofs": "Face and pitch in degrees, comma separated, for example: S 30, W 30.",
+            "rotation": "Degrees the house is turned from true north (see scripts/house_orientation.py).",
+            "shade_below": "Treat the south-east to south-west sun as blocked below this elevation (trees, neighbours)."
+          }
+        }
+      },
+      "error": {
+        "invalid_roofs": "Write roofs as face and pitch, for example: S 30, W 30.",
+        "invalid_lights": "Write lights as light.id=watts, for example: light.office=105."
+      },
+      "abort": {
+        "reconfigure_successful": "Saved."
+      }
+    }
+  }
+}

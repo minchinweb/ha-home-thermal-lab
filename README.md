@@ -18,17 +18,33 @@ The button adds this repository to HACS as a custom repository. By hand:
    `https://github.com/minchinweb/ha-home-thermal-lab` with the type
    **Integration**.
 2. Find **Home Thermal Lab** in HACS, download it, and restart Home Assistant.
-3. Add the sensors to `configuration.yaml` (below) and restart again.
+3. Add the integration (**Settings > Devices & services > Add integration >
+   Home Thermal Lab**), pick the outdoor temperature sensor, then add each
+   sensor from the integration's page (below). Or use YAML instead.
 
 Without HACS, copy `custom_components/home_thermal_lab/` into your Home
 Assistant `custom_components/` folder.
 
-The integration is configured in YAML only and switches nothing. It needs the
+The integration switches nothing. It needs Home Assistant 2025.3 or later, the
 recorder (default), and fetches an hourly forecast from Open-Meteo for the home
 location. The `.github/workflows/validate.yml` workflow runs the HACS and
 `hassfest` checks on every push.
 
 ## Sensors
+
+### From the web interface
+
+Add the integration, choose the outdoor temperature sensor, then use **Add
+shadow zone**, **Add heating-call statistics**, **Add furnace energy** or **Add
+contribution chart** on the integration's page. Each is a sub-entry; the pencil
+icon edits it and the sensor reloads on save. The forms take the same settings
+as the YAML below, with these differences: roofs are typed as `S 30, W 30`
+(face and pitch), dimmed lights as `light.office_main_lights=105` (entity and
+watts at full), and the furnace powers are one box per state. Change the
+outdoor sensor with **Reconfigure** on the integration. Entities from the web
+and from YAML can both exist; use one or the other so they do not duplicate.
+
+### From YAML
 
 All four kinds go under one platform entry. Every key is optional except
 where noted; `sensor.py` documents each one.
