@@ -171,6 +171,25 @@ The kitchen rose from 21.4 C at 10:15 to 25.0 C at 14:07 (local) with its own zo
 - After 12:30 the kitchen gained about 1 C more than the model by 13:45. In that time the sun was clear of the neighbour's roof from the patio door, and the oven was running. One day cannot separate the two. If it were all sun, the patio door's gain would be about 0.7 mC/h per W/m2.
 - Photos at 14:08 (sun at 193 degrees, 20 high) show the sun shining through the spruce. A broad stripe of light with dappled branch shadows crosses the floor and the island. The spruce blocks only part of the light. The kitchen kept rising (24.84 to 25.03 C from 13:52 to 14:07) with the oven off and only a short Z2 call.
 
+#### The rest of the afternoon (to 16:52, times in UTC-6)
+
+Z4 did not call after 13:15, and Z2 made only short calls (a quarter of the time or less), so the afternoon is mostly free of bleed. The sky stayed clear (580 to 775 W/m2 beam). Rate fitted in 15-minute bins from 09:00, with the bleed fixed at the 15-day values (z2 +1.92, z4 +2.10 C/h per call), the cooling-law term fixed at 0.03/h, and bins with cooking (whole-house power over 2 kW, and the bin after) left out. The sun term is the beam through the S patio door (with the house's shading) and the W windows, at 70% through the glass:
+
+| Local time | Sun az / el | Kitchen | What happened |
+|---|---|---|---|
+| 13:07 to 14:07 | 177-193 / 21 | 24.47 to 25.03 | about 2 kW through the patio door, no calls, no cooking: +0.5 C/h |
+| 14:07 to 14:52 | 193-204 / 20-18 | 25.03 to 23.99 | sun behind the spruce: -1.4 C/h |
+| 15:07 to 15:52 | 208-218 / 17-13 | 24.00 to 24.71 | sun past the spruce, now on the W windows too: +0.9 C/h |
+| 16:07 to 16:37 | 222-228 / 12-9 | 24.80 to 25.54 | sun plus cooking (3 to 4.5 kW) |
+| 16:37 to 16:52 | 228-231 / 9-7 | 25.54 to 25.26 | sun into the trees and garage (about 8 degrees) |
+
+- Gain about 0.50 C/h per kW of sun through the glass. The physical value, with the kitchen's effective 7.9 MJ/K (13), is 0.46. On one clear afternoon with few calls, the kitchen's sun is measurable and matches physics. Over 15 autumn days the same gain came out at 0.03, buried by bleed and cooking.
+- Fitted separately: S +0.48, W +0.63 C/h per kW. The west window is positive for the first time; until now its sun came only as the evening cool-down began.
+- The spruce passes little: 0 to 10% fits best (RMSE 0.60 C/h, against 0.71 at 100% and 0.71 with no sun term). This corrects the note above that it passes "a good share": the dappled stripe in the 14:08 photo is real, but the room lost 1 C in the 45 minutes the sun was behind the tree.
+- About 9 kWh came through the glass from 11:30 to 17:00. If it all stayed in the kitchen, that would be about 4 C.
+- One afternoon, 19 usable bins: the cooling-law term cannot be fitted from it (it comes out positive), so it is fixed.
+- Photos at 16:54 (sun at 231, 7 high) show two bright rectangles on the east wall above the desk, split by a dark bar: the patio door's two panes and centre frame, thrown north-east. The kitchen thermostat is on that wall, just north of them. Earlier in the afternoon, with the sun further south, the patches fall further north, nearer the thermostat; a rough trace puts the lit band below the thermostat's height, but not by much. Sun on the wall just under or beside the thermostat would raise its reading more than the room's air. That the gain matches physics argues against a large sensor effect, but a look at where the patches fall around 15:30 to 16:30 on the next clear day would settle it.
+
 ### Horizon fit with bleed and partial transmission (`scripts/horizon_profile.py --days 15`, 18 October to 2 November 2026)
 
 Every model now has the other zones' calls as terms, the cooling law included. The kitchen roof is now 18.8 degrees (about 4:12), measured from the ceiling, which falls from 12.5 ft to 8 ft across the 13.25 ft east-west span, in place of the 3:12 (14 degrees) used before. The change moves the kitchen's numbers by less than 0.01 C/h. A new "partial" model lets a fitted share of blocked beam through (0 to 90% in steps of 10). The same terms were added to `scripts/solar_windows.py`.
