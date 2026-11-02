@@ -36,6 +36,8 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import itertools
+
 from envfile import load_env
 from regress_rooms import (
     OUTDOOR,
@@ -191,9 +193,7 @@ def main() -> None:
         f"from {SECTOR_START:.0f}\n"
     )
     edges = SECTOR_START + SECTOR_WIDTH * np.arange(SECTORS + 1)
-    header = "".join(
-        f"{lo:>4.0f}-{hi:<4.0f}" for lo, hi in zip(edges, edges[1:], strict=False)
-    )
+    header = "".join(f"{lo:>4.0f}-{hi:<4.0f}" for lo, hi in itertools.pairwise(edges))
     print(f"{'room':<13}{'n':>5}  clear-sun height (deg) by sun azimuth: {header}")
     print(f"{'':<20}{'CV RMSE C/h: cooling law':>26}{'no shading':>12}{'horizon':>10}")
     for name, spec in WINDOWS.items():
