@@ -23,7 +23,7 @@ and appliances.
 
 Usage::
 
-    uv run python scripts/thermal_momentum.py --days 10 --bin 15 \n        --furnace-btu 80000 --afue 0.95 --low-fraction 0.5
+    uv run python scripts/thermal_momentum.py --days 10 --bin 15 --furnace-btu 80000
 """
 
 from __future__ import annotations
