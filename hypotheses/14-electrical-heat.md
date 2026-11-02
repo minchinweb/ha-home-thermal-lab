@@ -46,3 +46,10 @@ Note: Home Assistant's time zone is America/Regina (UTC-6 all year), which is wh
 - Other rooms: noisy and mixed. Master bedroom +0.5 C (fan-only calls, probably unrelated), the S basement bedroom -0.6 C, basement rooms cooling less than before.
 - Scale check: with roughly 6 kWh/C for the whole house (13) and 1.5 kWh/C per zone, 1.7 kWh retained in the kitchen zone would give about +1 C; spread over the house about +0.3 C. Neither is seen, so most of the stove's heat is not showing up as warmer air at the sensors (heat in food and water, pans, vented moisture, fans mixing it through the house).
 - Follow-up: re-run `event_response.py 18:08 18:59 --follow 60` after 20:00 to see any slow warming after the load stopped.
+
+### Cooking session in watts (using C of about 6.7 kWh/C for the house, about 1.7 per 600 sq ft zone; see 13)
+
+- Energy in: 1.70 kWh over 51 min (about 2.0 kW extra).
+- Kitchen zone alone: if all of it stayed there, +1.0 C. Observed excess over its prior drift: -0.24 C/h, or -0.2 C over the session, with one thermostat step (0.06 C) as the noise floor. That caps the heat kept in the kitchen air and walls at about 0.1 to 0.2 kWh, under 10% of what was used.
+- Whole house: the mean excess rate across the 12 room sensors is about +0.05 C/h (+0.04 C over the session), worth about 0.3 kWh, or 17%. The rooms disagree widely (-0.9 to +1.0 C/h), so the standard error is about +-0.15 C/h, equivalent to +-0.9 kWh. It cannot separate 0 from 100% of the stove's heat.
+- Conclusion: the stove's heat is not visible at the room sensors. Either most of it left the air (food, water, steam), or it was spread across the house and lost in the noise. A single session is too weak to tell them apart; a repeat with the hood off, a longer run, or a quieter house (no furnace calls) would help.
