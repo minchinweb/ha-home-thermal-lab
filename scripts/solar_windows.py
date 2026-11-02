@@ -7,16 +7,18 @@ four walls:
 * master bedroom: a south window and a roof deck;
 * the W bedroom: a west window;
 * office: an east window (limited winter light);
-* kitchen: large south and west windows.
+* kitchen: a south patio door, two west windows and a small east one.
 
 ``--rotation`` turns every wall by that many degrees clockwise from the compass
 grid (the house is slightly off north; see ``scripts/house_orientation.py``).
 
 Per room, two fits in bins when its own zone is not calling for heat:
 
-* day: ``dT/dt = a * diff + c + g_window * I_window [+ r * roof]``, where the
-  window term is beam plus half diffuse light on that wall, and the roof term is
-  light on a flat surface;
+* day: ``dT/dt = a * diff + c + sum_z b_z * call_z + g_window * I_window
+  [+ r * roof]``, where ``call_z`` is the share of the bin each other zone was
+  calling for heat (air leaks past the closed dampers, hypothesis 06), the
+  window term is beam plus half diffuse light on that wall, and the roof term
+  is light on a flat surface;
 * night: ``dT/dt = a * diff + c + d * clear`` with ``clear`` the clear-sky
   fraction (1 - cloud cover), for bins with no furnace call anywhere. A negative
   ``d`` is a room losing extra heat to a clear sky (radiation out of the windows
@@ -50,6 +52,7 @@ from regress_rooms import (
     _ols,
     _overlap_fraction,
 )
+from room_geometry import KITCHEN_ROOF_PITCH
 from thermal_momentum import ZONE_OF_ROOM
 
 from custom_components.home_thermal_lab.ha_history import (
@@ -73,9 +76,10 @@ WINDOWS = {
     "Z3 master": {"walls": ["S"], "roof": [("E", None), ("W", None)]},
     "W bedroom": {"walls": ["W"], "roof": []},
     "Z4 office": {"walls": ["E"], "roof": []},
-    "Z1 kitchen": {"walls": ["S", "W", "N"], "roof": [("W", 14.04)]},
+    "Z1 kitchen": {"walls": ["S", "W", "E"], "roof": [("W", KITCHEN_ROOF_PITCH)]},
     "S basement": {"walls": ["S"], "roof": []},
     "SE basement": {"walls": ["S"], "roof": []},
+    # E window in a well facing the street; the N one has a wall just outside
     "NE basement": {"walls": ["E"], "roof": []},
 }
 MIN_BINS = 40
@@ -173,7 +177,10 @@ def main() -> None:
         f"{args.rotation:+.0f} deg; clear-sky fraction on night bins: mean "
         f"{np.nanmean(clear[night]):.2f}"
     )
-    print("window and roof terms in mC/h per W/m2; clear-sky term in mC/h\n")
+    print(
+        "window and roof terms in mC/h per W/m2; bleed in C/h per other zone's "
+        "call; clear-sky term in mC/h\n"
+    )
     for name, spec in WINDOWS.items():
         z = ZONE_OF_ROOM[name]
         room = _bin_means(stats.get(ROOMS[name], []), start, bins, width)
@@ -185,7 +192,9 @@ def main() -> None:
 
         sel = day & own_off & ok
         labels = [f"{f} wall" for f in spec["walls"]]
-        cols = [diff[sel], np.ones(sel.sum()), *(face[f][sel] for f in spec["walls"])]
+        others = [o for o in ZONES if o != z]
+        cols = [diff[sel], np.ones(sel.sum()), *(heat[o][sel] for o in others)]
+        cols += [face[f][sel] for f in spec["walls"]]
         for f, tilt in spec["roof"]:
             tilt = args.pitch if tilt is None else tilt
             labels.append(f"{f} roof {tilt:.0f}")
@@ -193,8 +202,13 @@ def main() -> None:
         row = f"{name:<12}{int(sel.sum()):>5} day"
         if sel.sum() >= MIN_BINS:
             b, s, _ = _ols(np.column_stack(cols), y[sel])
+            first = 2 + len(others)
             row += "  " + "  ".join(
-                f"{label} {_cell(b[2 + i], s[2 + i])}" for i, label in enumerate(labels)
+                f"{label} {_cell(b[first + i], s[first + i])}"
+                for i, label in enumerate(labels)
+            )
+            row += "  bleed " + " ".join(
+                f"{o} {_cell(b[2 + i], s[2 + i], 1.0)}" for i, o in enumerate(others)
             )
         else:
             row += "  too little data"

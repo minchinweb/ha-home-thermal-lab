@@ -58,3 +58,22 @@ The zone model gained a delivery lag (`ZoneModel.lag`): the heat reaching the ro
 | z4 office | 0.46 | 0.48 | 0.49 | 0.51 | 0.53 |
 
 RMSE (C). **Not supported at this resolution:** any lag makes the paths worse. In 15 minute bins of the room sensors, the calls (median 9 minutes in z4) and their overshoot are mostly inside one bin, and a lag mainly lengthens the simulated calls. The integration still learns the lag (`furnace_lag` on the shadow sensor), so a zone where it helps will use it.
+
+### Effective heat capacity from the measured airflow (`scripts/room_capacity.py --days 15`, 18 October to 2 November 2026)
+
+Room sizes and supply airflow are now in `scripts/room_geometry.py`, from the owner's balancing check (see 06). A zone call brings a room `airflow x air heat x supply rise` watts. Dividing that by how fast the room warms during the call (the bleed or own-call rate, fitted over all bins with the window light as terms) gives the room's effective heat capacity. The supply rise (supply air minus room air, at the register) is not measured. The table uses 25 K, and the capacity scales with it (35 K gives 40% more).
+
+| Room | Air volume m3 | Air alone kJ/K | Warming C/h per call (cfm) | Effective capacity MJ/K | Times the air |
+|---|---|---|---|---|---|
+| Kitchen | 84.6 | 102 | z2 +1.92 (349), z4 +2.58 (330) | 7.9 | 78 |
+| Z4 office (main office) | 24.5 | 30 | z4 +1.65 (107) | 3.3 | 112 |
+| W bedroom | 21.5 | 26 | z4 +1.07 (119) | 5.7 | 220 |
+| S basement | 20.3 | 25 | z2 +1.30 (127) | 5.0 | 204 |
+| SE basement | 11.8 | 14 | z2 +2.27 (142) | 3.2 | 225 |
+| NE basement | 13.6 | 16 | z2 +2.32 (137) | 3.0 | 184 |
+
+- Each room acts like 80 to 230 times its air (the office 112, using its thermostat's reading). The rest is drywall, furniture and floors, plus the air that moves on to the rooms next door. Per cubic metre the kitchen is the lightest (93 kJ/K per m3 against about 250 for the bedrooms), probably because its heat spreads into the open entranceway and front room, and its high sloped ceiling holds air with little wall around it.
+- The two kitchen values differ (10.7 MJ/K from z2, 7.5 from z4), so the 25% agreement is the precision of the method, given the unmeasured supply rise and the single airflow test.
+- The master, N bedroom and upstairs bathroom get under 50 cfm from z2 and z4, and z3 never called, so they have no value yet.
+- The basement bedrooms warm 0.6 to 0.9 C/h during z4 calls with no z4 air reaching them (see 06 and 11).
+- With these capacities the window gains in 11 convert to apertures in m2.

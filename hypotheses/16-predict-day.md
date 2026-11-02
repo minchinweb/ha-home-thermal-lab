@@ -106,7 +106,7 @@ Last fits (z4 as the neighbour of z1 to z3; per hour, and C per hour of call):
 | z4 office (neighbour: the other three) | 0.024 | 0.17 | 1.01 | 0.16 |
 
 - **Supported:** with the neighbour terms all four zones fit physically, and the model error halves (0.93 to 0.54 together). With the neighbours known it beats the profile with offset in z1, z2 and z3 and overall (0.43 against 0.47), and in the first 6 hours on every variant (0.26 to 0.29 against 0.30).
-- **Not yet usable for the day:** the neighbours' day has to be forecast too, and the gap from 0.43 to 0.51 to 0.54 is that forecast's error. z4's own model (0.42 to 0.44) is still worse than its profile (0.33), and z1 amplifies it (n at the cap, x 2.8 C per hour of call: the kitchen follows z4 and warms during its calls, as 06 found).
+- **Not yet usable for the day:** the neighbours' day has to be forecast too, and the gap from 0.43 to 0.51 to 0.54 is that forecast's error. z4's own model (0.42 to 0.44) is still worse than its profile (0.33), and z1 amplifies it (n at the cap, x 2.8 C per hour of call: the kitchen follows z4 and warms during its calls; 06 finds z2's calls warm it as much, which the hub rule leaves out, see below).
 - So the coupling settles the open zones' wrong-sign fits but not, on its own, the forecast (the hybrid below does).
 - Next: make z4's own forecast as good as its profile (the furnace's lag and overshoot, 13; the hybrid in (4) above), then use the coupled model where it wins (the first 6 hours, and the open zones given z4). The kitchen's n at the cap and its c of 1.2 C/h (cooking, the fridge) want a check over more weeks.
 
@@ -132,3 +132,12 @@ By zone (whole day), D / H / H yesterday: z1 kitchen 0.60 / 0.55 / 0.53; z2 base
 - **The furnace lag does not help** at this resolution: on 6 hour paths with the thermostat simulated, the error rises with the lag in both zones that heat (z4 0.46 at none to 0.53 at 30 minutes; z2 0.29 to 0.40), so `fit_furnace_lag` picks none. See 13.
 - **Built:** the integration now fits each zone alone and with its neighbours, keeps the coupled fit where it is physical and better on idle history, simulates all zones together (`house.forecast_house`) and issues the hybrid; a zone with no usable model gets D. The live scores will say whether it holds outside the backtest.
 - Still open: the basement, where the hybrid is slightly worse than D; the furnace's lag at the room sensors' own resolution (the 5 minute statistics are averaged into 15 minute bins here); more weeks of history (the zone sensors go back only 14 days, so the backtest has 10 test days).
+
+### Checked against the airflow measurements (06, 11 and 13)
+
+The owner's register airflow check (06) and the bleed terms in the solar fits (11) came in after the backtests above. They mostly agree with the coupled fits:
+
+- **The basement and z4:** the basement bedrooms warm 0.5 to 0.9 C/h during z4 calls with no z4 air reaching them. So the hub rule's choice of z4 as z2's neighbour (x 1.25 C per hour of z4 call) is physical, though the path (stairs, ducts, the furnace room) is not known.
+- **The kitchen and z4:** the bleed fit gives the kitchen +2.1 to +2.6 C/h per z4 call; the coupled fit's x is 2.8 C per hour of call. The same order.
+- **The kitchen and z2 (a gap):** the kitchen gets about as much air from a z2 call as from a z4 call (349 and 330 cfm after rebalancing; bleed +1.9 and +2.1 C/h). Under the hub rule its only neighbour is z4, so z2's calls are missing from its model, and its fitted `c` (1.2 C/h) and capped `n` may be standing in for them. Next: backtest the kitchen with z2 and z4 as its neighbours (`neighbours` on the zone), leaving the hub rule for the others; giving every zone all the others lost (0.49), but that is not the same test.
+- The kitchen's effective heat capacity (7.5 to 10.7 MJ/K, 13) is the lightest per cubic metre in the house, which fits a room that follows its neighbours quickly (n at the cap).

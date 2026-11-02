@@ -4,16 +4,27 @@ Trees to the south and east and a low house just south block the low sun. For
 each room this fits ``dT/dt = a * diff + c + sum_f g_f * L_f`` over daytime bins
 when the room's own zone is not heating, where each window's light is::
 
-    L_f = beam_f * [sun elevation >= horizon(sun azimuth)] + diffuse_f
+    L_f = beam_f * (clear + t * (1 - clear)) + diffuse_f
+    clear = [sun elevation >= horizon(sun azimuth)]
 
 The horizon is a step per 30 degree sector of sun azimuth (90 to 270): the lowest
 sun height at which that sector is clear, chosen from a grid by coordinate
-descent on the fit error, with the gains ``g`` refit for every candidate. Roof
-faces are treated as unshaded (they sit above the trees and the house to the
-south). Every model is scored by leave-one-day-out cross-validation: the
-horizon is re-fit with each day held out, then used to predict that day. Three
-models are compared: the cooling law alone, windows without shading
-(horizon = 0), and windows with the fitted horizon.
+descent on the fit error, with the gains ``g`` refit for every candidate. ``t``
+is the share of beam light that gets through whatever blocks it (0 for a roof or
+a wall; a thin spruce passes some), fitted from a grid in the same descent. It
+is 0 except in the "partial" model. Roof faces are treated as unshaded (they sit
+above the trees and the house to the south).
+
+Heat that leaks in from the other zones' calls (hypothesis 06; the kitchen's
+damper hardly closes) is a term per other zone, ``+ sum_z b_z * call_z``, in
+every model. Without it the window terms take up that heat whenever the calls
+line up with the sun.
+
+Every model is scored by leave-one-day-out cross-validation: the horizon is
+re-fit with each day held out, then used to predict that day. The models
+compared: the cooling law (with the bleed terms) alone, windows without shading
+(horizon = 0), windows with the fitted horizon (blocked means blocked), the same
+with partial transmission, and the two roof variants.
 
 Sectors the sun never crossed in sunny bins are left at 0 and shown as ``.``.
 
@@ -67,6 +78,7 @@ SECTOR_START = 90.0
 SECTOR_WIDTH = 30.0
 SECTORS = 6
 HORIZON_GRID = np.arange(0.0, 31.0, 3.0)
+TRANSMIT_GRID = np.arange(0.0, 0.91, 0.1)
 MIN_SECTOR_BINS = 5
 MIN_BINS = 60
 PASSES = 3
@@ -81,11 +93,25 @@ class RoomFit:
     ``SECTORS`` entries, or twice that for ``separate`` (walls then roof).
     """
 
-    def __init__(self, y, diff, sector, elevation, walls, roofs, roof_mode):
+    def __init__(
+        self,
+        y,
+        diff,
+        sector,
+        elevation,
+        walls,
+        roofs,
+        roof_mode,
+        bleed=(),
+        partial=False,
+    ):
         self.y, self.diff = y, diff
         self.sector, self.elevation = sector, elevation
         self.walls, self.roofs = walls, roofs  # lists of (beam, diffuse)
         self.roof_mode = roof_mode if roofs else "none"
+        self.bleed = list(bleed)  # other zones' call fractions
+        self.partial = partial
+        self.transmit = 0.0
 
     @property
     def size(self) -> int:
@@ -101,8 +127,9 @@ class RoomFit:
             roof_clear = wall_clear
         else:
             roof_clear = np.ones(len(self.y), dtype=bool)
-        cols = [self.diff, np.ones(len(self.y))]
-        cols += [beam * wall_clear + diffuse for beam, diffuse in self.walls]
+        wall_light = wall_clear + self.transmit * ~wall_clear
+        cols = [self.diff, np.ones(len(self.y)), *self.bleed]
+        cols += [beam * wall_light + diffuse for beam, diffuse in self.walls]
         cols += [beam * roof_clear + diffuse for beam, diffuse in self.roofs]
         return np.column_stack(cols)
 
@@ -112,9 +139,15 @@ class RoomFit:
         beta, *_ = np.linalg.lstsq(x, self.y[rows], rcond=None)
         return float(np.sum((self.y[rows] - x @ beta) ** 2)), beta
 
+    @property
+    def first_light(self) -> int:
+        """Index of the first window column in the coefficients."""
+        return 2 + len(self.bleed)
+
     def fit_horizon(self, rows: np.ndarray, beam_ref: np.ndarray) -> np.ndarray:
-        """Coordinate descent over the sector horizons."""
+        """Coordinate descent over the sector horizons (and ``transmit``)."""
         horizon = np.zeros(self.size)
+        self.transmit = 0.0
         usable = [
             k
             for k in range(SECTORS)
@@ -133,6 +166,14 @@ class RoomFit:
                     if err < best[0] - 1e-12:
                         best = (err, h)
                 horizon[k] = best[1]
+            if self.partial:
+                best = (np.inf, self.transmit)
+                for t in TRANSMIT_GRID:
+                    self.transmit = t
+                    err, _ = self.sse(horizon, rows)
+                    if err < best[0] - 1e-12:
+                        best = (err, t)
+                self.transmit = best[1]
         return horizon
 
 
@@ -222,9 +263,12 @@ def main() -> None:
     print(f"{'room':<13}{'n':>5}  clear-sun height (deg) by sun azimuth: {header}")
     print(
         f"{'':<20}CV RMSE C/h: {'cooling law':>12}{'no shading':>12}{'walls only':>12}"
-        f"{'roof shared':>13}{'roof own':>10}"
+        f"{'partial':>10}{'roof shared':>13}{'roof own':>10}"
     )
     for name, spec in WINDOWS.items():
+        if not spec["walls"]:
+            print(f"{name:<13}       no window that sees direct sun")
+            continue
         z = ZONE_OF_ROOM[name]
         room = _bin_means(stats.get(ROOMS[name], []), start, bins, width)
         y = np.full(bins, np.nan)
@@ -232,6 +276,8 @@ def main() -> None:
         diff = t_out - room
         own_off = (heat[z] == 0) & (np.concatenate([[1.0], heat[z][:-1]]) == 0)
         rows = day & own_off & ~np.isnan(y) & ~np.isnan(diff)
+        others = [o for o in ZONES if o != z]
+        bleed = [heat[o] for o in others]
         if rows.sum() < MIN_BINS:
             print(f"{name:<13}{int(rows.sum()):>5}  too little data")
             continue
@@ -254,12 +300,17 @@ def main() -> None:
         ]
         y0, d0 = np.nan_to_num(y), np.nan_to_num(diff)
         models = {
-            mode: RoomFit(y0, d0, sector, elevation, walls, roofs, mode)
+            mode: RoomFit(y0, d0, sector, elevation, walls, roofs, mode, bleed)
             for mode in ("none", "shared", "separate")
         }
-        base_x = np.column_stack([d0, np.ones(bins)])
+        models["partial"] = RoomFit(
+            y0, d0, sector, elevation, walls, roofs, "none", bleed, partial=True
+        )
+        base_x = np.column_stack([d0, np.ones(bins), *bleed])
 
-        errors = {k: [] for k in ("base", "flat", "none", "shared", "separate")}
+        errors = {
+            k: [] for k in ("base", "flat", "none", "partial", "shared", "separate")
+        }
         for d in np.unique(day_index[rows]):
             test = rows & (day_index == d)
             train = rows & (day_index != d)
@@ -280,13 +331,28 @@ def main() -> None:
         print(
             f"{name:<13}{int(rows.sum()):>5}  {_cells(walls_only, covered)}   (walls)"
         )
+        partial = models["partial"]
+        thin = partial.fit_horizon(rows, ref)
+        _, beta = partial.sse(thin, rows)
+        print(
+            f"{'':<20}{_cells(thin, covered)}   (walls, {partial.transmit:.0%} "
+            "of blocked beam gets through)"
+        )
+        bleeds = zip(others, beta[2 : partial.first_light], strict=True)
+        gains = zip(spec["walls"], beta[partial.first_light :] * 1000, strict=False)
+        print(
+            f"{'':<20}bleed C/h per call: "
+            + ", ".join(f"{o} {b:+.2f}" for o, b in bleeds)
+            + "; window gain mC/h per W/m2: "
+            + ", ".join(f"{f} {g:+.2f}" for f, g in gains)
+        )
         if roofs:
             own = models["separate"].fit_horizon(rows, ref)
             print(f"{'':<20}{_cells(own[SECTORS:], covered)}   (roof, own horizon)")
         rmse = {k: np.sqrt(np.mean(v)) for k, v in errors.items()}
         print(
             f"{'':<20}{'':>13}{rmse['base']:>12.3f}{rmse['flat']:>12.3f}"
-            f"{rmse['none']:>12.3f}"
+            f"{rmse['none']:>12.3f}{rmse['partial']:>10.3f}"
             + (
                 f"{rmse['shared']:>13.3f}{rmse['separate']:>10.3f}"
                 if roofs
@@ -296,6 +362,7 @@ def main() -> None:
     print(
         "\n'.' = sun spent fewer than 5 sunny bins in that sector. A height of 0 means"
         "\nclear, 30 means blocked at every height seen. CV = leave one day out."
+        "\nEvery model, the cooling law included, has the other zones' calls (bleed)."
     )
 
 
