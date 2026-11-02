@@ -1,6 +1,6 @@
 # 16 Predict next-day house/room temperature
 
-**Status:** revised after reading ClimateAdvisor; zone model with a simulated thermostat built and backtested (does not yet beat the profile with offset); live forecasts now logged as issued
+**Status:** revised after reading ClimateAdvisor; the zone model alone does not beat the profile with offset, but the hybrid (profile plus the coupled zone model's departures) does, 0.44 against 0.46 C (see the last section); the live forecast uses the hybrid and is logged and scored as issued
 
 **Claim:** With the fitted factors (B, C) and a weather forecast, we can predict each room's temperature for the coming day.
 
@@ -75,7 +75,7 @@ Rolling origin at local midnight (America/Regina) of test days 4 to 13, 14 days 
 
 By zone (whole day): z4 office D 0.33, R1 0.44, R4 0.44, RM 0.46, RM with yesterday's program 0.47, RM held 2.93; z2 basement D 0.43, RM 0.84; z3 master D 0.52, RM 0.70; z1 kitchen D 0.59, RM 1.67.
 
-- **Refuted for now:** the zone model with a simulated thermostat does not beat the profile with offset in any zone. Even in z4, the one zone whose fit is physical (a = 0.031 per hour, c 0.38 C/h, g 0.0027), it is 0.44 to 0.46 C against 0.33.
+- **Refuted for now:** the zone model with a simulated thermostat does not beat the profile with offset in any zone. Even in z4, the one zone whose fit is physical (a = 0.031 per hour, c 0.38 C/h, g 0.0027), it is 0.44 to 0.46 C against 0.33. (Neighbour terms and the hybrid, below, change this.)
 - z1, z2 and z3 fit with the wrong sign (a from -0.010 to -0.055): the room "warms toward a colder outdoors". Their thermostats are off (z1, z3) or their calls are short and few (z2), so they are driven by the rest of the house, which a one-zone model cannot see. The integration now refuses such fits (`problem: wrong sign`) instead of forecasting with them; the backtest still simulates them, which is why the R rows are so poor on average.
 - Hour-long blocks and the multi-step refinement did not help here (0.83 to 0.93 on average; 0.44 to 0.46 in z4). With 7 training days there are only a few hundred idle hours, and the error is dominated by what the model lacks (other zones, people, the furnace's lag and overshoot) rather than by the thermostat's 0.1 C steps.
 - **The program matters most.** Holding the midnight setpoint all day cost z4 2.9 C (it has a night setback). Repeating yesterday's setpoints came within 0.02 C of knowing the day's own (0.47 against 0.46), so the forecast sensor does that.
