@@ -10,6 +10,10 @@ wave, and for testing hypotheses about how a house behaves thermally.
 
 ## Install with HACS
 
+[![Open your Home Assistant instance and open this repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=MinchinWeb&repository=ha-targeting-temperature-wave&category=integration)
+
+The button adds this repository to HACS as a custom repository. By hand:
+
 1. In HACS, open the menu (three dots) and choose **Custom repositories**. Add
    `https://github.com/MinchinWeb/ha-targeting-temperature-wave` with the type
    **Integration**.
@@ -73,7 +77,8 @@ sensor:
         room_entity: sensor.z4_temperature
         other_climate_entities: [climate.z1, climate.z2, climate.z3]
         plug_entities: [sensor.office_office_computer_plug_power]
-        terms: {a: 0.0185, c: -0.028, g: 0.00005, h: 1.65, x: 0.35, p: 1.33}
+        lights: {light.office_main_lights: 105}   # 7 x 15 W LEDs, scaled by the dimmer
+        terms: {a: 0.0174, c: -0.069, g: 0.00005, h: 1.67, x: 0.31, p: 1.15}
         walls: [E]
         rotation: 10.4
         shade_below: 18

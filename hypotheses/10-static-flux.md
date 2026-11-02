@@ -33,3 +33,5 @@ The hypothesis asks for the coupling when the furnace, AC and fans are off. 08 f
 - The network barely predicts better: CV RMSE changes by -0.013 to +0.007 C/h across rooms (night), and by up to -0.014 (all day, with a sun term). The zone terms are mostly small and some are non-physical (the office sensor -0.74/h toward its own zone).
 - Consistent couplings: the master bedroom follows the rest of z3 (+0.57/h); the SE basement follows z2 (+0.37); most rooms are pulled toward z3 (upstairs), which may be the stack effect or simply that z3 never calls and so moves with the house.
 - Conclusion: with the fan always on, the idle data cannot identify pairwise static coupling. The deliberate no-fan nights are the test.
+
+The no-fan nights are now running (see 08, from 2 November 2026). Rerun `scripts/room_network.py` on those nights' still bins once a few have passed.

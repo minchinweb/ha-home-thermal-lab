@@ -32,3 +32,9 @@ The first look compared the master bedroom's warming during heating calls with t
 - The blower's electrical draw at its short off-gaps (`scripts/blower_power.py`) shows no clear step (median +0.04 kW with 5-minute windows), so in fan-only mode it runs slowly.
 
 **Next:** a deliberate test. For example, set all four thermostats' fan minimum on-time to 0 on alternate nights for two weeks (with a heat setpoint low enough that no zone calls), and rerun `fan_mixing.py`; the "still" column will then fill in. The same nights give 10 its no-fan data.
+
+### No-fan nights set up (2026-11-02)
+
+`homeassistant/no_fan_nights.yaml`, installed in Home Assistant as two automations ("No-fan night: start" and "No-fan night: end"): on even days of the year, 23:00 to 06:00 local, every thermostat's fan minimum on-time is set to 0 and the fan mode to auto; at 06:00 (or when Home Assistant starts during the day) they go back to 15 min/h (z2: 40). Heating is unchanged; a heat call still runs the blower and the analysis uses the time between calls. First night 2 November, last 16 November (8 nights, with 7 normal nights between them). `scripts/fan_mixing.py` finds these nights from the thermostats' `fan_min_on_time` attribute.
+
+Owner's note: the blower probably does not stop when a zone goes from a fan-only call to a heating call. That fits the power data: the +0.2 kW "heat on" step in 14 was measured with the blower already running for the fan, so it is the extra draw of heating over fan-only, not the blower starting. It also means the 3-minute "off" gaps above may not be real stops (a furnace usually has a fan-off delay), which would explain why no step shows at them. The no-fan nights will give the first real off-to-on edges for the fan-only power.

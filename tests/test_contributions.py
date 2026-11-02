@@ -8,6 +8,7 @@ from custom_components.house_thermal_lab.contributions import (
     Inputs,
     ZoneTerms,
     chart_points,
+    dimmer_kw,
     forecast,
     history,
 )
@@ -39,6 +40,24 @@ def test_forecast_thermostat_turns_heat_on_and_off():
     assert cum[-1]["furnace"] > 0
     assert cum[-1]["outdoor"] < 0
     assert temps[-1] == pytest.approx(20.0 + sum(cum[-1].values()))
+
+
+def test_dimmer_power_follows_brightness():
+    rows = [
+        {
+            "state": "on",
+            "last_updated": "2026-11-02T10:00:00+00:00",
+            "attributes": {"brightness": 255},
+        },
+        {
+            "state": "on",
+            "last_updated": "2026-11-02T11:00:00+00:00",
+            "attributes": {"brightness": 51},
+        },
+        {"state": "off", "last_updated": "2026-11-02T12:00:00+00:00", "attributes": {}},
+    ]
+    kw = [v for _, v in dimmer_kw(rows, 105.0)]
+    assert kw == pytest.approx([0.105, 0.021, 0.0])
 
 
 def test_chart_points_thins_and_marks_forecast():

@@ -3,12 +3,13 @@ Changelog
 
 .. release:: unreleased
 
+  - :feature:`-` No-fan nights experiment (Home Assistant automations, hypotheses 08 and 10), detected in the fan mixing script.
+  - :feature:`-` Office lights on a dimmer as a modelled load (scripts and the contribution sensor's ``lights`` option); HACS "add repository" button in the README.
   - :feature:`-` Package the integration for HACS (``hacs.json``, manifest version and issue tracker, HACS and hassfest validation workflow); no ``async_setup`` needed.
   - :feature:`-` New sensors: heating-call statistics per zone, modelled furnace energy (blower and gas) for the energy dashboard, and per-zone contribution split for a stacked chart.
   - :feature:`-` Contribution split (history and forecast) and its fitting script; furnace energy meter; heating-call analysis (lag, rise, overshoot, dip, rebound).
   - :feature:`-` Fan mixing test and its review (hypothesis 08), door-edge study at 5-minute bins (09), room network fit (10), furnace lag (13), plug-load heat and blower power (14), plug terms in the occupancy fit (15), shower log from bathroom humidity (18).
   - :feature:`-` Tampa, Sherbrooke and Victoria (city, not the airport) as example locations; retry the Open-Meteo archive when it is overloaded.
-
   - :feature:`-` Shadow-controller sensors for Home Assistant, forecast loader and log-versus-thermostat comparison.
   - :feature:`-` Shadow-mode furnace controller: which calls could have been skipped, with a no-heat forecast check (hypothesis 17).
   - :feature:`-` Next-day room temperature backtest against persistence, yesterday and profile baselines, with outdoor and sun terms (hypothesis 16).

@@ -31,6 +31,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from appliance_heat import light_power
 from envfile import load_env
 from predict_day import _room_light
 from regress_rooms import OUTDOOR, ROOMS, ZONES, _bin_means, _ols, _overlap_fraction
@@ -63,6 +64,7 @@ ZONE_PLUGS = {
     ],
     "z4": ["sensor.office_office_computer_plug_power"],
 }
+ZONE_LIGHTS = {"z4": ["office lights"]}  # modelled, see appliance_heat.LIGHTS
 NAMES = ["a", "c", "g", "h", "x", "p"]
 
 
@@ -98,6 +100,7 @@ def main() -> None:
         )
     )
     t_out = _bin_means(stats.get(OUTDOOR, []), start, bins, width)
+    lights = light_power(args.ha_url, token, start, end, bins, width)
     heat = {}
     for z in ZONES:
         states = fetch_states(
@@ -141,6 +144,8 @@ def main() -> None:
         kw = np.zeros(bins)
         for e in ZONE_PLUGS.get(z, []):
             kw += np.nan_to_num(_bin_means(stats.get(e, []), start, bins, width)) / 1000
+        for lamp in ZONE_LIGHTS.get(z, []):
+            kw += np.nan_to_num(lights[lamp])
         cols = [t_out - room, np.ones(bins), light, heat[z], other, kw]
         keep = [True, True, spec is not None, heat[z].any(), True, z in ZONE_PLUGS]
         x = np.column_stack([c for c, k in zip(cols, keep, strict=True) if k])

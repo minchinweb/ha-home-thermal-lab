@@ -39,6 +39,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+from appliance_heat import light_power
 from door_state import auc
 from envfile import load_env
 from regress_rooms import (
@@ -79,7 +80,7 @@ PLUGS = {
     "kitchen PCs": "sensor.kitchen_kitchen_computers_plug_power",
     "office PC": "sensor.office_office_computer_plug_power",
 }
-ZONE_PLUGS = {"z1": ["fridge", "kitchen PCs"], "z4": ["office PC"]}
+ZONE_PLUGS = {"z1": ["fridge", "kitchen PCs"], "z4": ["office PC", "office lights"]}
 
 
 def _fraction(entity, args, token, start, end, bins, width):
@@ -173,6 +174,7 @@ def main() -> None:
         k: _bin_means(stats.get(e, []), start, bins, width) / 1000.0
         for k, e in PLUGS.items()
     }
+    plug |= light_power(args.ha_url, token, start, end, bins, width)
 
     print(
         f"\nquiet night bins: {int(quiet.sum())}\n\n"

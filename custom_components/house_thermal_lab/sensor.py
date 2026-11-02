@@ -55,6 +55,7 @@ from .contributions import (
     Inputs,
     ZoneTerms,
     chart_points,
+    dimmer_kw,
     forecast,
     held_values,
     on_fraction,
@@ -128,6 +129,8 @@ CONTRIBUTION_SCHEMA = vol.Schema(
         vol.Optional("room_entity"): cv.entity_id,
         vol.Optional("other_climate_entities", default=[]): cv.entity_ids,
         vol.Optional("plug_entities", default=[]): cv.entity_ids,
+        # dimmed lights without a meter: light entity -> watts at full brightness
+        vol.Optional("lights", default={}): {cv.entity_id: vol.Coerce(float)},
         vol.Required("terms"): vol.Schema(
             {
                 vol.Required("a"): vol.Coerce(float),
@@ -502,6 +505,7 @@ class ContributionSensor(SensorEntity):
             *item["other_climate_entities"],
         ]
         wanted += item["plug_entities"]
+        wanted += list(item["lights"])
         if room_entity:
             wanted.append(room_entity)
         rows = await _recorded(self._hass, wanted, start - timedelta(hours=1), now)
@@ -530,6 +534,10 @@ class ContributionSensor(SensorEntity):
             held_values(_numbers(rows[e]), [t + step / 2 for t in times[:-1]])
             for e in item["plug_entities"]
         ]
+        lamps = [
+            held_values(dimmer_kw(rows[e], watts), [t + step / 2 for t in times[:-1]])
+            for e, watts in item["lights"].items()
+        ]
         steps: list[Inputs | None] = []
         for i in range(back):
             if outdoor[i] is None:
@@ -537,6 +545,7 @@ class ContributionSensor(SensorEntity):
                 continue
             _, lit = _light_at(self._hass, item, by_end, times[i] + step / 2)
             kw = sum((p[i] or 0.0) for p in plugs) / 1000.0
+            kw += sum((lamp[i] or 0.0) for lamp in lamps)
             steps.append(Inputs(outdoor[i], lit, own[i], other[i], kw))
         model = ZoneTerms(**item["terms"])
         past = split_history(model, temps, steps, STEP_HOURS)

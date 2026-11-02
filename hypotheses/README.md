@@ -16,9 +16,9 @@ Home Assistant, so they can be re-run later or by others.
 | [05](05-furnace-power.md) | Furnace heating power from room gradient | B. Characterise house | in progress: stages, call lengths and rise measured; call statistics sensor |
 | [06](06-crossover-bleed.md) | Heat crosses over between zones during a call (strongest into the kitchen) | B | in progress |
 | [07](07-ac-power.md) | AC cooling power from room gradient | B | waiting for the cooling season |
-| [08](08-fan-flux.md) | Heat flux of running the furnace fan | B | revised: the blower is never off long enough; needs no-fan nights |
+| [08](08-fan-flux.md) | Heat flux of running the furnace fan | B | revised: the blower is never off long enough; no-fan nights running 2-16 Nov |
 | [09](09-door-state.md) | Door open/closed from inter-room gradients | B | two runs: too few clean door edges |
-| [10](10-static-flux.md) | Static heat flux between rooms/floors | B | revised: no fan-off data; needs no-fan nights |
+| [10](10-static-flux.md) | Static heat flux between rooms/floors | B | revised: no fan-off data; no-fan nights running 2-16 Nov |
 | [11](11-solar-gain.md) | Predict room solar gain | C. Disturbances | horizon and roof fits; small gains, not validated |
 | [12](12-wind-loss.md) | Predict heat loss from wind speed/direction | C | first run: no wind effect detectable |
 | [13](13-thermal-momentum.md) | Measure the house's thermal momentum (inertia, time constant) | B | in progress: tau about 54 h; furnace lag 6-12 min, overshoot 0.2 C |
@@ -36,9 +36,11 @@ forecast, and only makes sense once B and C hold up.
 
 ## Cross-cutting notes
 
-- Home Assistant's recorder keeps about 10 days of detail; long-term
-  statistics are hourly. Fitting at 5-minute resolution needs the component
-  to snapshot its own data, or a longer `purge_keep_days`.
+- Home Assistant's recorder keeps state history and 5-minute statistics for
+  `purge_keep_days`: 10 days until 1 November 2026, now 60 (checked on 2
+  November: nothing before 22 October was purged overnight, so the setting
+  is live; the full 60 days will be there from about 21 December). Long-term
+  statistics are hourly and kept indefinitely.
 - Zoning valves leak into non-calling zones, so "off" is not zero flow.
   Model spillover as a fitted parameter.
 - Furnace, fan, solar gain and occupants all act at once. Pick clean windows

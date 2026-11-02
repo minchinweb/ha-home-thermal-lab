@@ -69,3 +69,5 @@ The all-day fit now also includes each zone's metered plugs (z4: the office comp
 - The basement rooms (no plugs) are unchanged: night +0.05 to +0.07, event study +0.08 to +0.12 (S basement +0.12*).
 - The office CO2 sensor still follows occupancy (AUC 0.75).
 - Answer to "can we test it now": yes, and the result is the same as before. Body heat is too small to see in the room temperature. Presence is better read from computer power and CO2 than from temperature.
+
+With the office lights added as a third term (modelled power, see 14), the occupancy term for the office sensors turns negative (-0.25 C/h*, Z4 thermostat -0.13*) while lights (+3.6) and computer (+1.6) carry the warming. The three signals mark the same sessions and cannot be separated. Occupied hours with the lights off (daytime) are, if anything, cooler than the model expects.

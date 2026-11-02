@@ -1,5 +1,8 @@
 """Heat from the plug-metered appliances: kitchen fridge and computers, office
-computer (hypothesis 14).
+computer, and the office's dimmed lights (hypothesis 14).
+
+The lights have no meter: their power is modelled as 105 W (7 LED bulbs of
+about 15 W) times the dimmer level.
 
 For each room, on bins where its own zone is not heating (this bin and the one
 before), fits::
@@ -39,6 +42,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from envfile import load_env
 from regress_rooms import OUTDOOR, ROOMS, _bin_means, _ols, _overlap_fraction
 
+from custom_components.house_thermal_lab.contributions import dimmer_kw, held_values
 from custom_components.house_thermal_lab.ha_history import (
     fetch_home_position,
     fetch_states,
@@ -55,12 +59,37 @@ PLUGS = {
     "office PC": "sensor.office_office_computer_plug_power",
 }
 # room label -> (sensors averaged, zone, plugs tested)
+# Lights on a dimmer: entity -> watts at full brightness (7 bulbs of about 15 W)
+LIGHTS = {"office lights": ("light.office_main_lights", 105.0)}
 TARGETS = {
     "Kitchen (z1)": (["Z1 kitchen"], "z1", ["fridge", "kitchen PCs"]),
-    "Office (W+AQ)": (["Office sensor", "Office AQ"], "z4", ["office PC"]),
-    "Z4 office": (["Z4 office"], "z4", ["office PC"]),
+    "Office (W+AQ)": (
+        ["Office sensor", "Office AQ"],
+        "z4",
+        ["office PC", "office lights"],
+    ),
+    "Z4 office": (["Z4 office"], "z4", ["office PC", "office lights"]),
 }
 C_ZONE = 1.7  # kWh/C per 600 sq ft zone (hypothesis 13)
+
+
+def light_power(url, token, start, end, bins, width) -> dict[str, np.ndarray]:
+    """Mean kW per bin of each dimmed light in ``LIGHTS`` (modelled, not metered)."""
+    out = {}
+    for name, (entity, watts) in LIGHTS.items():
+        rows = fetch_states(url, token, entity, start, end, with_attributes=True)
+        series = [(t.astimezone(UTC), v) for t, v in dimmer_kw(rows, watts)]
+        sub = 5  # samples per bin
+        times = [
+            start + (i + (k + 0.5) / sub) * width
+            for i in range(bins)
+            for k in range(sub)
+        ]
+        held = np.array(
+            [np.nan if v is None else v for v in held_values(series, times)]
+        )
+        out[name] = held.reshape(bins, sub).mean(axis=1)
+    return out
 
 
 def _mean(series: list[np.ndarray]) -> np.ndarray:
@@ -103,6 +132,7 @@ def main() -> None:
         k: _bin_means(stats.get(e, []), start, bins, width) / 1000.0
         for k, e in PLUGS.items()
     }
+    power |= light_power(args.ha_url, token, start, end, bins, width)
     sun = np.array(
         [
             max(

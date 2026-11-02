@@ -22,6 +22,10 @@ bedroom (cooled toward it in summer).
 A second view groups rooms by floor and follows the basement-minus-upstairs gap
 across fan switch-ons that follow at least ``--settle`` minutes of still air.
 
+Fan-off periods only exist on the no-fan nights of
+``homeassistant/no_fan_nights.yaml`` (every thermostat's fan minimum on-time set
+to 0), which the script finds from the thermostats' ``fan_min_on_time``.
+
 The master bedroom's register fan (``fan.master_bedroom_ad3958``) runs on its
 own; its share is reported for the master bedroom rows but not separated.
 
@@ -118,7 +122,7 @@ def main() -> None:
         count > 0, np.nansum(pair, axis=0) / np.maximum(count, 1), np.nan
     )
 
-    heat_runs, blower_runs = [], []
+    heat_runs, blower_runs, zero_min = [], [], []
     known_from = start
     for z in ZONES:
         states = fetch_states(
@@ -131,6 +135,14 @@ def main() -> None:
             states, end, {"heating", "cooling"}, "hvac_action"
         )
         blower_runs += stage_runs(states, end, "fan")
+        zero_min.append(
+            _overlap_fraction(
+                runs_from_states(states, end, {0}, "fan_min_on_time"),
+                start,
+                bins,
+                width,
+            )
+        )
     heat = _overlap_fraction(merge_runs(heat_runs, 0.0), start, bins, width)
     blower = _overlap_fraction(merge_runs(blower_runs, 0.0), start, bins, width)
     register = _overlap_fraction(
@@ -151,6 +163,8 @@ def main() -> None:
 
     known = np.array([start + i * width >= known_from for i in range(bins)])
     no_heat = known & (heat == 0) & (np.concatenate([[1.0], heat[:-1]]) == 0)
+    # no-fan nights (homeassistant/no_fan_nights.yaml): every fan minimum is 0
+    experiment = known & (np.min(np.stack(zero_min), axis=0) >= 0.999)
     fan_only = no_heat & (blower >= 0.999)
     still = no_heat & (blower <= 0.001)
     print(
@@ -159,6 +173,11 @@ def main() -> None:
         f"{(heat[known] > 0).mean():.0%}, fan only {fan_only[known].mean():.0%}, "
         f"still {still[known].mean():.0%}; register fan on "
         f"{register[known].mean():.0%}"
+    )
+    print(
+        f"no-fan night bins (all fan minimums 0): {int(experiment.sum())}, of them "
+        f"still {int((still & experiment).sum())}, fan only "
+        f"{int((fan_only & experiment).sum())}"
     )
     shares = [(0, 0.001), (0.001, 0.5), (0.5, 0.999), (0.999, 2.0)]
     print(

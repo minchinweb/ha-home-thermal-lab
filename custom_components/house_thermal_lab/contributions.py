@@ -164,6 +164,24 @@ def held_values(
     return out
 
 
+def dimmer_kw(rows: list[dict], watts: float) -> list[tuple[datetime, float]]:
+    """Electrical power (kW) of dimmed lights from a ``light`` entity's history.
+
+    Off (or unavailable) is 0; on is ``watts * brightness / 255``, taking LED
+    power as roughly proportional to the dimmer level. Rows need ``state``,
+    ``last_updated`` and ``attributes``.
+    """
+    out = []
+    for r in rows:
+        level = 0.0
+        if r.get("state") == "on":
+            brightness = (r.get("attributes") or {}).get("brightness")
+            level = 1.0 if brightness is None else float(brightness) / 255.0
+        when = datetime.fromisoformat(r["last_updated"])
+        out.append((when, watts * level / 1000.0))
+    return sorted(out)
+
+
 def on_fraction(
     runs: list[tuple[datetime, datetime]], start: datetime, n: int, step: timedelta
 ) -> list[float]:

@@ -1,0 +1,75 @@
+# No-fan nights: the experiment for hypotheses 08 (fan flux) and 10 (static flux).
+#
+# The four Ecobees' fan minimum on-times (z1, z3, z4: 15 min/h; z2: 40 min/h)
+# keep the furnace blower running almost all the time, so the recorded data has
+# no fan-off periods to compare with. On alternate nights (even day of the year)
+# from 23:00 to 06:00 this sets every fan minimum on-time to 0 and the fan mode
+# to auto. Heating still works as normal: a heat call runs the blower, and the
+# analysis uses the time between calls. The analysis reads the thermostats'
+# `fan_min_on_time` attribute from the recorder, so it needs no other log.
+#
+# Runs until the end date in the start automation's condition. To stop early,
+# disable "No-fan night: start" (the restore keeps running and is harmless).
+#
+# Install either as a package (`homeassistant: packages: !include_dir_named
+# packages` in configuration.yaml, then copy this file into `packages/`), or
+# paste each automation into the automation editor's YAML mode.
+#
+# Afterwards: `uv run python scripts/fan_mixing.py --days 14 --bin 5` and
+# `uv run python scripts/blower_power.py --days 14 --edge 5`.
+
+automation:
+  - id: house_thermal_lab_no_fan_night_start
+    alias: "No-fan night: start"
+    description: >-
+      Hypotheses 08 and 10 (house_thermal_lab): on even days of the year, set
+      every zone's fan minimum on-time to 0 for the night.
+    mode: single
+    triggers:
+      - trigger: time
+        at: "23:00:00"
+    conditions:
+      - condition: template
+        value_template: "{{ now().timetuple().tm_yday % 2 == 0 }}"
+      - condition: template
+        value_template: "{{ now() < as_datetime('2026-11-17T00:00:00-06:00') }}"
+    actions:
+      - action: ecobee.set_fan_min_on_time
+        data:
+          entity_id: [climate.z1, climate.z2, climate.z3, climate.z4]
+          fan_min_on_time: 0
+      - action: climate.set_fan_mode
+        target:
+          entity_id: [climate.z1, climate.z2, climate.z3, climate.z4]
+        data:
+          fan_mode: auto
+
+  - id: house_thermal_lab_no_fan_night_end
+    alias: "No-fan night: end"
+    description: >-
+      Restore the usual fan minimum on-times (z2 40 min/h, the others 15) after
+      a no-fan night, at 06:00 or when Home Assistant starts during the day.
+    mode: single
+    triggers:
+      - trigger: time
+        at: "06:00:00"
+      - trigger: homeassistant
+        event: start
+    conditions:
+      - condition: time
+        after: "06:00:00"
+        before: "23:00:00"
+      - condition: template
+        value_template: >-
+          {{ ['climate.z1', 'climate.z2', 'climate.z3', 'climate.z4']
+             | map('state_attr', 'fan_min_on_time') | select('eq', 0)
+             | list | count > 0 }}
+    actions:
+      - action: ecobee.set_fan_min_on_time
+        data:
+          entity_id: climate.z2
+          fan_min_on_time: 40
+      - action: ecobee.set_fan_min_on_time
+        data:
+          entity_id: [climate.z1, climate.z3, climate.z4]
+          fan_min_on_time: 15

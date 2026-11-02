@@ -79,3 +79,11 @@ The new `energy` sensor integrates these per furnace state (fan 0.04 kW, heating
 
 - Stove: no sensor. There is no on/off signal; the only trace is whole-house bursts that a kettle, oven or other loads also produce. A clamp meter on the range circuit would be needed.
 - Dryer (gas): its status entities exist (`sensor.dryer_current_status`, now unavailable). An electrical figure of about 0.3 kW while running (from the regression above) is plausible, with medium confidence while the status entity works. Gas use cannot be estimated without the burner's rating and duty cycle, so no gas sensor.
+
+### Office lights (2026-11-02)
+
+The office lights are on a dimmer (`light.office_main_lights`, brightness 0-255): 7 LED bulbs of about 15 W (100 W equivalent), so about 105 W at full. They have no meter; their power is modelled as 105 W times the dimmer level (mean 32 W, spread 47 W over 11 days) and added to `appliance_heat.py`, `occupancy.py`, `fit_contributions.py` and the contribution sensor (`lights:` option).
+
+- With both terms, the office sensors give office computer +1.25 +- 0.24 and lights +1.95 +- 0.28 C/h per kW (Z4 thermostat: +0.88 and +1.65). Both are two to three times what their watts could do, and the 17 clean light steps give +2.8 to +4.5 C/h per kW.
+- Like the computer, the lights mark the times someone is in the office (with a person, and evenings with the computer busy). They are a better presence signal than heat sources.
+- The z4 contribution fit with the lights included: `{a: 0.0174, c: -0.069, g: 0.00005, h: 1.67, x: 0.31, p: 1.15}`, R2 0.66.
