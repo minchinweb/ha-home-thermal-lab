@@ -31,7 +31,7 @@ jobs:
       fail-fast: false
       matrix:
         # libraries: oldest supported + newest; apps: just the one in .python-version
-        python-version: ["3.9", "3.15"]
+        python-version: ["3.13", "3.15"]  # requires-python >= 3.13 (Home Assistant)
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v10.3.0
