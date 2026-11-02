@@ -225,6 +225,9 @@ def main() -> None:
         f"{'roof shared':>13}{'roof own':>10}"
     )
     for name, spec in WINDOWS.items():
+        if not spec["walls"]:
+            print(f"{name:<13}       no window that sees direct sun")
+            continue
         z = ZONE_OF_ROOM[name]
         room = _bin_means(stats.get(ROOMS[name], []), start, bins, width)
         y = np.full(bins, np.nan)

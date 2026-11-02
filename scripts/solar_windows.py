@@ -73,10 +73,11 @@ WINDOWS = {
     "Z3 master": {"walls": ["S"], "roof": [("E", None), ("W", None)]},
     "W bedroom": {"walls": ["W"], "roof": []},
     "Z4 office": {"walls": ["E"], "roof": []},
-    "Z1 kitchen": {"walls": ["S", "W", "N"], "roof": [("W", 14.04)]},
+    "Z1 kitchen": {"walls": ["S", "W", "E"], "roof": [("W", 14.04)]},
     "S basement": {"walls": ["S"], "roof": []},
     "SE basement": {"walls": ["S"], "roof": []},
-    "NE basement": {"walls": ["E"], "roof": []},
+    # E and N windows; a wall just outside the E one blocks the sun (photo 2026-11-02)
+    "NE basement": {"walls": [], "roof": []},
 }
 MIN_BINS = 40
 MIN_ELEVATION = 3.0
