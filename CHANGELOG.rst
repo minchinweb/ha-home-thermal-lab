@@ -3,6 +3,7 @@ Changelog
 
 .. release:: unreleased
 
+  - :feature:`-` Ground-temperature test (hypothesis 03) and occupancy test (hypothesis 15).
   - :feature:`-` Door-state test against the S basement bedroom door contact (hypothesis 09).
   - :feature:`-` Wind loader and wind-loss test (hypothesis 12).
   - :feature:`-` Furnace stage (W1/W2) summary from Ecobee equipment state.
