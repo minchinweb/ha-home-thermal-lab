@@ -1,13 +1,13 @@
 {
   "domain": "home_thermal_lab",
   "name": "Home Thermal Lab",
-  "codeowners": ["@MinchinWeb"],
+  "codeowners": ["@minchinweb"],
   "config_flow": false,
   "dependencies": ["recorder"],
-  "documentation": "https://github.com/MinchinWeb/ha-home-thermal-lab",
+  "documentation": "https://github.com/minchinweb/ha-home-thermal-lab",
   "integration_type": "service",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/MinchinWeb/ha-home-thermal-lab/issues",
+  "issue_tracker": "https://github.com/minchinweb/ha-home-thermal-lab/issues",
   "requirements": [],
   "version": "0.1.0"
 }
