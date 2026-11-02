@@ -46,3 +46,33 @@ def solar_elevation_degrees(when: datetime, latitude: float, longitude: float) -
         declination
     ) * math.cos(hour_angle)
     return math.degrees(math.asin(max(-1.0, min(1.0, sin_elevation))))
+
+
+def solar_azimuth_degrees(when: datetime, latitude: float, longitude: float) -> float:
+    """Compass direction of the sun, degrees clockwise from north.
+
+    Args:
+        when: The moment (timezone-aware).
+        latitude: Degrees north.
+        longitude: Degrees east.
+
+    Returns:
+        Azimuth in degrees, 0 to 360 (180 is due south).
+    """
+    utc = when.astimezone(UTC)
+    day = utc.timetuple().tm_yday
+    declination = math.radians(23.44) * math.sin(2 * math.pi * (284 + day) / 365.0)
+    solar_hours = (
+        utc.hour
+        + utc.minute / 60.0
+        + utc.second / 3600.0
+        + longitude / 15.0
+        + equation_of_time_minutes(utc.date()) / 60.0
+    )
+    hour_angle = math.radians(15.0 * (solar_hours - 12.0))
+    lat = math.radians(latitude)
+    south_based = math.atan2(
+        math.sin(hour_angle),
+        math.cos(hour_angle) * math.sin(lat) - math.tan(declination) * math.cos(lat),
+    )
+    return (math.degrees(south_based) + 180.0) % 360.0
