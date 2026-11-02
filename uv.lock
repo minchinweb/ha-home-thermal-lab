@@ -379,7 +379,7 @@ wheels = [
 ]
 
 [[package]]
-name = "ha-targeting-temperature-wave"
+name = "ha-home-thermal-lab"
 version = "0"
 source = { virtual = "." }
 

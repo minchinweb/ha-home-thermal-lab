@@ -1,5 +1,5 @@
 [project]
-name = "ha-targeting-temperature-wave"
+name = "ha-home-thermal-lab"
 version = "0"
 description = "Home Assistant custom components for a target daily temperature wave, and experiments on house thermal behaviour."
 # Home Assistant's own minimum.

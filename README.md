@@ -1,4 +1,4 @@
-# ha-targeting-temperature-wave
+# ha-home-thermal-lab
 
 Home Assistant custom components for modelling a target daily temperature
 wave, and for testing hypotheses about how a house behaves thermally.
@@ -10,12 +10,12 @@ wave, and for testing hypotheses about how a house behaves thermally.
 
 ## Install with HACS
 
-[![Open your Home Assistant instance and open this repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=MinchinWeb&repository=ha-targeting-temperature-wave&category=integration)
+[![Open your Home Assistant instance and open this repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=MinchinWeb&repository=ha-home-thermal-lab&category=integration)
 
 The button adds this repository to HACS as a custom repository. By hand:
 
 1. In HACS, open the menu (three dots) and choose **Custom repositories**. Add
-   `https://github.com/MinchinWeb/ha-targeting-temperature-wave` with the type
+   `https://github.com/MinchinWeb/ha-home-thermal-lab` with the type
    **Integration**.
 2. Find **House Thermal Lab** in HACS, download it, and restart Home Assistant.
 3. Add the sensors to `configuration.yaml` (below) and restart again.

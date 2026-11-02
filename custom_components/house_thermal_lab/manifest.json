@@ -4,10 +4,10 @@
   "codeowners": ["@MinchinWeb"],
   "config_flow": false,
   "dependencies": ["recorder"],
-  "documentation": "https://github.com/MinchinWeb/ha-targeting-temperature-wave",
+  "documentation": "https://github.com/MinchinWeb/ha-home-thermal-lab",
   "integration_type": "service",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/MinchinWeb/ha-targeting-temperature-wave/issues",
+  "issue_tracker": "https://github.com/MinchinWeb/ha-home-thermal-lab/issues",
   "requirements": [],
   "version": "0.1.0"
 }
