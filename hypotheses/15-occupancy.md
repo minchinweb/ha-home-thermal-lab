@@ -1,6 +1,6 @@
 # 15 Occupancy from room temperature changes
 
-**Status:** first test run; no temperature signal found yet
+**Status:** three test runs; the office signal is the computer's power, not body heat
 
 **Claim:** Occupancy (people home, or in a given room) can be inferred from room temperature changes, because each person adds roughly 100 W of heat.
 
@@ -53,3 +53,19 @@ Extra warming `b` in C/h (own zone not calling for heat; * = beyond two standard
 - Conclusion: some sign of people warming small rooms (office, S basement), nothing reliable. The best next steps are the solar and furnace terms from 11 and 05 for daytime, the door contact (09) as a second label for the S basement bedroom, and a longer record (the recorder is already at 60 days).
 
 Correction: the office sensor and the office air-quality sensor are one room. They are now averaged into one "Office (W+AQ)" row: night +0.06 C/h (not significant), all day +0.09 C/h*, events -0.03 C/h, AUC 0.61. The earlier table counted this room twice.
+
+### Third run: appliance power as its own term (`scripts/occupancy.py --days 14`, to 2026-11-02)
+
+The all-day fit now also includes each zone's metered plugs (z4: the office computer; z1: the fridge and kitchen computers), because 14 found the office computer's power acting like an occupancy signal.
+
+| Room | b all day | b with plugs | plug term (C/h per kW) |
+|---|---|---|---|
+| Office (W+AQ) | +0.083* | +0.020 | office PC +1.62* |
+| Z4 office | +0.096* | +0.054 | office PC +1.09* |
+| W bedroom | +0.051 | +0.032 | office PC +0.50* |
+| Kitchen | -0.183* | -0.160* | fridge +0.36, kitchen PCs -1.25 |
+
+- The office "occupancy" warming mostly goes away (+0.08 to +0.02, not significant) once the computer's power is in. The computer's power carries the signal better than the occupancy sensor; the two are the same sessions.
+- The basement rooms (no plugs) are unchanged: night +0.05 to +0.07, event study +0.08 to +0.12 (S basement +0.12*).
+- The office CO2 sensor still follows occupancy (AUC 0.75).
+- Answer to "can we test it now": yes, and the result is the same as before. Body heat is too small to see in the room temperature. Presence is better read from computer power and CO2 than from temperature.

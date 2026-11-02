@@ -10,7 +10,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import date, datetime, timedelta
 import json
+import time
 from typing import TYPE_CHECKING
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -21,6 +23,8 @@ if TYPE_CHECKING:
 
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
 HOURLY_VARIABLES = "temperature_2m,weather_code,cloud_cover"
+RETRIES = 4
+RETRY_SECONDS = 20.0
 
 # A fetcher takes a URL and returns the decoded JSON body.
 Fetcher = Callable[[str], dict]
@@ -35,8 +39,16 @@ def urllib_fetch(url: str) -> dict:
     Returns:
         The decoded JSON body.
     """
-    with urllib.request.urlopen(url, timeout=60) as resp:
-        return json.load(resp)
+    for attempt in range(RETRIES):
+        try:
+            with urllib.request.urlopen(url, timeout=60) as resp:
+                return json.load(resp)
+        except urllib.error.HTTPError as err:
+            # 429 (rate limit) and 5xx are usually transient on the free API
+            if (err.code != 429 and err.code < 500) or attempt == RETRIES - 1:
+                raise
+        time.sleep(RETRY_SECONDS * (attempt + 1))
+    raise RuntimeError("unreachable")
 
 
 def build_url(location: Location, start: date, end: date) -> str:

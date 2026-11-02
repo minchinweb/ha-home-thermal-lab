@@ -1,6 +1,6 @@
 # 13 Thermal momentum of the house
 
-**Status:** untested
+**Status:** in progress; cool-down tau, wave lag, furnace start lag and overshoot measured
 
 **Claim:** The house's thermal momentum (inertia) can be measured: how long a room keeps changing temperature after the heat source stops, or how slowly it follows the outdoor wave.
 
@@ -33,3 +33,17 @@ High stage output 22.3 kW; stage-weighted mean output over the 10 days 2.13 kW a
 ### Re-run with the low stage at 65% of high (working assumption until the nameplate is read; see 05)
 
 Mean furnace output 2.63 kW; UA about 123 W/C (about 0.05 W/C per sq ft); median tau 54 h (the data window moved slightly); C about 6.7 kWh/C. `--low-fraction` now defaults to 0.65.
+
+### Furnace start lag, and the dip and rebound after a call (`scripts/furnace_lag.py`, 11 days to 2026-11-02)
+
+From the thermostat's own reading (about 0.06 C steps), per call; overshoot, dip and rebound only for calls with 30+ minutes before the next one, within 90 minutes of the end:
+
+| Zone, calls | Lag to first rise | No rise at all | Rise during call | Overshoot after | Dip after (at) | Rebound |
+|---|---|---|---|---|---|---|
+| z2 low only (62, median 6 min) | 3 min | 0 | +0.3 C | +0.45 C | -0.2 C (47 min) | 0.0 |
+| z4 low only (114, median 9 min) | 8 min | 17 | +0.1 C | +0.2 C | -0.2 C (48 min) | +0.1 |
+| z4 stepped up (18, median 66 min) | 6 min | 0 | +1.7 C | +0.2 C | -0.1 C (33 min) | 0.0 |
+
+- Lag: heat reaches the z4 thermostat about 6 to 12 minutes after a call starts, and the median z4 low-stage call lasts only 9 minutes. 17 of 114 z4 calls ended before the reading moved at all. Most short calls stop just as the warm air arrives, and the room keeps rising about 0.2 C after the furnace stops. z2's thermostat responds in 3 minutes.
+- After a call: the overshoot (+0.2 to +0.45 C) comes first, then the reading falls back below the end value (-0.1 to -0.2 C) within 30 to 50 minutes. A rebound as surfaces give heat back is not visible at the thermostat's 0.06 C resolution (median 0 to +0.1 C). The dip may be ordinary cooling rather than the loss of forced warm air; separating them needs the room sensors at finer resolution or longer gaps between calls.
+- For control (17): the 6 to 12 minute lag plus about 0.2 C of overshoot is the momentum to anticipate. A controller that stops calls about 0.2 C early would land near the setpoint.

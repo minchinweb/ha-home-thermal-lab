@@ -9,23 +9,24 @@ Home Assistant, so they can be re-run later or by others.
 
 | # | Hypothesis | Stage | Status |
 |---|---|---|---|
-| [01](01-sine-wave.md) | Daily temperature is roughly sinusoidal | A. Validate the wave | in progress |
-| [02](02-solar-noon-peak.md) | Peak at solar noon, trough at solar midnight | A | in progress |
-| [03](03-ground-temperature.md) | Ground temperature follows a damped, lagged wave of air temperature | B. Characterise house | untested |
-| [04](04-envelope-flux.md) | Heat flux through the envelope from inside and outside (or ground) temperatures | B | untested |
-| [05](05-furnace-power.md) | Furnace heating power from room gradient | B. Characterise house | untested |
+| [01](01-sine-wave.md) | Daily temperature is roughly sinusoidal | A. Validate the wave | in progress: fits within about 1 C; more locations being added |
+| [02](02-solar-noon-peak.md) | Peak at solar noon, trough at solar midnight | A | in progress: the peak comes 1-3 h after solar noon |
+| [03](03-ground-temperature.md) | Ground temperature follows a damped, lagged wave of air temperature | B. Characterise house | first run: fits the 1.8 m soil roughly (RMSE 1.5 C with an offset) |
+| [04](04-envelope-flux.md) | Heat flux through the envelope from inside and outside (or ground) temperatures | B | untested on its own (envelope terms are in 13, 16 and 17) |
+| [05](05-furnace-power.md) | Furnace heating power from room gradient | B. Characterise house | in progress: stages, call lengths and rise measured; call statistics sensor |
 | [06](06-crossover-bleed.md) | Heat crosses over between zones during a call (strongest into the kitchen) | B | in progress |
-| [07](07-ac-power.md) | AC cooling power from room gradient | B | untested |
-| [08](08-fan-flux.md) | Heat flux of running the furnace fan | B | untested |
-| [09](09-door-state.md) | Door open/closed from inter-room gradients | B | untested |
-| [10](10-static-flux.md) | Static heat flux between rooms/floors | B | untested |
-| [11](11-solar-gain.md) | Predict room solar gain | C. Disturbances | untested |
-| [12](12-wind-loss.md) | Predict heat loss from wind speed/direction | C | untested |
-| [13](13-thermal-momentum.md) | Measure the house's thermal momentum (inertia, time constant) | B | untested |
-| [14](14-electrical-heat.md) | Electrical use becomes indoor heat | B | untested |
-| [15](15-occupancy.md) | Occupancy from room temperature changes | B | untested |
-| [16](16-predict-day.md) | Predict next-day house/room temperature | D. Predict and control | untested |
-| [17](17-control.md) | Decide whether to run furnace/AC to avoid overshoot | D | untested |
+| [07](07-ac-power.md) | AC cooling power from room gradient | B | waiting for the cooling season |
+| [08](08-fan-flux.md) | Heat flux of running the furnace fan | B | revised: the blower is never off long enough; needs no-fan nights |
+| [09](09-door-state.md) | Door open/closed from inter-room gradients | B | two runs: too few clean door edges |
+| [10](10-static-flux.md) | Static heat flux between rooms/floors | B | revised: no fan-off data; needs no-fan nights |
+| [11](11-solar-gain.md) | Predict room solar gain | C. Disturbances | horizon and roof fits; small gains, not validated |
+| [12](12-wind-loss.md) | Predict heat loss from wind speed/direction | C | first run: no wind effect detectable |
+| [13](13-thermal-momentum.md) | Measure the house's thermal momentum (inertia, time constant) | B | in progress: tau about 54 h; furnace lag 6-12 min, overshoot 0.2 C |
+| [14](14-electrical-heat.md) | Electrical use becomes indoor heat | B | in progress: blower +0.2 kW when heating; small plug loads not resolvable |
+| [15](15-occupancy.md) | Occupancy from room temperature changes | B | three runs: the office signal is the computer, not body heat |
+| [16](16-predict-day.md) | Predict next-day house/room temperature | D. Predict and control | backtest: profile plus offset is best (about 0.42 C) |
+| [17](17-control.md) | Decide whether to run furnace/AC to avoid overshoot | D | shadow mode; sensors ready, not yet deployed |
+| [18](18-shower-heat.md) | Showers from bathroom humidity, and their heat | C | first run: showers detected; heat into the house not measurable |
 
 ## Dependency order
 

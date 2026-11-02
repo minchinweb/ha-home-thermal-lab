@@ -32,6 +32,11 @@ EXAMPLE_LOCATIONS: tuple[Location, ...] = (
     Location("Edmonton", 53.5461, -113.4938, "home"),
     Location("Dieppe", 49.9229, 1.0777, "home"),
     Location("Tahiti", -17.6509, -149.4260, "paradise"),
+    Location("Tampa", 27.9506, -82.4572, "other"),
+    Location("Sherbrooke", 45.4042, -71.8929, "other"),
+    # The city proper (Inner Harbour), not the airport at Sidney: the two have
+    # different microclimates. The airport is (48.6469, -123.4258).
+    Location("Victoria", 48.4284, -123.3656, "other"),
 )
 
 

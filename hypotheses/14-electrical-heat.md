@@ -1,6 +1,6 @@
 # 14 Electrical use becomes indoor heat
 
-**Status:** untested
+**Status:** in progress; blower and plug loads measured; small loads not resolvable at the room sensors
 
 **Claim:** Apart from the AC (which moves heat outside), essentially all electricity used inside becomes heat inside the house.
 
@@ -59,3 +59,23 @@ Note: Home Assistant's time zone is America/Regina (UTC-6 all year), which is wh
 - Kitchen: +0.11 C/h before, -0.13 during, -0.30 C/h in the follow-up window, net -0.11 C since 18:08. It kept cooling after the burners went off, faster than before the cooking, so there is no lingering stove warmth at the kitchen sensor.
 - Whole house: follow-up rates are -0.4 to +0.1 C/h and mostly negative, consistent with the normal evening cool-down. Nothing stands out as a slow release of stored heat.
 - This matches the earlier estimate that under 10% of the stove's energy ended up in the kitchen air and walls.
+
+### Metered plugs: kitchen fridge and computers, office computer (`scripts/appliance_heat.py`, 11 days to 2026-11-02, 15-minute bins, own zone not heating)
+
+Plug power: fridge mean 98 W, kitchen computers 47 W, office computer 112 W, each varying by about 50 W. If all the heat stayed in a 600 sq ft zone (about 1.7 kWh/C), 1 kW would warm it about 0.6 C/h.
+
+- Office computer: +1.7 +- 0.2 C/h per kW at the office sensors (+1.2 at the Z4 thermostat), two to three times what its own watts could do. The computer's power is standing in for the session at the desk: a person, monitors and lights. 50 W of swing times 1.7 is about +0.08 C/h, the size of the "occupancy" effect in 15, which disappears once this term is in (see 15).
+- Kitchen: no detectable effect. Fridge -0.1 +- 0.6 C/h per kW; kitchen computers -1.5 +- 0.6 (the wrong sign: they come on with the kitchen's morning and evening routine, when the room is cooling for other reasons). Few clean steps (4 for the fridge, 19 for the computers) give wild per-kW values.
+- Conclusion: a 50-150 W appliance is below what the room sensors can resolve against everything else, and the office computer is useful mainly as an occupancy signal.
+
+### Furnace blower and an energy sensor (`scripts/blower_power.py`, 10 days)
+
+Whole-house power steps at furnace edges (5-minute windows either side; the Eagle readings lag by a minute or two, so 1-2 minute windows show nothing):
+
+- Heating starts: +0.21 kW (80 edges); ends: -0.18 kW (65). The high stage adds nothing (+0.01 kW, 12 edges).
+- Fan-only blower starting or stopping (the short gaps of 08): +0.04 and 0.00 kW, so in fan mode it draws little, at most about 0.04 kW.
+
+The new `energy` sensor integrates these per furnace state (fan 0.04 kW, heating 0.24 kW) into kWh for Home Assistant's energy dashboard; the same sensor with gas input powers (23.4 kW high, 15.2 kW low at the assumed 65%) gives a modelled furnace gas figure.
+
+- Stove: no sensor. There is no on/off signal; the only trace is whole-house bursts that a kettle, oven or other loads also produce. A clamp meter on the range circuit would be needed.
+- Dryer (gas): its status entities exist (`sensor.dryer_current_status`, now unavailable). An electrical figure of about 0.3 kW while running (from the regression above) is plausible, with medium confidence while the status entity works. Gas use cannot be estimated without the burner's rating and duty cycle, so no gas sensor.

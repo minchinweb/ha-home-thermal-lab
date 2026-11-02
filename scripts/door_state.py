@@ -55,6 +55,7 @@ DOOR = "binary_sensor.s_basement_bedroom_door"
 TARGET = "S basement"
 PARTNERS = ["Z2 basement", "NE basement", "SE basement"]
 MIN_PER_CLASS = 10
+MOSTLY = 0.8
 
 
 def auc(open_values: np.ndarray, closed_values: np.ndarray) -> float:
@@ -79,12 +80,70 @@ def _report(label: str, feature: np.ndarray, is_open, is_closed, unit: str) -> N
     )
 
 
+def _slope(values: np.ndarray, hours: float) -> float:
+    """Least-squares slope (per hour) of evenly spaced values; NaN if too few."""
+    ok = ~np.isnan(values)
+    if ok.sum() < 3:
+        return float("nan")
+    t = np.arange(len(values))[ok] * hours
+    return float(np.polyfit(t, values[ok], 1)[0])
+
+
+def _edges(gap, is_open, is_closed, edge_minutes: int, bin_minutes: int) -> None:
+    """Event study at door edges: does the gap start closing when the door opens?
+
+    For every edge with ``edge_minutes`` of mostly (``MOSTLY``) the old state
+    before it and mostly the new state after, the signed gap (target minus
+    partner) is fitted with a line on each side. "Closing" is the rate toward
+    zero (positive when the rooms are converging). If the door couples the
+    rooms, opening should raise it and
+    closing should lower it.
+    """
+    n = max(int(edge_minutes / bin_minutes), 3)
+    hours = bin_minutes / 60.0
+    found = {"opens": [], "closes": []}
+    for i in range(n, len(gap) - n):
+        for kind, before, after in (
+            ("opens", is_closed, is_open),
+            ("closes", is_open, is_closed),
+        ):
+            if not (before[i - 1] and after[i]):
+                continue
+            if before[i - n : i].mean() < MOSTLY or after[i : i + n].mean() < MOSTLY:
+                continue
+            g0 = gap[i - 1]
+            if np.isnan(g0) or g0 == 0:
+                continue
+            sign = -np.sign(g0)
+            found[kind].append(
+                (
+                    sign * _slope(gap[i - n : i], hours),
+                    sign * _slope(gap[i : i + n], hours),
+                )
+            )
+    for kind, rows in found.items():
+        rows = [r for r in rows if not np.isnan(r).any()]
+        if not rows:
+            print(f"  door {kind}: no clean edges")
+            continue
+        b = np.array([r[0] for r in rows])
+        a = np.array([r[1] for r in rows])
+        print(
+            f"  door {kind} ({len(rows)} edges, {edge_minutes} min each side): gap "
+            f"closing at {np.median(b):+.2f} C/h before, {np.median(a):+.2f} after; "
+            f"faster after in {np.mean(a > b):.0%}"
+        )
+
+
 def main() -> None:
     """Print the door classification summary."""
     load_env()
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--days", type=int, default=14)
     p.add_argument("--bin", type=int, default=15, help="minutes")
+    p.add_argument(
+        "--edge", type=int, default=30, help="minutes before and after a door edge"
+    )
     p.add_argument("--ha-url", default=os.environ.get("HA_URL"))
     args = p.parse_args()
 
@@ -162,7 +221,8 @@ def main() -> None:
         _report("gradient", gradient, is_open & quiet, is_closed & quiet, "C")
         _report("rate mismatch", mismatch, is_open & quiet, is_closed & quiet, "C/h")
 
-        # Change in gradient over stretches of at least 6 bins (90 min at 15 min)
+        # Change in gradient over stretches of at least 90 minutes
+        span_bins = max(round(90 / args.bin), 2)
         spans = {"open": [], "closed": []}
         labels = np.where(is_open, 1, np.where(is_closed, 0, -1))
         i = 0
@@ -170,7 +230,7 @@ def main() -> None:
             j = i
             while j + 1 < bins and labels[j + 1] == labels[i]:
                 j += 1
-            if labels[i] >= 0 and j - i + 1 >= 6:
+            if labels[i] >= 0 and j - i + 1 >= span_bins:
                 g0, g1 = gradient[i], gradient[j]
                 if not (np.isnan(g0) or np.isnan(g1)):
                     spans["open" if labels[i] else "closed"].append(g1 - g0)
@@ -181,6 +241,7 @@ def main() -> None:
                     f"  gradient change across {kind} stretches of 90+ min: "
                     f"median {statistics.median(vals):+.2f} C (n={len(vals)})"
                 )
+        _edges(target - partner, is_open, is_closed, args.edge, args.bin)
         print()
 
 

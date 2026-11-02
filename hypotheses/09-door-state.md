@@ -1,6 +1,6 @@
 # 09 Door open/closed from inter-room gradients
 
-**Status:** first test run; the proposed features do not identify the door
+**Status:** two test runs (15 and 5 minute bins); too few clean door edges to decide
 
 **Claim:** The temperature difference between two connected rooms, and how fast it decays, indicates whether the door between them is open or closed.
 
@@ -24,3 +24,9 @@ First test (`scripts/door_state.py`, 14 days to 2026-11-01, 15-minute bins; 504 
 - Gradient change across 90+ minute open stretches: +0.06 C (13 stretches) versus -0.16 C across closed ones against Z2, in line with the room being warmer when open rather than the rooms equalising.
 
 Reading: this pair does not show the expected coupling. Next steps: use 5-minute bins with the door-open event times (open or close edges) to look for step changes in the rate of change; try a pair with more air flow, such as the upstairs hallway rooms if they get contact sensors; and treat the 'open means occupied' link as an input for 15.
+
+### 5-minute bins (`scripts/door_state.py --bin 5`, 11 days to 2026-11-02)
+
+- Same picture as at 15 minutes: the S basement bedroom is warmer than Z2 with the door open (1.15 against 0.80 C, AUC 0.81). The rate mismatch becomes pure noise at 5 minutes (one 0.1 C step in 5 minutes is 1.2 C/h), AUC 0.45 to 0.58.
+- New door-edge event study (`--edge`, rate of gap closing in the window before and after each edge, with at least 80% of the window in the old and new state): only 5 clean openings and 1 or 2 clean closings in 11 days, because the door flutters. After the door opens, the gap to the NE bedroom starts closing (-0.18 to +0.42 C/h, 4 of 5) but the gap to Z2 widens (-0.64 to -0.76). After the door closes, closing slows in every pair, as coupling would predict, but on one or two events.
+- Reading: too few clean edges to decide. The door needs a longer record (the edge study can be rerun as data builds up), or a deliberate test (door shut for a night, open the next).

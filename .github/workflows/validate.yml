@@ -1,0 +1,25 @@
+name: Validate
+
+# Checks the integration the way HACS and Home Assistant do before installing it.
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  hacs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: hacs/action@main
+        with:
+          category: integration
+          # not (yet) in the home-assistant/brands repository, nor in the
+          # default HACS store; it is added as a custom repository
+          ignore: brands
+
+  hassfest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: home-assistant/actions/hassfest@master

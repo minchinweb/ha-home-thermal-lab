@@ -74,6 +74,14 @@ EDGE = 2  # bins either side of an onset or departure
 HOLD = 4  # bins an occupied or empty spell must last to count as an event
 
 
+PLUGS = {
+    "fridge": "sensor.kitchen_fridge_plug_power",
+    "kitchen PCs": "sensor.kitchen_kitchen_computers_plug_power",
+    "office PC": "sensor.office_office_computer_plug_power",
+}
+ZONE_PLUGS = {"z1": ["fridge", "kitchen PCs"], "z4": ["office PC"]}
+
+
 def _fraction(entity, args, token, start, end, bins, width):
     states = fetch_states(args.ha_url, token, entity, start, end)
     if not states:
@@ -154,18 +162,23 @@ def main() -> None:
         fetch_statistics_from_url(
             args.ha_url,
             token,
-            [OUTDOOR, CO2, *ROOMS.values()],
+            [OUTDOOR, CO2, *ROOMS.values(), *PLUGS.values()],
             start,
             end,
             period="5minute",
         )
     )
     t_out = _bin_means(stats.get(OUTDOOR, []), start, bins, width)
+    plug = {
+        k: _bin_means(stats.get(e, []), start, bins, width) / 1000.0
+        for k, e in PLUGS.items()
+    }
 
     print(
         f"\nquiet night bins: {int(quiet.sum())}\n\n"
         f"{'room':<16}{'zone':>5}{'night n':>8}{'b night':>10}{'AUC':>6}"
         f"{'day n':>7}{'b all day':>11}{'events':>8}{'event C/h':>11}"
+        f"{'b + plug':>10}{'plug C/h/kW':>13}"
     )
     for name, entity in ROOMS.items():
         if name == "Office AQ":
@@ -221,6 +234,17 @@ def main() -> None:
             row += f"{len(ev):>8}{_cell(mean, se):>11}"
         else:
             row += f"{len(ev):>8}{'-':>11}"
+
+        # all day again, with the zone's metered plugs as their own terms
+        names = ZONE_PLUGS.get(z, [])
+        cols = [diff, np.ones(bins), sun, o, *(plug[k] for k in names)]
+        x_all = np.column_stack(cols)
+        sel = own_off & good & ~np.isnan(x_all).any(axis=1)
+        if names and sel.sum() >= MIN_BINS:
+            b, s, _ = _ols(x_all[sel], y[sel])
+            row += f"{_cell(b[3], s[3]):>10}" + "".join(
+                f" {k} {_cell(b[4 + j], s[4 + j])}" for j, k in enumerate(names)
+            )
         print(row)
 
     co2 = _bin_means(stats.get(CO2, []), start, bins, width)

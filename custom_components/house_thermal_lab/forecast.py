@@ -22,13 +22,16 @@ class ForecastHour:
     light: Irradiance
 
 
-def build_url(latitude: float, longitude: float, days: int = 2) -> str:
-    """Build the forecast URL for the coming hours in GMT."""
+def build_url(
+    latitude: float, longitude: float, days: int = 2, past_days: int = 0
+) -> str:
+    """Build the forecast URL for the coming hours (and ``past_days``) in GMT."""
     query = urllib.parse.urlencode(
         {
             "latitude": latitude,
             "longitude": longitude,
             "forecast_days": days,
+            "past_days": past_days,
             "hourly": HOURLY,
             "timezone": "GMT",
         }
@@ -67,6 +70,7 @@ def fetch_forecast(
     longitude: float,
     days: int = 2,
     fetch: Fetcher = urllib_fetch,
+    past_days: int = 0,
 ) -> list[ForecastHour]:
-    """Fetch the forecast (blocking)."""
-    return parse_forecast(fetch(build_url(latitude, longitude, days)))
+    """Fetch the forecast (blocking); ``past_days`` adds the recent past."""
+    return parse_forecast(fetch(build_url(latitude, longitude, days, past_days)))

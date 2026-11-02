@@ -8,31 +8,148 @@ wave, and for testing hypotheses about how a house behaves thermally.
 - `hypotheses/`: one file per hypothesis (claim, data, method, results).
 - `scripts/`: command-line runners and reports. Copy `.env.example` to `.env` (git-ignored) and fill in your Home Assistant URL, token and sensor.
 
-## Shadow controller (hypothesis 17)
+## Install with HACS
 
-`house_thermal_lab` provides a `sensor` platform that logs, for each zone, whether
-a heat call starting now could be skipped (`skip`) or not (`heat`). It never
-switches anything. Fit each zone's model with `scripts/shadow_control.py`
-(it prints the `model:` line), copy `custom_components/house_thermal_lab/` to
-your Home Assistant `custom_components/` folder, and add to `configuration.yaml`
-(see the top of `custom_components/house_thermal_lab/sensor.py` for every option):
+1. In HACS, open the menu (three dots) and choose **Custom repositories**. Add
+   `https://github.com/MinchinWeb/ha-targeting-temperature-wave` with the type
+   **Integration**.
+2. Find **House Thermal Lab** in HACS, download it, and restart Home Assistant.
+3. Add the sensors to `configuration.yaml` (below) and restart again.
+
+Without HACS, copy `custom_components/house_thermal_lab/` into your Home
+Assistant `custom_components/` folder.
+
+The integration is configured in YAML only and switches nothing. It needs the
+recorder (default), and fetches an hourly forecast from Open-Meteo for the home
+location. The `.github/workflows/validate.yml` workflow runs the HACS and
+`hassfest` checks on every push.
+
+## Sensors
+
+All four kinds go under one platform entry. Every key is optional except
+where noted; `sensor.py` documents each one.
 
 ```yaml
 sensor:
   - platform: house_thermal_lab
-    outdoor_entity: sensor.edmonton_temperature
+    outdoor_entity: sensor.edmonton_temperature   # needed for zones and contributions
+
+    # Shadow controller (hypothesis 17): `skip` or `heat` for a call starting now.
+    # Fit `model` with scripts/shadow_control.py.
     zones:
       - name: Z4 office
         climate_entity: climate.z4
         room_entity: sensor.z4_temperature
-        model: {a: 0.0, c: 0.0, g: 0.0}   # paste the fitted values
+        model: {a: 0.0106, c: 0.0032, g: 0.000229}
         walls: [E]
         rotation: 10.4
+        shade_below: 18
+
+    # Heating-call statistics per zone (05, 13): state = calls in `days`;
+    # attributes `low` and `stepped` hold min / median / max minutes, rise,
+    # lag to the first rise, overshoot, dip and rebound.
+    call_stats:
+      - name: Z4 heating calls
+        climate_entity: climate.z4
+        days: 7
+      - name: Z2 heating calls
+        climate_entity: climate.z2
+
+    # Modelled energy (kWh, total_increasing) for the energy dashboard.
+    # Powers in kW per state: off, fan, heat_low, heat_high, cool.
+    energy:
+      - name: Furnace blower energy
+        climate_entities: [climate.z1, climate.z2, climate.z3, climate.z4]
+        kw: {fan: 0.04, heat_low: 0.24, heat_high: 0.24}
+      - name: Furnace gas energy   # 80,000 BTU/h input; low stage taken as 65%
+        climate_entities: [climate.z1, climate.z2, climate.z3, climate.z4]
+        kw: {heat_low: 15.2, heat_high: 23.4}
+
+    # What moved each zone's temperature (chart below). Fit `terms` with
+    # scripts/fit_contributions.py.
+    contributions:
+      - name: Z4 office
+        climate_entity: climate.z4
+        room_entity: sensor.z4_temperature
+        other_climate_entities: [climate.z1, climate.z2, climate.z3]
+        plug_entities: [sensor.office_office_computer_plug_power]
+        terms: {a: 0.0185, c: -0.028, g: 0.00005, h: 1.65, x: 0.35, p: 1.33}
+        walls: [E]
+        rotation: 10.4
+        shade_below: 18
 ```
 
+The blower figures come from `scripts/blower_power.py` (heating adds about
+0.2 kW; the fan-only blower shows no clear step, at most about 0.04 kW). Add
+the energy sensors under **Settings > Dashboards > Energy**: the blower as an
+individual device, the gas one as gas consumption. Both are models, not meters.
+
 After some days, `scripts/shadow_compare.py --zone z4=sensor.shadow_z4_office`
-compares the log with the heating calls the thermostat made. The sensor module
-needs Home Assistant and has not yet been run inside it.
+compares the shadow log with the calls the thermostat made.
+
+## Contribution chart
+
+`sensor.contributions_<zone>` holds the zone's temperature now (the baseline).
+Its `points` attribute has one entry per 30 minutes for the past and next
+24 hours, with each effect's running total relative to the baseline: `outdoor`
+(envelope loss), `house` (heat from the rest of the house), `sun`, `furnace`,
+`crossover`, `appliances` and, for the past only, `unexplained` (what the model
+misses, so the past stack adds up to what was measured). Points with
+`forecast: 1` are the forecast, with the furnace run by a simple thermostat at
+the current setpoint. The attribute is not written to the database.
+
+With [apexcharts-card](https://github.com/RomRider/apexcharts-card) (from HACS),
+stacked columns put the gains above the baseline and the losses below it:
+
+```yaml
+type: custom:apexcharts-card
+header:
+  show: true
+  title: Z4 office, change from now (C)
+graph_span: 48h
+span:
+  offset: +24h
+now:
+  show: true
+  label: now
+stacked: true
+yaxis:
+  - decimals: 1
+series:
+  - &term
+    entity: sensor.contributions_z4_office
+    name: outdoor
+    type: column
+    data_generator: |
+      return entity.attributes.points.map(p => [new Date(p.t).getTime(), p.outdoor]);
+  - <<: *term
+    name: house
+    data_generator: |
+      return entity.attributes.points.map(p => [new Date(p.t).getTime(), p.house]);
+  - <<: *term
+    name: sun
+    data_generator: |
+      return entity.attributes.points.map(p => [new Date(p.t).getTime(), p.sun]);
+  - <<: *term
+    name: furnace
+    data_generator: |
+      return entity.attributes.points.map(p => [new Date(p.t).getTime(), p.furnace]);
+  - <<: *term
+    name: crossover
+    data_generator: |
+      return entity.attributes.points.map(p => [new Date(p.t).getTime(), p.crossover]);
+  - <<: *term
+    name: appliances
+    data_generator: |
+      return entity.attributes.points.map(p => [new Date(p.t).getTime(), p.appliances]);
+  - <<: *term
+    name: unexplained
+    data_generator: |
+      return entity.attributes.points.map(p => [new Date(p.t).getTime(), p.unexplained ?? 0]);
+```
+
+For the temperature itself (measured, then forecast), add a second card with
+one `line` series returning `[time, p.temp]`. Both cards are untested.
 
 ## Development
 

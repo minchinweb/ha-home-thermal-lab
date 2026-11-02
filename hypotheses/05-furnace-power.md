@@ -1,6 +1,6 @@
 # 05 Furnace heating power from room temperature gradient
 
-**Status:** untested
+**Status:** in progress; call lengths, stages and rise measured; live call statistics sensor
 
 **Claim:** Observing the temperature rise in a room while the furnace runs lets us estimate the furnace's effective heating power.
 
@@ -55,3 +55,12 @@ Only z4 has enough high-stage calls (z2 has one). Warming rate of the z4 rooms a
 - High stage: +2.5 C/h (15 calls).
 - High / low about 1.55 skipping the first 3 minutes of each stretch, and about 1.30 skipping 8. Read as low being roughly 65 to 77% of high, not 50%.
 - Caveats: the ratio is biased toward 1 (a warmer room loses more heat, high calls come late in long calls, some heat leaks to other zones, the sensors step in 0.1 C). So the low stage is probably no larger than 77% of high, and a typical two-stage furnace (about 65%) fits better than a half. Check the nameplate.
+
+### Call statistics and response (`scripts/furnace_lag.py`, 11 days to 2026-11-02; same code as the new `call_stats` sensor)
+
+| Zone | Calls | Low only (min / median / max) | Stepped up (min / median / max) | Rise low / stepped |
+|---|---|---|---|---|
+| z2 | 63 | 62 calls: 3 / 6 / 15 min | 1 call: 6 min | +0.3 / +0.5 C |
+| z4 | 132 | 114 calls: 3 / 9 / 36 min | 18 calls: 27 / 66 / 90 min | +0.1 / +1.7 C |
+
+Lag, overshoot, dip and rebound are in 13. The `call_stats` sensor reports the same figures live (state: calls in the last `days`; attributes split by stage).
