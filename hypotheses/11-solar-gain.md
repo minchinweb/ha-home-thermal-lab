@@ -99,3 +99,18 @@ Each room's window light is the beam (when the sun is above that sector's horizo
 - Basement bedrooms (S basement, SE): blocked to 21 to 27 degrees across the south-east to south, so effectively no direct light in this period, consistent with low windows behind a house and trees to the south. NE basement is blocked towards the south and clear at the east.
 - N bedroom, W bedroom and the office have no useful window signal: the N bedroom's north window never sees direct sun; the office east window and the W bedroom's west window gain nothing beyond noise over these two weeks.
 - The shading is a step (one height per 30 degree sector), is learned from about 300 sunny bins in 14 days, and is not validated against a photo of the tree line. A photo from each window, or a sun-path tool, would give the true profile to compare with these steps.
+
+
+### Horizon on the roof faces too (`scripts/horizon_profile.py`)
+
+Same 14 days, roof 12:12 (kitchen 3:12). Three ways of treating the roof, scored by leave-one-day-out RMSE (C/h) for the three rooms that have roof faces: unshaded (the walls-only column above), sharing the window horizon, and its own horizon:
+
+| Room | cooling law only | windows, no shading | horizon on walls, roof unshaded | roof shares the wall horizon | roof has its own horizon |
+|---|---|---|---|---|---|
+| N bedroom | 0.327 | 0.331 | 0.331 | 0.322 | 0.322 |
+| Master | 0.382 | 0.368 | 0.357 | 0.351 | 0.353 |
+| Kitchen | 1.068 | 1.025 | 0.985 | 0.973 | 0.977 |
+
+- Shading the roof helps a little in all three rooms, and the N bedroom now beats the cooling law alone (0.322 against 0.327) for the first time. The gain is 0.006 to 0.009 C/h, about 2% of the error, much smaller than the day-to-day spread, so it is a hint, not a result.
+- the N bedroom's own roof horizon is 21 degrees for sun from 120 to 180 and 24 degrees for 180 to 210, clear at 90 to 120 and about 9 degrees at 210 to 240. The master's own roof horizon (6, 21, 0, 21, 6, 6) varies sector to sector like its wall horizon and looks over-fitted. The kitchen's low roof is clear except at 120 to 150 (18) and 180 to 210 (27).
+- Sharing one horizon between a room's walls and roof does as well as giving the roof its own, with fewer parameters, so the simpler model is the better choice for now. This agrees with the east roof being shaded by the same trees that block the east and south-east windows.

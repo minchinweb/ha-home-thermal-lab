@@ -74,21 +74,36 @@ MIN_ELEVATION = 3.0
 
 
 class RoomFit:
-    """Fit one room's windows with a stepped horizon."""
+    """Fit one room's windows and roof faces with stepped horizons.
 
-    def __init__(self, y, diff, sector, elevation, wall_beam, wall_diffuse, roofs):
+    ``roof_mode`` is ``none`` (roof unshaded), ``shared`` (roof uses the wall
+    horizon) or ``separate`` (roof has its own horizon). The horizon vector has
+    ``SECTORS`` entries, or twice that for ``separate`` (walls then roof).
+    """
+
+    def __init__(self, y, diff, sector, elevation, walls, roofs, roof_mode):
         self.y, self.diff = y, diff
         self.sector, self.elevation = sector, elevation
-        self.wall_beam, self.wall_diffuse = wall_beam, wall_diffuse
-        self.roofs = roofs
+        self.walls, self.roofs = walls, roofs  # lists of (beam, diffuse)
+        self.roof_mode = roof_mode if roofs else "none"
+
+    @property
+    def size(self) -> int:
+        """Length of the horizon vector."""
+        return SECTORS * (2 if self.roof_mode == "separate" else 1)
 
     def design(self, horizon: np.ndarray) -> np.ndarray:
-        """Design matrix for a horizon (one elevation per sector)."""
-        clear = self.elevation >= horizon[self.sector]
+        """Design matrix for a horizon vector."""
+        wall_clear = self.elevation >= horizon[self.sector]
+        if self.roof_mode == "separate":
+            roof_clear = self.elevation >= horizon[SECTORS + self.sector]
+        elif self.roof_mode == "shared":
+            roof_clear = wall_clear
+        else:
+            roof_clear = np.ones(len(self.y), dtype=bool)
         cols = [self.diff, np.ones(len(self.y))]
-        for beam, diffuse in zip(self.wall_beam, self.wall_diffuse, strict=True):
-            cols.append(beam * clear + diffuse)
-        cols.extend(self.roofs)
+        cols += [beam * wall_clear + diffuse for beam, diffuse in self.walls]
+        cols += [beam * roof_clear + diffuse for beam, diffuse in self.roofs]
         return np.column_stack(cols)
 
     def sse(self, horizon: np.ndarray, rows: np.ndarray) -> tuple[float, np.ndarray]:
@@ -99,14 +114,17 @@ class RoomFit:
 
     def fit_horizon(self, rows: np.ndarray, beam_ref: np.ndarray) -> np.ndarray:
         """Coordinate descent over the sector horizons."""
-        horizon = np.zeros(SECTORS)
+        horizon = np.zeros(self.size)
         usable = [
             k
             for k in range(SECTORS)
             if ((self.sector == k) & rows & (beam_ref > 20)).sum() >= MIN_SECTOR_BINS
         ]
+        slots = [
+            k + SECTORS * layer for layer in range(self.size // SECTORS) for k in usable
+        ]
         for _ in range(PASSES):
-            for k in usable:
+            for k in slots:
                 best = (np.inf, horizon[k])
                 for h in HORIZON_GRID:
                     trial = horizon.copy()
@@ -116,6 +134,13 @@ class RoomFit:
                         best = (err, h)
                 horizon[k] = best[1]
         return horizon
+
+
+def _cells(horizon: np.ndarray, covered: list[bool]) -> str:
+    """One column per sector; ``.`` where the sun was too rarely seen."""
+    return "".join(
+        f"{horizon[k]:>9.0f}" if covered[k] else f"{'.':>9}" for k in range(SECTORS)
+    )
 
 
 def main() -> None:
@@ -195,7 +220,10 @@ def main() -> None:
     edges = SECTOR_START + SECTOR_WIDTH * np.arange(SECTORS + 1)
     header = "".join(f"{lo:>4.0f}-{hi:<4.0f}" for lo, hi in itertools.pairwise(edges))
     print(f"{'room':<13}{'n':>5}  clear-sun height (deg) by sun azimuth: {header}")
-    print(f"{'':<20}{'CV RMSE C/h: cooling law':>26}{'no shading':>12}{'horizon':>10}")
+    print(
+        f"{'':<20}CV RMSE C/h: {'cooling law':>12}{'no shading':>12}{'walls only':>12}"
+        f"{'roof shared':>13}{'roof own':>10}"
+    )
     for name, spec in WINDOWS.items():
         z = ZONE_OF_ROOM[name]
         room = _bin_means(stats.get(ROOMS[name], []), start, bins, width)
@@ -207,62 +235,63 @@ def main() -> None:
         if rows.sum() < MIN_BINS:
             print(f"{name:<13}{int(rows.sum()):>5}  too little data")
             continue
-        walls = spec["walls"]
+        walls = [
+            (np.nan_to_num(beam(f, 90.0)), np.nan_to_num(diffuse(90.0)))
+            for f in spec["walls"]
+        ]
         roofs = []
         for face_name, tilt in spec["roof"]:
             tilt = args.pitch if tilt is None else tilt
             roofs.append(
-                np.array(
-                    [
-                        h.on_plane(face_name, tilt, rel[k], elevation[k])
-                        if h
-                        else np.nan
-                        for k, h in enumerate(held)
-                    ]
-                )
+                (np.nan_to_num(beam(face_name, tilt)), np.nan_to_num(diffuse(tilt)))
             )
-        fit = RoomFit(
-            np.nan_to_num(y),
-            np.nan_to_num(diff),
-            sector,
-            elevation,
-            [np.nan_to_num(beam(f, 90.0)) for f in walls],
-            [np.nan_to_num(diffuse(90.0)) for _ in walls],
-            [np.nan_to_num(r) for r in roofs],
+        ref = np.maximum(
+            np.nan_to_num(beam(spec["walls"][0], 90.0)), np.nan_to_num(beam("S", 90.0))
         )
-        # reference beam for deciding which sectors have enough sunny bins
-        ref = np.nan_to_num(beam(walls[0], 90.0))
-        ref = np.maximum(ref, np.nan_to_num(beam("S", 90.0)))
-
-        horizon = fit.fit_horizon(rows, ref)
         covered = [
             ((sector == k) & rows & (ref > 20)).sum() >= MIN_SECTOR_BINS
             for k in range(SECTORS)
         ]
+        y0, d0 = np.nan_to_num(y), np.nan_to_num(diff)
+        models = {
+            mode: RoomFit(y0, d0, sector, elevation, walls, roofs, mode)
+            for mode in ("none", "shared", "separate")
+        }
+        base_x = np.column_stack([d0, np.ones(bins)])
 
-        errors = {"base": [], "flat": [], "horizon": []}
+        errors = {k: [] for k in ("base", "flat", "none", "shared", "separate")}
         for d in np.unique(day_index[rows]):
             test = rows & (day_index == d)
             train = rows & (day_index != d)
             if test.sum() < 4 or train.sum() < MIN_BINS:
                 continue
-            base_x = np.column_stack([fit.diff, np.ones(bins)])
-            beta = np.linalg.lstsq(base_x[train], fit.y[train], rcond=None)[0]
-            errors["base"].extend((fit.y[test] - base_x[test] @ beta) ** 2)
-            zero = np.zeros(SECTORS)
-            _, beta = fit.sse(zero, train)
-            errors["flat"].extend((fit.y[test] - fit.design(zero)[test] @ beta) ** 2)
-            h = fit.fit_horizon(train, ref)
-            _, beta = fit.sse(h, train)
-            errors["horizon"].extend((fit.y[test] - fit.design(h)[test] @ beta) ** 2)
-        cells = "".join(
-            f"{horizon[k]:>9.0f}" if covered[k] else f"{'.':>9}" for k in range(SECTORS)
-        )
-        print(f"{name:<13}{int(rows.sum()):>5}  {cells}")
+            beta = np.linalg.lstsq(base_x[train], y0[train], rcond=None)[0]
+            errors["base"].extend((y0[test] - base_x[test] @ beta) ** 2)
+            flat = models["none"]
+            zero = np.zeros(flat.size)
+            _, beta = flat.sse(zero, train)
+            errors["flat"].extend((y0[test] - flat.design(zero)[test] @ beta) ** 2)
+            for mode, model in models.items():
+                h = model.fit_horizon(train, ref)
+                _, beta = model.sse(h, train)
+                errors[mode].extend((y0[test] - model.design(h)[test] @ beta) ** 2)
+
+        walls_only = models["none"].fit_horizon(rows, ref)
         print(
-            f"{'':<20}{np.sqrt(np.mean(errors['base'])):>26.3f}"
-            f"{np.sqrt(np.mean(errors['flat'])):>12.3f}"
-            f"{np.sqrt(np.mean(errors['horizon'])):>10.3f}"
+            f"{name:<13}{int(rows.sum()):>5}  {_cells(walls_only, covered)}   (walls)"
+        )
+        if roofs:
+            own = models["separate"].fit_horizon(rows, ref)
+            print(f"{'':<20}{_cells(own[SECTORS:], covered)}   (roof, own horizon)")
+        rmse = {k: np.sqrt(np.mean(v)) for k, v in errors.items()}
+        print(
+            f"{'':<20}{'':>13}{rmse['base']:>12.3f}{rmse['flat']:>12.3f}"
+            f"{rmse['none']:>12.3f}"
+            + (
+                f"{rmse['shared']:>13.3f}{rmse['separate']:>10.3f}"
+                if roofs
+                else f"{'-':>13}{'-':>10}"
+            )
         )
     print(
         "\n'.' = sun spent fewer than 5 sunny bins in that sector. A height of 0 means"
