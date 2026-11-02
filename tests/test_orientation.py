@@ -7,6 +7,7 @@ import pytest
 from custom_components.home_thermal_lab.orientation import (
     choose_outline,
     outline_svg,
+    ring_from_nominatim,
     wall_rotation,
 )
 
@@ -56,3 +57,21 @@ def test_outline_svg_shows_polygon_and_rotated_arrow():
     assert "<polygon" in svg
     assert "rotation +10.4" in svg
     assert "south wall faces 190" in svg
+
+
+def test_ring_from_nominatim_reads_a_building_polygon():
+    body = {
+        "category": "building",
+        "geojson": {
+            "type": "Polygon",
+            "coordinates": [
+                [[-113.5, 53.5], [-113.4, 53.5], [-113.4, 53.6], [-113.5, 53.5]]
+            ],
+        },
+    }
+    assert ring_from_nominatim(body)[0] == (53.5, -113.5)
+    assert ring_from_nominatim({**body, "category": "highway"}) is None
+    assert (
+        ring_from_nominatim({"category": "building", "geojson": {"type": "Point"}})
+        is None
+    )

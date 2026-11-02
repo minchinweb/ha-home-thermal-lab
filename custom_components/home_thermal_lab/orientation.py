@@ -19,6 +19,7 @@ OVERPASS = (
     "https://overpass-api.de/api/interpreter",
     "https://overpass.private.coffee/api/interpreter",
 )
+NOMINATIM = "https://nominatim.openstreetmap.org/reverse"
 METRES_PER_DEGREE = 111_320.0
 
 Point = tuple[float, float]  # (latitude, longitude)
@@ -88,8 +89,38 @@ def choose_outline(outlines: list[list[Point]], home: Point) -> list[Point] | No
     )
 
 
+def ring_from_nominatim(body: dict) -> list[Point] | None:
+    """The building polygon in a Nominatim reverse-geocoding answer, if it is one."""
+    geometry = body.get("geojson") or {}
+    if body.get("category") != "building" or geometry.get("type") != "Polygon":
+        return None
+    return [(lat, lon) for lon, lat in geometry["coordinates"][0]]
+
+
+def _nominatim(lat: float, lon: float) -> list[Point] | None:
+    query = urllib.parse.urlencode(
+        {"lat": lat, "lon": lon, "zoom": 18, "polygon_geojson": 1, "format": "jsonv2"}
+    )
+    request = urllib.request.Request(
+        f"{NOMINATIM}?{query}", headers={"User-Agent": "home-thermal-lab/0.1"}
+    )
+    with urllib.request.urlopen(request, timeout=15) as resp:
+        return ring_from_nominatim(json.load(resp))
+
+
 def fetch_outlines(lat: float, lon: float, radius: int = 40) -> list[list[Point]]:
-    """Building outlines within ``radius`` metres of a position (blocking)."""
+    """Building outlines at a position (blocking).
+
+    Nominatim names the building under the point in one quick request; if that
+    fails or finds none, the Overpass servers list every building within
+    ``radius`` metres (they are often busy).
+    """
+    try:
+        ring = _nominatim(lat, lon)
+    except (OSError, ValueError, KeyError):
+        ring = None
+    if ring:
+        return [ring]
     query = f'[out:json];way(around:{radius},{lat},{lon})["building"];out geom;'
     body = urllib.parse.urlencode({"data": query}).encode()
     error: OSError | None = None
@@ -98,7 +129,7 @@ def fetch_outlines(lat: float, lon: float, radius: int = 40) -> list[list[Point]
             url, body, headers={"User-Agent": "home-thermal-lab/0.1"}
         )
         try:
-            with urllib.request.urlopen(request, timeout=15) as resp:
+            with urllib.request.urlopen(request, timeout=10) as resp:
                 ways = json.load(resp)["elements"]
             break
         except OSError as err:

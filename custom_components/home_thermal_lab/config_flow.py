@@ -358,7 +358,7 @@ class HomeThermalLabConfigFlow(ConfigFlow, domain=DOMAIN):
             outlines = await self.hass.async_add_executor_job(fetch_outlines, lat, lon)
         except (OSError, ValueError, KeyError):
             _LOGGER.warning("Could not fetch the building outline from OpenStreetMap")
-            return {}  # not cached, so a later form tries again
+            return {"failed": True}  # not cached, so a later form tries again
         points = choose_outline(outlines, (lat, lon))
         info: dict = {}
         if points:
@@ -372,6 +372,11 @@ class HomeThermalLabConfigFlow(ConfigFlow, domain=DOMAIN):
     async def _map_text(self, rotation: float | None) -> str:
         """Markdown for the form: the drawing, or why there is none."""
         info = await self._outline()
+        if info.get("failed"):
+            return (
+                "Could not reach OpenStreetMap to measure the rotation. Type it if "
+                "you know it, or try again later with Reconfigure."
+            )
         if not info.get("points"):
             return (
                 "No building was found at your home position on OpenStreetMap, "
