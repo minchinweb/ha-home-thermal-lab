@@ -49,3 +49,30 @@ Second view: the cooling-law residual in sunny bins (316 of 491 daytime bins wit
 - Low sun to the south-west: negative or zero, so the evening sun reaches nothing at that height (or the west gain is being masked by the evening cool-down).
 - Master bedroom: a small gain only with the sun due south and high (+0.07). N bedroom, W bedroom and the office: nothing above noise.
 - Conclusion: the shading is real and strong in this part of the year (the sun never gets above 25 degrees), and most of the apparent south gain in the first table is from a narrow window of sun positions. A usable model must be a horizon profile per window (the lowest elevation at which the sun is clear, for each azimuth), not a wall-normal cosine. Better data: spring and autumn weeks with high sun, clear skies, and a noted tree-line from the kitchen window (a photo from each window would give the profile directly).
+
+
+### Windows, roof and house rotation (`scripts/solar_windows.py --rotation 10.4`, same 14 days)
+
+House rotation: the OpenStreetMap outline for the house (8 walls, all on one grid) has its walls 10.4 degrees clockwise of north (`scripts/house_orientation.py`). Rotating the model by 10.4 degrees changes the coefficients modestly (for example master east roof +0.82 against +0.94 at 0 degrees), so it is a refinement, not a big effect at this latitude and season.
+
+Window and roof layout used (from the house): N bedroom north window + east and west roof faces (roof pitch assumed 25 degrees; 18 degrees changes little); master south window + east/west roof; W bedroom west; office east (limited winter light); kitchen south, west and a small north-east window + a low-slope (10 degree) west roof; S basement and the SE basement bedroom south windows; NE basement an east window low to the ground. The front room (large east window) has no sensor yet.
+
+Milli-C/h per W/m2 (* = beyond two standard errors):
+
+| Room | Walls | Roof | Clear sky at night (mC/h) |
+|---|---|---|---|
+| N bedroom | N +0.08 | E +0.25*, W +0.42 | -51 |
+| Master | S -0.19 | E +0.82*, W +1.46* | -22 |
+| W bedroom | W +0.84* | - | -74 |
+| Office | E -0.17 | - | -61 |
+| Kitchen | S -1.78*, W -1.33, E +1.82* | W (10 degrees) +5.39* | -125* |
+| S basement | S +0.39* | - | -36 |
+| SE basement | S +0.35 | - | +1 |
+| NE basement | E +0.33 | - | +31 |
+
+- The attic rooms respond to the roof, not the wall: the master bedroom has a significant gain on both roof faces (west +1.46, east +0.82, about +0.15 C/h per 100 W/m2 at the west face) while its south window term is zero or slightly negative; the N bedroom's east roof face is significant and her north window is nothing. This agrees with the roof deck heating the attic rooms.
+- the W bedroom's west window is the one clear wall term in the upper floors (+0.84 mC/h per W/m2).
+- the S basement bedroom's and the SE bedroom's south windows are positive (+0.39 significant, +0.35); the NE basement east window (low to the ground) is +0.33 but not significant.
+- Windows lose heat to a clear sky: the clear-sky term is negative for the kitchen (-125 mC/h when the sky is clear compared with overcast, significant), and negative but within noise for N bedroom, W bedroom, the office, the master and S basement. The basement rooms with windows low to the ground (SE, NE) show none. That fits the user's suggestion that windows can show a negative effect: extra radiant loss on clear nights, which is part of why the daytime terms and the air-temperature term can disagree.
+- Kitchen caution: the wall and roof terms are large and have opposite signs (S -1.78, E +1.82, west roof +5.4), which is collinearity between faces over a fortnight with the sun between 3 and 25 degrees, not independent window gains. The 10 degree roof is close to a horizontal surface, so it also picks up anything that follows the sun's height.
+- Next: a horizon (shading) profile per window as described above, a longer and sunnier dataset, a front-room sensor, and fixing the roof pitch (a photo or the plans).

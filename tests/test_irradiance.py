@@ -39,3 +39,14 @@ def test_azimuth_is_south_at_solar_noon_and_east_in_the_morning():
     assert solar_azimuth_degrees(solar_noon, 53.5, lon) == pytest.approx(180.0, abs=5)
     morning = datetime(2026, 3, 20, 16, 0, tzinfo=UTC)
     assert 90 < solar_azimuth_degrees(morning, 53.5, lon) < 160
+
+
+def test_plane_matches_wall_and_flat_cases():
+    hour = Irradiance(datetime(2026, 11, 1, tzinfo=UTC), 400.0, 40.0)
+    wall = hour.on_plane("S", 90.0, 180.0, 20.0)
+    assert wall == pytest.approx(hour.on_face("S", 180.0, 20.0), rel=1e-6)
+    flat = hour.on_plane("S", 0.0, 90.0, 30.0)
+    assert flat == pytest.approx(400.0 * 0.5 + 40.0)
+    assert hour.on_plane("E", 25.0, 270.0, 20.0) == pytest.approx(
+        40.0 * (1 + 0.9063) / 2, rel=1e-3
+    )

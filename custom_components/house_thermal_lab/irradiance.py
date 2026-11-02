@@ -24,11 +24,13 @@ class Irradiance:
         time: End of the hour.
         direct_normal: Beam irradiance on a surface facing the sun.
         diffuse: Diffuse irradiance on a horizontal surface.
+        cloud_cover: Cloud cover in percent (0 clear, 100 overcast).
     """
 
     time: datetime
     direct_normal: float
     diffuse: float
+    cloud_cover: float = 0.0
 
     def on_face(self, face: str, azimuth: float, elevation: float) -> float:
         """Irradiance on a vertical wall.
@@ -49,6 +51,32 @@ class Irradiance:
         )
         return self.direct_normal * max(cos_incidence, 0.0) + 0.5 * self.diffuse
 
+    def on_plane(
+        self, face: str, tilt: float, azimuth: float, elevation: float
+    ) -> float:
+        """Irradiance on a tilted plane (for example a pitched roof face).
+
+        Args:
+            face: Direction the plane faces: ``N``, ``E``, ``S`` or ``W``.
+            tilt: Angle of the plane from horizontal, in degrees (90 is a wall).
+            azimuth: Sun compass azimuth in degrees.
+            elevation: Sun elevation in degrees.
+
+        Returns:
+            Beam on the plane (zero when the sun is behind it or down) plus the
+            share of diffuse light the plane sees, ``(1 + cos(tilt)) / 2``.
+        """
+        if elevation <= 0:
+            return 0.0
+        el, tl = math.radians(elevation), math.radians(tilt)
+        cos_incidence = math.sin(el) * math.cos(tl) + math.cos(el) * math.sin(
+            tl
+        ) * math.cos(math.radians(azimuth - FACES[face]))
+        return (
+            self.direct_normal * max(cos_incidence, 0.0)
+            + self.diffuse * (1 + math.cos(tl)) / 2
+        )
+
 
 def build_url(latitude: float, longitude: float, past_days: int) -> str:
     """Build the forecast URL for recent hourly irradiance in GMT."""
@@ -58,7 +86,7 @@ def build_url(latitude: float, longitude: float, past_days: int) -> str:
             "longitude": longitude,
             "past_days": past_days,
             "forecast_days": 1,
-            "hourly": "direct_normal_irradiance,diffuse_radiation",
+            "hourly": "direct_normal_irradiance,diffuse_radiation,cloud_cover",
             "timezone": "GMT",
         }
     )
@@ -69,16 +97,20 @@ def parse_irradiance(body: dict) -> list[Irradiance]:
     """Turn the API body into readings, skipping hours with missing values."""
     hourly = body.get("hourly", {})
     out = []
-    for stamp, direct, diffuse in zip(
-        hourly.get("time", []),
-        hourly.get("direct_normal_irradiance", []),
-        hourly.get("diffuse_radiation", []),
-        strict=False,
+    clouds = hourly.get("cloud_cover") or []
+    for i, (stamp, direct, diffuse) in enumerate(
+        zip(
+            hourly.get("time", []),
+            hourly.get("direct_normal_irradiance", []),
+            hourly.get("diffuse_radiation", []),
+            strict=False,
+        )
     ):
         if direct is None or diffuse is None:
             continue
         when = datetime.fromisoformat(stamp).replace(tzinfo=UTC)
-        out.append(Irradiance(when, float(direct), float(diffuse)))
+        cloud = clouds[i] if i < len(clouds) and clouds[i] is not None else 0.0
+        out.append(Irradiance(when, float(direct), float(diffuse), float(cloud)))
     return out
 
 
@@ -90,3 +122,10 @@ def fetch_irradiance(
 ) -> list[Irradiance]:
     """Fetch recent hourly irradiance (blocking)."""
     return parse_irradiance(fetch(build_url(latitude, longitude, past_days)))
+
+
+def horizontal(reading: Irradiance, elevation: float) -> float:
+    """Global irradiance on a flat surface (a stand-in for a shallow roof)."""
+    if elevation <= 0:
+        return 0.0
+    return reading.direct_normal * math.sin(math.radians(elevation)) + reading.diffuse

@@ -3,6 +3,7 @@ Changelog
 
 .. release:: unreleased
 
+  - :feature:`-` Per-room window and roof solar model with clear-sky term, tilted-plane irradiance and house rotation from OpenStreetMap.
   - :feature:`-` Irradiance loader, sun azimuth and solar-gain test by window face (hypothesis 11).
   - :feature:`-` Ground-temperature test (hypothesis 03) and occupancy test (hypothesis 15).
   - :feature:`-` Door-state test against the S basement bedroom door contact (hypothesis 09).
