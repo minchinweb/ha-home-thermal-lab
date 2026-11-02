@@ -29,30 +29,9 @@ from envfile import load_env
 from regress_rooms import POWER, ZONES
 
 from custom_components.home_thermal_lab.ha_history import fetch_states
-from custom_components.home_thermal_lab.hvac import Run
+from custom_components.home_thermal_lab.hvac import HIGH, LOW, Run, stage_runs
 from custom_components.home_thermal_lab.hvac_response import merge_runs
 from custom_components.home_thermal_lab.power import power_series, time_weighted_mean
-
-LOW = "auxHeat1"
-HIGH = "auxHeat2"
-
-
-def stage_runs(states: list[dict], end: datetime, token: str) -> list[Run]:
-    """Runs of states whose ``equipment_running`` includes ``token``."""
-    out = []
-    began = None
-    for s in states:
-        value = s.get("attributes", {}).get("equipment_running")
-        when = datetime.fromisoformat(s["last_updated"]).astimezone(UTC)
-        on = value is not None and token in value.split(",")
-        if on and began is None:
-            began = when
-        elif not on and began is not None:
-            out.append(Run(began, when))
-            began = None
-    if began is not None:
-        out.append(Run(began, end))
-    return out
 
 
 def _overlap(a: Run, runs: list[Run]) -> float:

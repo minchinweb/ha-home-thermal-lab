@@ -46,3 +46,21 @@ def test_lights_reject_bad_parts(text):
 def test_kw_table_keeps_filled_modes_only():
     form = {"name": "x", "fan": 0.04, "heat_low": 0.0, "heat_high": None, "cool": ""}
     assert kw_table(form) == {"fan": 0.04, "heat_low": 0.0}
+
+
+def test_roof_ratio_pitch():
+    roofs = parse_roofs("S 4:12, W 12:12, N 0:12")
+    assert [r[1] for r in roofs] == pytest.approx([18.4349, 45.0, 0.0], abs=1e-3)
+    assert format_roofs(roofs) == "S 4:12, W 12:12, N 0:12"
+    assert format_roofs([["S", 30.0]]) == "S 30"
+
+
+@pytest.mark.parametrize("text", ["S 4:0", "S -1:12", "S a:12", "S 4:"])
+def test_roof_ratio_rejects_bad_parts(text):
+    with pytest.raises(FieldError):
+        parse_roofs(text)
+
+
+def test_kw_table_converts_btu():
+    table = kw_table({"heat_high": 80000, "fan": ""}, "BTU/h")
+    assert table == {"heat_high": pytest.approx(23.4456)}

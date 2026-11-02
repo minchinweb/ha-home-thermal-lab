@@ -76,6 +76,32 @@ def runs_from_states(
     return runs
 
 
+LOW = "auxHeat1"
+HIGH = "auxHeat2"
+
+
+def stage_runs(states: list[dict], end: datetime, token: str) -> list[Run]:
+    """Runs of states whose ``equipment_running`` includes ``token``.
+
+    Ecobee thermostats report ``equipment_running`` such as ``auxHeat1,fan``;
+    ``LOW`` and ``HIGH`` are the two furnace stages, ``"fan"`` is the blower.
+    """
+    out = []
+    began = None
+    for s in states:
+        value = s.get("attributes", {}).get("equipment_running")
+        when = datetime.fromisoformat(s["last_updated"]).astimezone(UTC)
+        on = value is not None and token in value.split(",")
+        if on and began is None:
+            began = when
+        elif not on and began is not None:
+            out.append(Run(began, when))
+            began = None
+    if began is not None:
+        out.append(Run(began, end))
+    return out
+
+
 @dataclass(frozen=True)
 class DailyUse:
     """Run time on one local day.

@@ -34,13 +34,33 @@ location. The `.github/workflows/validate.yml` workflow runs the HACS and
 
 ### From the web interface
 
-Add the integration, choose the outdoor temperature sensor, then use **Add
-shadow zone**, **Add heating-call statistics**, **Add furnace energy** or **Add
-contribution chart** on the integration's page. Each is a sub-entry; the pencil
-icon edits it and the sensor reloads on save. The forms take the same settings
-as the YAML below, with these differences: roofs are typed as `S 30, W 30`
-(face and pitch), dimmed lights as `light.office_main_lights=105` (entity and
-watts at full), and the furnace powers are one box per state. Change the
+Add the integration and choose the outdoor temperature sensor. Then add the
+sensors from the integration's page, with the buttons in this order:
+
+1. **Add heating-call statistics**: one per zone; only a thermostat is needed.
+2. **Add furnace energy**: one for the blower and one for the gas.
+   - Blower: pick your whole-house power sensor and the integration learns the
+     fan and heating powers from the steps in it whenever the furnace changes
+     state (`scripts/blower_power.py` shows the same steps). It needs several
+     days of data and refreshes every 6 hours; the powers you type are used
+     until then and for any state it cannot learn. The `learned_kw` and `edges`
+     attributes show what it found. Fan-only draw is small, so it is the last
+     to be clear; the fewer fan-only edges lost to heating calls, the better.
+   - Gas: leave the power sensor empty, set the unit to **BTU/h** and type the
+     furnace input (80,000 for the high stage, about 65% of that for low).
+3. **Add shadow zone**: one per zone. Leave **a** and **c** empty and the
+   integration fits the zone's no-heat model on the last 14 days of idle
+   history (the room temperature, the outdoor sensor and the sun on its
+   windows), retries every 6 hours, and shows the result in the `a`, `c`, `g`
+   and `model` attributes. Type them in to pin the numbers instead.
+4. **Add contribution chart**: one per zone. Its terms still come from
+   `scripts/fit_contributions.py`.
+
+Each is a sub-entry; the pencil icon edits it and the sensor reloads on save.
+The forms take the same settings as the YAML below, with these differences:
+roofs are typed as `S 30, W 4:12` (face, then the pitch in degrees or as
+rise:run), dimmed lights as `light.office_main_lights=105` (entity and watts at
+full), and the furnace powers are one box per state, in kW or BTU/h. Change the
 outdoor sensor with **Reconfigure** on the integration. Entities from the web
 and from YAML can both exist; use one or the other so they do not duplicate.
 
@@ -60,7 +80,7 @@ sensor:
       - name: Z4 office
         climate_entity: climate.z4
         room_entity: sensor.z4_temperature
-        model: {a: 0.0106, c: 0.0032, g: 0.000229}
+        model: {a: 0.0106, c: 0.0032, g: 0.000229}   # leave out to learn it
         walls: [E]
         rotation: 10.4
         shade_below: 18
@@ -81,6 +101,8 @@ sensor:
       - name: Furnace blower energy
         climate_entities: [climate.z1, climate.z2, climate.z3, climate.z4]
         kw: {fan: 0.04, heat_low: 0.24, heat_high: 0.24}
+        power_entity: sensor.whole_house_power   # optional: learn kw from it
+        learn_days: 14
       - name: Furnace gas energy   # 80,000 BTU/h input; low stage taken as 65%
         climate_entities: [climate.z1, climate.z2, climate.z3, climate.z4]
         kw: {heat_low: 15.2, heat_high: 23.4}

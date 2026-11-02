@@ -67,8 +67,11 @@ from .contributions import (
 )
 from .energy import MODES, Meter, furnace_mode
 from .forecast import ForecastHour, fetch_forecast
-from .hvac import runs_from_states
-from .irradiance import light_on_surfaces
+from .hvac import HIGH, runs_from_states, stage_runs
+from .hvac_response import merge_runs
+from .irradiance import fetch_irradiance, light_on_surfaces
+from .learn import bin_fraction, bin_held, blower_kw, edge_steps, fit_no_heat
+from .power import power_series
 from .shadow import ZoneModel, decide
 from .solar import solar_azimuth_degrees, solar_elevation_degrees
 
@@ -78,6 +81,9 @@ SCAN_INTERVAL = timedelta(minutes=15)
 STEP_HOURS = 0.25
 LOOK_AHEAD_STEPS = 12
 FORECAST_MAX_AGE = timedelta(hours=1)
+LEARN_EVERY = timedelta(hours=6)
+LEARN_BIN = timedelta(minutes=15)
+LEARN_DAYS = 14
 FACES = ["N", "E", "S", "W"]
 
 SUN_SCHEMA = {
@@ -94,10 +100,11 @@ ZONE_SCHEMA = vol.Schema(
         vol.Required("name"): cv.string,
         vol.Required("climate_entity"): cv.entity_id,
         vol.Optional("room_entity"): cv.entity_id,
-        vol.Required("model"): vol.Schema(
+        # leave out (or leave a and c out) to learn the model from the recorder
+        vol.Optional("model", default={}): vol.Schema(
             {
-                vol.Required("a"): vol.Coerce(float),
-                vol.Required("c"): vol.Coerce(float),
+                vol.Optional("a"): vol.Coerce(float),
+                vol.Optional("c"): vol.Coerce(float),
                 vol.Optional("g", default=0.0): vol.Coerce(float),
             }
         ),
@@ -120,7 +127,12 @@ ENERGY_SCHEMA = vol.Schema(
     {
         vol.Required("name"): cv.string,
         vol.Required("climate_entities"): cv.entity_ids,
-        vol.Required("kw"): vol.Schema({vol.In(MODES): vol.Coerce(float)}),
+        vol.Optional("kw", default={}): vol.Schema({vol.In(MODES): vol.Coerce(float)}),
+        # a whole-house power sensor: the blower powers are learned from it
+        vol.Optional("power_entity"): cv.entity_id,
+        vol.Optional("learn_days", default=14): vol.All(
+            vol.Coerce(int), vol.Range(2, 60)
+        ),
     }
 )
 
@@ -198,12 +210,18 @@ def _light_at(hass, zone: dict, by_end: dict, moment: datetime) -> tuple:
     slot = by_end.get(hour_end)
     if slot is None:
         return None, 0.0
-    lat, lon = hass.config.latitude, hass.config.longitude
+    return slot, _surface_light(
+        hass.config.latitude, hass.config.longitude, zone, slot.light, moment
+    )
+
+
+def _surface_light(lat: float, lon: float, zone: dict, reading, moment) -> float:
+    """Light (W/m2) on the zone's walls and roofs from an hour's irradiance."""
     az = solar_azimuth_degrees(moment, lat, lon)
     el = solar_elevation_degrees(moment, lat, lon)
     shaded = 120.0 <= az < 210.0 and el < zone["shade_below"]
-    light = light_on_surfaces(
-        slot.light,
+    return light_on_surfaces(
+        reading,
         az,
         el,
         zone["walls"],
@@ -211,7 +229,6 @@ def _light_at(hass, zone: dict, by_end: dict, moment: datetime) -> tuple:
         zone["rotation"],
         shaded,
     )
-    return slot, light
 
 
 def _as_dict(state) -> dict:
@@ -249,6 +266,52 @@ def _numbers(rows: list[dict]) -> list[tuple[datetime, float]]:
             continue
         out.append((datetime.fromisoformat(r["last_changed"]).astimezone(UTC), value))
     return sorted(out)
+
+
+def _learn_blower(rows, item, end, watts):
+    """Blower powers (kW) from whole-house power and the thermostats (blocking)."""
+    scale = 0.001 if watts else 1.0
+    power = [(t, v * scale) for t, v in power_series(rows[item["power_entity"]])]
+    heat, fan, high = [], [], []
+    for climate_id in item["climate_entities"]:
+        states = rows[climate_id]
+        heat += runs_from_states(states, end, {"heating"}, "hvac_action")
+        fan += stage_runs(states, end, "fan")
+        high += stage_runs(states, end, HIGH)
+    steps = edge_steps(
+        power, merge_runs(heat, 0.0), merge_runs(fan, 0.0), merge_runs(high, 0.0)
+    )
+    return blower_kw(steps)
+
+
+def _fit_zone(zone, rows, irradiance, lat, lon, start, end):
+    """Fit a zone's no-heat model from recorded history (blocking)."""
+    width = LEARN_BIN
+    bins = int((end - start) / width)
+    climate = rows[zone["climate_entity"]]
+    room_id = zone.get("room_entity")
+    room = _numbers(rows[room_id]) if room_id else temperature_series(climate)
+    outdoor = _numbers(rows[zone["outdoor_entity"]])
+    heating = bin_fraction(
+        runs_from_states(climate, end, {"heating"}, "hvac_action"), start, bins, width
+    )
+    by_end = {r.time: r for r in irradiance}
+    light = []
+    for i in range(bins):
+        mid = start + (i + 0.5) * width
+        reading = by_end.get(
+            mid.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+        )
+        light.append(
+            0.0 if reading is None else _surface_light(lat, lon, zone, reading, mid)
+        )
+    return fit_no_heat(
+        bin_held(room, start, bins, width),
+        bin_held(outdoor, start, bins, width),
+        light,
+        heating,
+        width.total_seconds() / 3600.0,
+    )
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -316,8 +379,48 @@ class ShadowSensor(SensorEntity):
         self._attr_unique_id = f"home_thermal_lab_shadow_{zone['climate_entity']}"
         self._attr_native_value = None
         self._attr_extra_state_attributes = {}
+        model = zone["model"]
+        self._learned = "a" not in model or "c" not in model
+        self._model = (
+            None
+            if self._learned
+            else ZoneModel(model["a"], model["c"], model.get("g", 0.0))
+        )
+        self._model_note = "given" if self._model else "waiting to learn"
+
+    async def _learn(self, _now=None) -> None:
+        """Fit the zone's no-heat model on its recent idle history."""
+        zone = {**self._zone, "outdoor_entity": self._outdoor_entity}
+        climate_id = zone["climate_entity"]
+        room_id = zone.get("room_entity")
+        ids = [climate_id, self._outdoor_entity] + ([room_id] if room_id else [])
+        end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+        start = end - timedelta(days=LEARN_DAYS)
+        lat, lon = self._hass.config.latitude, self._hass.config.longitude
+        try:
+            rows = await _recorded(self._hass, ids, start, end)
+            irradiance = await self._hass.async_add_executor_job(
+                fetch_irradiance, lat, lon, LEARN_DAYS + 2
+            )
+            fit = await self._hass.async_add_executor_job(
+                partial(_fit_zone, zone, rows, irradiance, lat, lon, start, end)
+            )
+        except Exception:  # noqa: BLE001 - try again at the next interval
+            _LOGGER.warning("Could not learn the model for %s", zone["name"])
+            return
+        if fit is None:
+            self._model_note = "not enough idle history yet"
+        else:
+            self._model = ZoneModel(fit.a, fit.c, fit.g)
+            self._model_note = f"learned from {fit.bins} idle bins of 15 minutes"
+        await self._refresh(None)
 
     async def async_added_to_hass(self) -> None:
+        if self._learned:
+            self.async_on_remove(
+                async_track_time_interval(self._hass, self._learn, LEARN_EVERY)
+            )
+            self._hass.async_create_task(self._learn())
         self.async_on_remove(
             async_track_time_interval(self._hass, self._refresh, SCAN_INTERVAL)
         )
@@ -349,7 +452,14 @@ class ShadowSensor(SensorEntity):
             setpoint = attrs.get("target_temp_low")
         outdoor_now = self._number(self._outdoor_entity)
         hours = await self._forecast.hours()
-        if room is None or setpoint is None or outdoor_now is None or not hours:
+        if (
+            self._model is None
+            or room is None
+            or setpoint is None
+            or outdoor_now is None
+            or not hours
+        ):
+            self._attr_extra_state_attributes = {"model": self._model_note}
             self._attr_native_value = "unknown"
             self.async_write_ha_state()
             return
@@ -373,7 +483,7 @@ class ShadowSensor(SensorEntity):
             float(setpoint),
             outdoor,
             light,
-            ZoneModel(**zone["model"]),
+            self._model,
             STEP_HOURS,
             zone["tolerance"],
             zone["max_dip"],
@@ -389,6 +499,10 @@ class ShadowSensor(SensorEntity):
             "thermostat_action": attrs.get("hvac_action"),
             "equipment_running": attrs.get("equipment_running"),
             "decided_at": now.isoformat(),
+            "model": self._model_note,
+            "a": round(self._model.a, 5),
+            "c": round(self._model.c, 5),
+            "g": round(self._model.g, 7),
         }
         self.async_write_ha_state()
 
@@ -464,6 +578,8 @@ class FurnaceEnergySensor(RestoreSensor):
         slug = item["name"].lower().replace(" ", "_")
         self._attr_unique_id = f"home_thermal_lab_energy_{slug}"
         self._meter = Meter(dict(item["kw"]))
+        self._learned: dict[str, float] = {}
+        self._edges: dict[str, int] = {}
 
     def _mode(self) -> str:
         zones = []
@@ -473,7 +589,37 @@ class FurnaceEnergySensor(RestoreSensor):
                 zones.append(dict(state.attributes))
         return furnace_mode(zones)
 
+    async def _learn(self, _now=None) -> None:
+        """Learn the blower powers from the whole-house power sensor."""
+        item = self._item
+        power_id = item["power_entity"]
+        ids = [power_id, *item["climate_entities"]]
+        end = datetime.now(UTC)
+        start = end - timedelta(days=item["learn_days"])
+        try:
+            rows = await _recorded(self._hass, ids, start, end)
+            unit = self._hass.states.get(power_id)
+            watts = unit is not None and unit.attributes.get("unit_of_measurement") in (
+                "W",
+                "w",
+            )
+            learned, edges = await self._hass.async_add_executor_job(
+                partial(_learn_blower, rows, item, end, watts)
+            )
+        except Exception:  # noqa: BLE001 - try again at the next interval
+            _LOGGER.warning("Could not learn the powers for %s", item["name"])
+            return
+        self._learned, self._edges = learned, edges
+        self._meter.advance(datetime.now(UTC))
+        self._meter.kw.update(learned)
+        self._publish()
+
     async def async_added_to_hass(self) -> None:
+        if self._item.get("power_entity"):
+            self.async_on_remove(
+                async_track_time_interval(self._hass, self._learn, LEARN_EVERY)
+            )
+            self._hass.async_create_task(self._learn())
         last = await self.async_get_last_sensor_data()
         if last is not None and last.native_value is not None:
             with contextlib.suppress(TypeError, ValueError):
@@ -495,6 +641,11 @@ class FurnaceEnergySensor(RestoreSensor):
             "mode": self._meter.mode,
             "kw": self._meter.kw.get(self._meter.mode, 0.0),
         }
+        if self._item.get("power_entity"):
+            self._attr_extra_state_attributes |= {
+                "learned_kw": {k: round(v, 4) for k, v in self._learned.items()},
+                "edges": self._edges,
+            }
         self.async_write_ha_state()
 
     async def _tick(self, _event) -> None:

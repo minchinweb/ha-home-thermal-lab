@@ -28,6 +28,7 @@ from . import CALL_STATS, CONTRIBUTION, DOMAIN, ENERGY, ZONE
 from .options import (
     FACES,
     KW_MODES,
+    POWER_UNITS,
     FieldError,
     format_lights,
     format_roofs,
@@ -47,6 +48,11 @@ _CLIMATES = selector.EntitySelector(
 _SENSOR = selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor"))
 _SENSORS = selector.EntitySelector(
     selector.EntitySelectorConfig(domain="sensor", multiple=True)
+)
+_UNITS = selector.SelectSelector(
+    selector.SelectSelectorConfig(
+        options=list(POWER_UNITS), mode=selector.SelectSelectorMode.DROPDOWN
+    )
 )
 _FACES = selector.SelectSelector(
     selector.SelectSelectorConfig(
@@ -73,8 +79,8 @@ def _zone_schema() -> vol.Schema:
             vol.Required("name"): _TEXT,
             vol.Required("climate_entity"): _CLIMATE,
             vol.Optional("room_entity"): _SENSOR,
-            vol.Required("a"): _NUMBER,
-            vol.Required("c"): _NUMBER,
+            vol.Optional("a"): _NUMBER,
+            vol.Optional("c"): _NUMBER,
             vol.Optional("g"): _NUMBER,
             vol.Optional("tolerance"): _NUMBER,
             vol.Optional("max_dip"): _NUMBER,
@@ -99,6 +105,9 @@ def _energy_schema() -> vol.Schema:
         {
             vol.Required("name"): _TEXT,
             vol.Required("climate_entities"): _CLIMATES,
+            vol.Optional("power_entity"): _SENSOR,
+            vol.Optional("learn_days"): _NUMBER,
+            vol.Optional("power_unit", default="kW"): _UNITS,
             **{vol.Optional(mode): _NUMBER for mode in KW_MODES},
         }
     )
@@ -149,10 +158,16 @@ def _sun_to_form(data: dict) -> dict:
 
 
 def _zone_from_form(form: dict) -> dict:
+    given = [k for k in ("a", "c") if form.get(k) not in (None, "")]
+    if len(given) == 1:
+        raise FieldError("a", "fill in both a and c, or neither")
+    model = {k: form[k] for k in given}
+    if model:
+        model.update(_clean(form, ("g",)))
     return {
         "name": form["name"],
         "climate_entity": form["climate_entity"],
-        "model": {"a": form["a"], "c": form["c"], **_clean(form, ("g",))},
+        "model": model,
         **_clean(form, ("room_entity", "tolerance", "max_dip")),
         **_sun_from_form(form),
     }
@@ -171,11 +186,16 @@ def _call_stats_from_form(form: dict) -> dict:
 
 
 def _energy_from_form(form: dict) -> dict:
-    return {
+    data = {
         "name": form["name"],
         "climate_entities": list(form["climate_entities"]),
-        "kw": kw_table(form),
+        "kw": kw_table(form, form.get("power_unit", "kW")),
     }
+    if form.get("power_entity"):
+        data["power_entity"] = form["power_entity"]
+    if form.get("learn_days") is not None:
+        data["learn_days"] = int(form["learn_days"])
+    return data
 
 
 def _energy_to_form(data: dict) -> dict:
@@ -242,10 +262,11 @@ class HomeThermalLabConfigFlow(ConfigFlow, domain=DOMAIN):
         cls, config_entry: ConfigEntry
     ) -> dict[str, type[ConfigSubentryFlow]]:
         """The sensors that can be added to the entry."""
+        # the order of the buttons on the integration's page
         return {
-            ZONE: ZoneSubentryFlow,
             CALL_STATS: CallStatsSubentryFlow,
             ENERGY: EnergySubentryFlow,
+            ZONE: ZoneSubentryFlow,
             CONTRIBUTION: ContributionSubentryFlow,
         }
 

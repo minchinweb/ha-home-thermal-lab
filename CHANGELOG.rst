@@ -3,6 +3,7 @@ Changelog
 
 .. release:: unreleased
 
+  - :feature:`-` Web setup: the sensor buttons are numbered in the order to add them; furnace powers can be given in BTU/h; a furnace energy sensor learns the blower powers from a whole-house power sensor; a shadow zone learns its no-heat model from the recorder when ``a`` and ``c`` are left out; roof pitches can be a rise:run ratio such as ``4:12``.
   - :feature:`-` Set up from the web interface: the integration holds the outdoor sensor, and each sensor (shadow zone, heating-call statistics, furnace energy, contribution chart) is added as a sub-entry. YAML still works. Needs Home Assistant 2025.3.
   - :feature:`-` Renamed: repository ``ha-home-thermal-lab``, integration domain ``home_thermal_lab`` (was ``house_thermal_lab``); household names replaced by room labels, with real entity ids in ``.env`` (``HA_ENTITY_ALIASES``).
   - :feature:`-` No-fan nights experiment (Home Assistant automations, hypotheses 08 and 10), detected in the fan mixing script.

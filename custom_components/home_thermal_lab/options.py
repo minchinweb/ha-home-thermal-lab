@@ -8,8 +8,12 @@ structures the YAML configuration uses.
 
 from __future__ import annotations
 
+import math
+
 FACES = ("N", "E", "S", "W")
 KW_MODES = ("off", "fan", "heat_low", "heat_high", "cool")
+POWER_UNITS = ("kW", "BTU/h")
+BTU_H_TO_KW = 0.00029307
 
 
 class FieldError(ValueError):
@@ -20,11 +24,24 @@ class FieldError(ValueError):
         self.field = field
 
 
+def _pitch(word: str) -> float:
+    """A pitch in degrees (``30``) or as a rise over 12 (``4:12``) or any run."""
+    if ":" in word:
+        rise, _, run = word.partition(":")
+        rise_n, run_n = float(rise), float(run)
+        if rise_n < 0 or run_n <= 0:
+            raise ValueError
+        return math.degrees(math.atan2(rise_n, run_n))
+    return float(word)
+
+
 def parse_roofs(text: str) -> list[list]:
-    """``"S 30, W 30"`` to ``[["S", 30.0], ["W", 30.0]]``: face and pitch in degrees.
+    """``"S 30, W 4:12"`` to ``[["S", 30.0], ["W", 18.43]]``: face and pitch.
+
+    The pitch is in degrees, or a ratio of rise to run such as ``4:12``.
 
     Raises:
-        FieldError: A part is not a face letter followed by a number.
+        FieldError: A part is not a face letter followed by a pitch.
     """
     roofs = []
     for part in text.replace(";", ",").split(","):
@@ -34,15 +51,22 @@ def parse_roofs(text: str) -> list[list]:
         try:
             if len(words) != 2 or words[0].upper() not in FACES:
                 raise ValueError
-            roofs.append([words[0].upper(), float(words[1])])
+            roofs.append([words[0].upper(), _pitch(words[1])])
         except ValueError:
             raise FieldError("roofs", f"not 'face pitch': {part.strip()!r}") from None
     return roofs
 
 
 def format_roofs(roofs: list) -> str:
-    """The inverse of ``parse_roofs``, for showing a saved value in the form."""
-    return ", ".join(f"{face} {pitch:g}" for face, pitch in roofs)
+    """The inverse of ``parse_roofs``; pitches that are n:12 show that way."""
+
+    def show(pitch: float) -> str:
+        for rise in range(25):
+            if abs(math.degrees(math.atan2(rise, 12)) - pitch) < 0.01:
+                return f"{rise}:12"
+        return f"{pitch:g}"
+
+    return ", ".join(f"{face} {show(pitch)}" for face, pitch in roofs)
 
 
 def parse_lights(text: str) -> dict[str, float]:
@@ -73,10 +97,16 @@ def format_lights(lights: dict) -> str:
     return ", ".join(f"{entity}={watts:g}" for entity, watts in lights.items())
 
 
-def kw_table(values: dict) -> dict[str, float]:
-    """Keep only the powers (kW per furnace state) that were filled in."""
+def kw_table(values: dict, unit: str = "kW") -> dict[str, float]:
+    """The powers (kW per furnace state) that were filled in.
+
+    Args:
+        values: The form, with a number for each mode in ``KW_MODES``.
+        unit: ``kW``, or ``BTU/h`` to convert (gas input, for instance).
+    """
+    factor = BTU_H_TO_KW if unit == "BTU/h" else 1.0
     return {
-        mode: float(values[mode])
+        mode: float(values[mode]) * factor
         for mode in KW_MODES
         if values.get(mode) not in (None, "")
     }
