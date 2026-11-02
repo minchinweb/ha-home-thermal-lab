@@ -34,3 +34,5 @@ Live ground truth, 1 November 2026 (owner's account, power from the Eagle sensor
 
 The burst signature (+1.2 to +2.3 kW, 30-75 minutes) in the history matches this, which supports reading those bursts as stove use, though the kettle alone is also a possibility for the shorter ones.
 
+First reading of the cooking session (`scripts/event_response.py`, 18:14 to about 18:30, range hood off, front-right burner on high, rear-left added at about 18:20 and later turned down to 3): about 0.37 kWh above the 1.27 kW house level beforehand (2.71 kW during). The furnace was only calling for the fan. The kitchen thermostat was drifting down at -0.89 C/h in the half hour before and at -0.44 C/h during, so its cooling slowed by about +0.45 C/h, but it was still lower at the end (-0.11 C), and the change is about one 0.06 C reading step. Not a clear warming signal. Other rooms moved by similar small amounts in both directions, so none of this is distinguishable from noise yet.
+
