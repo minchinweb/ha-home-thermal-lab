@@ -46,3 +46,12 @@ The Ecobee climate entities report `equipment_running` (`auxHeat1,fan` = W1, low
 - Only z2 and z4 called for heat in this period. z2: 474 min low, 6 min high. z4: 1841 min low, 293 min high.
 - Whole-house episodes (3+ min): 142 low only (median 9 min), 2 high only, 16 that stepped up (median 66 min long). The step to high came after a median 47 min (range 21 to 63 min), so the thermostat escalates only after a long, unsatisfied call; short calls stay on low, as expected.
 - Whole-house power is the same in both stages (about 1.3 kW), so the blower does not change speed; the stage cannot be seen in electricity, only in the Ecobee state.
+
+### Relative size of the two stages (`scripts/furnace_stage_ratio.py`, 10 days to 2026-11-01)
+
+Only z4 has enough high-stage calls (z2 has one). Warming rate of the z4 rooms above their drift in the 30 minutes before the call began, in calls that stepped up (low stretch, then high) and in low-only calls:
+
+- Low stage: +1.5 C/h (98 low-only calls), +2.2 C/h (16 calls before stepping up).
+- High stage: +2.5 C/h (15 calls).
+- High / low about 1.55 skipping the first 3 minutes of each stretch, and about 1.30 skipping 8. Read as low being roughly 65 to 77% of high, not 50%.
+- Caveats: the ratio is biased toward 1 (a warmer room loses more heat, high calls come late in long calls, some heat leaks to other zones, the sensors step in 0.1 C). So the low stage is probably no larger than 77% of high, and a typical two-stage furnace (about 65%) fits better than a half. Check the nameplate.
