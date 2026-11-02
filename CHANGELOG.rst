@@ -3,6 +3,7 @@ Changelog
 
 .. release:: unreleased
 
+  - :feature:`-` Door-state test against the S basement bedroom door contact (hypothesis 09).
   - :feature:`-` Wind loader and wind-loss test (hypothesis 12).
   - :feature:`-` Furnace stage (W1/W2) summary from Ecobee equipment state.
   - :feature:`-` Thermal momentum script: cool-down tau, wave lag, static flux.
