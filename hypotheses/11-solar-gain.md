@@ -71,8 +71,8 @@ Milli-C/h per W/m2 (* = beyond two standard errors):
 | NE basement | E +0.33 | - | +31 |
 
 - The attic rooms respond to the roof, not the wall: the master bedroom has a significant gain on both roof faces (west +1.46, east +0.82, about +0.15 C/h per 100 W/m2 at the west face) while its south window term is zero or slightly negative; the N bedroom's east roof face is significant and her north window is nothing. This agrees with the roof deck heating the attic rooms.
-- the W bedroom's west window is the one clear wall term in the upper floors (+0.84 mC/h per W/m2).
-- the S basement bedroom's and the SE bedroom's south windows are positive (+0.39 significant, +0.35); the NE basement east window (low to the ground) is +0.33 but not significant.
+- The W bedroom's west window is the one clear wall term in the upper floors (+0.84 mC/h per W/m2).
+- The S basement bedroom's and the SE bedroom's south windows are positive (+0.39 significant, +0.35); the NE basement east window (low to the ground) is +0.33 but not significant.
 - Windows lose heat to a clear sky: the clear-sky term is negative for the kitchen (-125 mC/h when the sky is clear compared with overcast, significant), and negative but within noise for N bedroom, W bedroom, the office, the master and S basement. The basement rooms with windows low to the ground (SE, NE) show none. That fits the user's suggestion that windows can show a negative effect: extra radiant loss on clear nights, which is part of why the daytime terms and the air-temperature term can disagree.
 - Kitchen caution: the wall and roof terms are large and have opposite signs (S -1.78, E +1.82, west roof +5.4), which is collinearity between faces over a fortnight with the sun between 3 and 25 degrees, not independent window gains. The 10 degree roof is close to a horizontal surface, so it also picks up anything that follows the sun's height.
 - Next: a horizon (shading) profile per window as described above, a longer and sunnier dataset, a front-room sensor, and fixing the roof pitch (a photo or the plans).
@@ -112,5 +112,5 @@ Same 14 days, roof 12:12 (kitchen 3:12). Three ways of treating the roof, scored
 | Kitchen | 1.068 | 1.025 | 0.985 | 0.973 | 0.977 |
 
 - Shading the roof helps a little in all three rooms, and the N bedroom now beats the cooling law alone (0.322 against 0.327) for the first time. The gain is 0.006 to 0.009 C/h, about 2% of the error, much smaller than the day-to-day spread, so it is a hint, not a result.
-- the N bedroom's own roof horizon is 21 degrees for sun from 120 to 180 and 24 degrees for 180 to 210, clear at 90 to 120 and about 9 degrees at 210 to 240. The master's own roof horizon (6, 21, 0, 21, 6, 6) varies sector to sector like its wall horizon and looks over-fitted. The kitchen's low roof is clear except at 120 to 150 (18) and 180 to 210 (27).
+- The N bedroom's own roof horizon is 21 degrees for sun from 120 to 180 and 24 degrees for 180 to 210, clear at 90 to 120 and about 9 degrees at 210 to 240. The master's own roof horizon (6, 21, 0, 21, 6, 6) varies sector to sector like its wall horizon and looks over-fitted. The kitchen's low roof is clear except at 120 to 150 (18) and 180 to 210 (27).
 - Sharing one horizon between a room's walls and roof does as well as giving the roof its own, with fewer parameters, so the simpler model is the better choice for now. This agrees with the east roof being shaded by the same trees that block the east and south-east windows.

@@ -23,8 +23,8 @@ were perfect, so E to G show the most weather information can add; a real
 forecast would do a little worse. The thermostat setpoint is deliberately not an
 input: it is what this prediction is meant to produce (hypothesis 17).
 
-Each score is the RMSE in C over the 24 hours, averaged over test days. the owner's
-office and the office air-quality sensor are one room. The first test day is
+Each score is the RMSE in C over the 24 hours, averaged over test days. The office
+temperature sensor and the office air-quality sensor are one room. The first test day is
 the 10th day of data, and tau and the coefficients are fit on all earlier days
 only.
 

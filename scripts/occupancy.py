@@ -197,7 +197,7 @@ def main() -> None:
             room = np.where(
                 count > 0, np.nansum(both, axis=0) / np.maximum(count, 1), np.nan
             )
-            name = "Office (W+AQ)"
+            name = "Office (sensor+AQ)"
         y = np.full(bins, np.nan)
         y[:-1] = (room[1:] - room[:-1]) / hours
         diff = t_out - room

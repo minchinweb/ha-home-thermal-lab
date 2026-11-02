@@ -10,7 +10,7 @@
 
 ## Results
 
-First backtest (`scripts/predict_day.py --days 40`): rolling origin, at local midnight (America/Regina) of every test day predict the 24 hourly room temperatures of the day ahead from earlier data only. Hourly long-term statistics, 40 days to 2026-11-02, test days 10 to 39 (15 to 30 days per room: the Zigbee bedroom sensors have about 20 days of history). Outdoor temperature is the measured value, standing in for a perfect forecast. the office sensor and the office air-quality sensor are one room.
+First backtest (`scripts/predict_day.py --days 40`): rolling origin, at local midnight (America/Regina) of every test day predict the 24 hourly room temperatures of the day ahead from earlier data only. Hourly long-term statistics, 40 days to 2026-11-02, test days 10 to 39 (15 to 30 days per room: the Zigbee bedroom sensors have about 20 days of history). Outdoor temperature is the measured value, standing in for a perfect forecast. The office sensor and the office air-quality sensor are one room.
 
 Mean RMSE (C) over 24 h, averaged over rooms and test days:
 

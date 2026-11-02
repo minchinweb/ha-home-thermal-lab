@@ -1,6 +1,6 @@
 """Predict a room's solar gain from sun position and irradiance (hypothesis 11).
 
-the office sensor and the office air-quality sensor are one room, so they are
+The office sensor and the office air-quality sensor are one room, so they are
 averaged into a single "Office" series.
 
 Two views, both in daytime bins when the room's own zone is not calling for heat

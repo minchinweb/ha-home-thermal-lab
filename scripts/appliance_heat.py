@@ -63,7 +63,7 @@ PLUGS = {
 LIGHTS = {"office lights": ("light.office_main_lights", 105.0)}
 TARGETS = {
     "Kitchen (z1)": (["Z1 kitchen"], "z1", ["fridge", "kitchen PCs"]),
-    "Office (W+AQ)": (
+    "Office (sensor+AQ)": (
         ["Office sensor", "Office AQ"],
         "z4",
         ["office PC", "office lights"],

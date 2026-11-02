@@ -47,12 +47,12 @@ Extra warming `b` in C/h (own zone not calling for heat; * = beyond two standard
 | Kitchen | +0.02 | -0.17* | -0.06 |
 
 - Office: a steady +0.08 to +0.10 C/h with the office occupied, day or night, close to what one person (about 100 W into about 1.7 kWh/C) would give, but the onset and departure events show nothing (+0.01 C/h, 25 events), so it may be a slow difference between occupied and empty periods (time of day, computer and lights) and not people.
-- Basement rooms: events show +0.08 to +0.15 C/h, and the S basement bedroom is beyond two standard errors, but the all-day fit does not. the S basement bedroom is also the room with the door contact (09), where open (occupied) periods were warmer by 0.3 C.
+- Basement rooms: events show +0.08 to +0.15 C/h, and the S basement bedroom is beyond two standard errors, but the all-day fit does not. The S basement bedroom is also the room with the door contact (09), where open (occupied) periods were warmer by 0.3 C.
 - Kitchen: -0.17 C/h when occupied, the wrong sign. The kitchen is occupied at meals and in the evenings, when cooking, the dishwasher, doors and the range hood and the setback schedule change the heat balance, and the model has no term for them.
 - As a detector it is still weak (night AUC 0.47 to 0.62).
 - Conclusion: some sign of people warming small rooms (office, S basement), nothing reliable. The best next steps are the solar and furnace terms from 11 and 05 for daytime, the door contact (09) as a second label for the S basement bedroom, and a longer record (the recorder is already at 60 days).
 
-Correction: the office sensor and the office air-quality sensor are one room. They are now averaged into one "Office (W+AQ)" row: night +0.06 C/h (not significant), all day +0.09 C/h*, events -0.03 C/h, AUC 0.61. The earlier table counted this room twice.
+Correction: the office sensor and the office air-quality sensor are one room. They are now averaged into one "Office (sensor+AQ)" row: night +0.06 C/h (not significant), all day +0.09 C/h*, events -0.03 C/h, AUC 0.61. The earlier table counted this room twice.
 
 ### Third run: appliance power as its own term (`scripts/occupancy.py --days 14`, to 2026-11-02)
 
@@ -60,7 +60,7 @@ The all-day fit now also includes each zone's metered plugs (z4: the office comp
 
 | Room | b all day | b with plugs | plug term (C/h per kW) |
 |---|---|---|---|
-| Office (W+AQ) | +0.083* | +0.020 | office PC +1.62* |
+| Office (sensor+AQ) | +0.083* | +0.020 | office PC +1.62* |
 | Z4 office | +0.096* | +0.054 | office PC +1.09* |
 | W bedroom | +0.051 | +0.032 | office PC +0.50* |
 | Kitchen | -0.183* | -0.160* | fridge +0.36, kitchen PCs -1.25 |

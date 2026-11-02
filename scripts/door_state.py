@@ -1,7 +1,7 @@
 """Can a door's state be read from the temperatures either side? (hypothesis 09)
 
 Ground truth is the contact sensor on the S basement bedroom door
-(``binary_sensor.s_basement_bedroom_door``). the S basement bedroom is compared with
+(``binary_sensor.s_basement_bedroom_door``). The S basement bedroom is compared with
 three nearby basement rooms (the zone 2 thermostat and the NE and SE basement
 bedrooms). In 15 minute bins, labelled open (door open for more than half the
 bin) or closed (shut the whole bin), it measures two features per partner:
@@ -37,7 +37,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from envfile import load_env
+from envfile import load_env, real_entity
 from regress_rooms import ROOMS, ZONES, _bin_means, _overlap_fraction
 
 from custom_components.house_thermal_lab.ha_history import (
@@ -51,7 +51,7 @@ from custom_components.house_thermal_lab.hvac import runs_from_states
 from custom_components.house_thermal_lab.hvac_response import merge_runs
 from custom_components.house_thermal_lab.solar import solar_elevation_degrees
 
-DOOR = "binary_sensor.s_basement_bedroom_door"
+DOOR = real_entity("binary_sensor.s_basement_bedroom_door")
 TARGET = "S basement"
 PARTNERS = ["Z2 basement", "NE basement", "SE basement"]
 MIN_PER_CLASS = 10

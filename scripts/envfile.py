@@ -55,3 +55,25 @@ def load_env(path: Path = DEFAULT_PATH) -> dict[str, str]:
     for key, value in values.items():
         os.environ.setdefault(key, value)
     return values
+
+
+def real_entity(entity_id: str) -> str:
+    """Map a placeholder entity id to the real one named in ``.env``.
+
+    The scripts use neutral room names (``sensor.n_bedroom_temperature``) so
+    the repository holds no household names. ``HA_ENTITY_ALIASES`` in the
+    git-ignored ``.env`` maps them to the real ids, as comma-separated
+    ``placeholder=real`` pairs. Ids that are not listed pass through.
+
+    Args:
+        entity_id: The id used in the scripts.
+
+    Returns:
+        The id to ask Home Assistant for.
+    """
+    load_env()
+    for pair in os.environ.get("HA_ENTITY_ALIASES", "").split(","):
+        placeholder, _, real = pair.partition("=")
+        if placeholder.strip() == entity_id and real.strip():
+            return real.strip()
+    return entity_id

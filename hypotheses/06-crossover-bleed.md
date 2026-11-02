@@ -36,7 +36,7 @@ Extended matrix (`scripts/hvac_bleed_matrix.py`, 10 days, 70 episodes of 10 minu
 | Z2 basement | -0.2 (45) | +0.6 (13) | +2.0 (6) |
 | Z3 master | +0.2 (40) | -0.2 (13) | 0.0 (5) |
 | Z4 office | +1.2 (44) | +1.5 (13) | +0.6 (6) |
-| the office sensor | +2.9 (26) | +2.1 (13) | +0.3 (5) |
+| Office sensor | +2.9 (26) | +2.1 (13) | +0.3 (5) |
 | Office air-quality | +3.5 (45) | +3.1 (13) | +0.2 (6) |
 | N bedroom | +0.2 (13) | +0.3 (3) | +0.3 (1) |
 | Upstairs bathroom | +0.3 (17) | +0.5 (2) | -0.1 (1) |

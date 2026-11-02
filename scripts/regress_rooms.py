@@ -37,7 +37,7 @@ import numpy as np
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from envfile import load_env
+from envfile import load_env, real_entity
 
 from custom_components.house_thermal_lab.ha_history import (
     fetch_home_position,
@@ -52,7 +52,7 @@ from custom_components.house_thermal_lab.solar import solar_elevation_degrees
 OUTDOOR = "sensor.edmonton_temperature"
 POWER = "sensor.eagle_00bb9c_power_demand"
 ZONES = ["z1", "z2", "z3", "z4"]
-ROOMS = {
+ROOMS = {  # placeholders map to real ids through HA_ENTITY_ALIASES in .env
     "Z1 kitchen": "sensor.z1_temperature",
     "Z2 basement": "sensor.z2_temperature",
     "Z3 master": "sensor.z3_temperature",
@@ -66,6 +66,7 @@ ROOMS = {
     "Office sensor": "sensor.multisensor_6_air_temperature",
     "Office AQ": "sensor.office_office_air_quality_temperature",
 }
+ROOMS = {name: real_entity(entity) for name, entity in ROOMS.items()}
 TERMS = ["k_out", "h_z1", "h_z2", "h_z3", "h_z4", "sun", "kW", "const"]
 
 

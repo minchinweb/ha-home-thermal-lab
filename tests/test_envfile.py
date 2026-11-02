@@ -37,3 +37,12 @@ def test_load_env_keeps_existing(tmp_path, monkeypatch):
 
 def test_missing_file_is_fine(tmp_path):
     assert envfile.load_env(tmp_path / "nope.env") == {}
+
+
+def test_real_entity_maps_placeholders(monkeypatch):
+    monkeypatch.setenv(
+        "HA_ENTITY_ALIASES", "sensor.a=sensor.real_a, sensor.b = sensor.real_b"
+    )
+    assert envfile.real_entity("sensor.a") == "sensor.real_a"
+    assert envfile.real_entity("sensor.b") == "sensor.real_b"
+    assert envfile.real_entity("sensor.c") == "sensor.c"
