@@ -73,7 +73,7 @@ WINDOWS = {
     "Z3 master": {"walls": ["S"], "roof": [("E", None), ("W", None)]},
     "W bedroom": {"walls": ["W"], "roof": []},
     "Z4 office": {"walls": ["E"], "roof": []},
-    "Z1 kitchen": {"walls": ["S", "W", "E"], "roof": [("W", 10.0)]},
+    "Z1 kitchen": {"walls": ["S", "W", "N"], "roof": [("W", 14.04)]},
     "S basement": {"walls": ["S"], "roof": []},
     "SE basement": {"walls": ["S"], "roof": []},
     "NE basement": {"walls": ["E"], "roof": []},
@@ -94,7 +94,7 @@ def main() -> None:
     p.add_argument("--days", type=int, default=14)
     p.add_argument("--bin", type=int, default=15, help="minutes")
     p.add_argument("--rotation", type=float, default=0.0, help="degrees clockwise")
-    p.add_argument("--pitch", type=float, default=25.0, help="main roof tilt, degrees")
+    p.add_argument("--pitch", type=float, default=45.0, help="main roof tilt, degrees")
     p.add_argument("--ha-url", default=os.environ.get("HA_URL"))
     args = p.parse_args()
 

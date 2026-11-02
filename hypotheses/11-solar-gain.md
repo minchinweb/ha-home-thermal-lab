@@ -76,3 +76,26 @@ Milli-C/h per W/m2 (* = beyond two standard errors):
 - Windows lose heat to a clear sky: the clear-sky term is negative for the kitchen (-125 mC/h when the sky is clear compared with overcast, significant), and negative but within noise for N bedroom, W bedroom, the office, the master and S basement. The basement rooms with windows low to the ground (SE, NE) show none. That fits the user's suggestion that windows can show a negative effect: extra radiant loss on clear nights, which is part of why the daytime terms and the air-temperature term can disagree.
 - Kitchen caution: the wall and roof terms are large and have opposite signs (S -1.78, E +1.82, west roof +5.4), which is collinearity between faces over a fortnight with the sun between 3 and 25 degrees, not independent window gains. The 10 degree roof is close to a horizontal surface, so it also picks up anything that follows the sun's height.
 - Next: a horizon (shading) profile per window as described above, a longer and sunnier dataset, a front-room sensor, and fixing the roof pitch (a photo or the plans).
+
+
+### Horizon-profile fit (`scripts/horizon_profile.py --rotation 10.4`, same 14 days; roof 12:12 = 45 degrees, kitchen roof 3:12 = 14 degrees, kitchen walls S, W and N)
+
+Each room's window light is the beam (when the sun is above that sector's horizon) plus the diffuse sky, with a stepped horizon per 30 degree sector of sun azimuth chosen by coordinate descent; roof faces are unshaded. Scored by leave-one-day-out cross-validation (the horizon is re-fit with each day held out). Clear-sun height in degrees (0 clear, 27 to 30 blocked at every height seen, `.` = under 5 sunny bins):
+
+| Room | 90-120 | 120-150 | 150-180 | 180-210 | 210-240 | 240-270 | CV RMSE, cooling law only | windows, no shading | with horizon |
+|---|---|---|---|---|---|---|---|---|---|
+| Kitchen | 0 | 15 | 27 | 18 | 0 | 0 | 1.068 | 1.025 | 0.985 |
+| Master | 6 | 21 | 0 | 18 | 18 | 6 | 0.382 | 0.368 | 0.357 |
+| S basement | 6 | 18 | 27 | 0 | 0 | . | 0.509 | 0.510 | 0.504 |
+| SE basement | 0 | 21 | 21 | 27 | 21 | . | 0.882 | 0.881 | 0.881 |
+| NE basement | 6 | 0 | 21 | 27 | 0 | . | 0.808 | 0.809 | 0.817 |
+| N bedroom | 0 | 0 | 0 | 0 | 0 | . | 0.327 | 0.331 | 0.331 |
+| W bedroom | . | 0 | 0 | 18 | 9 | . | 0.306 | 0.310 | 0.326 |
+| Office | . | 21 | 21 | 0 | 0 | 0 | 0.396 | 0.398 | 0.401 |
+
+- Only the kitchen and the master bedroom improve under cross-validation, and only by a little: the kitchen error falls 1.068 to 0.985 C/h (8%) with the horizon (4% without shading), the master 0.382 to 0.357 (7%). For every other room, adding the windows, with or without a horizon, does not predict held-out days better than the cooling law alone (W bedroom and the NE basement are worse).
+- Kitchen: the fitted horizon is blocked at 27 degrees for sun from 150 to 180 (south-south-east), 18 degrees for 180 to 210 (south), and clear for south-west and west (210 to 270). That is the shape expected with trees and a low house to the south, a clear west, and sun that only reaches 25 degrees in the period, so south light gets through only in the last weeks of low sun. It is the best-supported result.
+- Master bedroom: the south window shows 0 at 150 to 180 and 18 at 180 to 270, a pattern that varies sector to sector and is likely over-fitting; its gain comes mostly from the roof (see above).
+- Basement bedrooms (S basement, SE): blocked to 21 to 27 degrees across the south-east to south, so effectively no direct light in this period, consistent with low windows behind a house and trees to the south. NE basement is blocked towards the south and clear at the east.
+- N bedroom, W bedroom and the office have no useful window signal: the N bedroom's north window never sees direct sun; the office east window and the W bedroom's west window gain nothing beyond noise over these two weeks.
+- The shading is a step (one height per 30 degree sector), is learned from about 300 sunny bins in 14 days, and is not validated against a photo of the tree line. A photo from each window, or a sun-path tool, would give the true profile to compare with these steps.

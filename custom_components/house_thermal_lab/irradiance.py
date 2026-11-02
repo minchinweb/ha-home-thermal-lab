@@ -51,20 +51,16 @@ class Irradiance:
         )
         return self.direct_normal * max(cos_incidence, 0.0) + 0.5 * self.diffuse
 
-    def on_plane(
+    def beam_on_plane(
         self, face: str, tilt: float, azimuth: float, elevation: float
     ) -> float:
-        """Irradiance on a tilted plane (for example a pitched roof face).
+        """Beam irradiance on a tilted plane (zero when the sun is behind it).
 
         Args:
             face: Direction the plane faces: ``N``, ``E``, ``S`` or ``W``.
             tilt: Angle of the plane from horizontal, in degrees (90 is a wall).
             azimuth: Sun compass azimuth in degrees.
             elevation: Sun elevation in degrees.
-
-        Returns:
-            Beam on the plane (zero when the sun is behind it or down) plus the
-            share of diffuse light the plane sees, ``(1 + cos(tilt)) / 2``.
         """
         if elevation <= 0:
             return 0.0
@@ -72,9 +68,20 @@ class Irradiance:
         cos_incidence = math.sin(el) * math.cos(tl) + math.cos(el) * math.sin(
             tl
         ) * math.cos(math.radians(azimuth - FACES[face]))
-        return (
-            self.direct_normal * max(cos_incidence, 0.0)
-            + self.diffuse * (1 + math.cos(tl)) / 2
+        return self.direct_normal * max(cos_incidence, 0.0)
+
+    def diffuse_on_plane(self, tilt: float, elevation: float) -> float:
+        """Diffuse light a plane sees: ``(1 + cos(tilt)) / 2`` of the sky's."""
+        if elevation <= 0:
+            return 0.0
+        return self.diffuse * (1 + math.cos(math.radians(tilt))) / 2
+
+    def on_plane(
+        self, face: str, tilt: float, azimuth: float, elevation: float
+    ) -> float:
+        """Beam plus diffuse irradiance on a tilted plane (a roof face, say)."""
+        return self.beam_on_plane(face, tilt, azimuth, elevation) + (
+            self.diffuse_on_plane(tilt, elevation)
         )
 
 
