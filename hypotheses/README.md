@@ -28,6 +28,8 @@ Home Assistant, so they can be re-run later or by others.
 | [17](17-control.md) | Decide whether to run furnace/AC to avoid overshoot | D | shadow mode; sensors ready, not yet deployed |
 | [18](18-shower-heat.md) | Showers from bathroom humidity, and their heat | C | first run: showers detected; heat into the house not measurable |
 
+Findings about the house that are not hypotheses (for example, when the kitchen's east window gets sun) are in [other-findings.md](other-findings.md).
+
 ## Dependency order
 
 A (1, 2) feeds back into the wave component. B and C produce the parameters
