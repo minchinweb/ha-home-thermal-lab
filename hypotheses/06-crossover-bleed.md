@@ -27,3 +27,19 @@ First look (`scripts/hvac_bleed.py`, 10 days). A heat call in one zone also warm
 At night, with no sun, the kitchen warms about twice as fast as the zone that is calling, and at the same rate as in the day. So the kitchen's rise is bleed from z4's call, and solar gain is not needed to explain it. This is the crossover flux between zones, and it can be measured per pair of zones. Only z4-alone episodes are well covered; z2-alone has a single episode, so the other direction is still open.
 
 Regression view (same run): each room's response to a z2 call and a z4 call, in C per hour per unit of the call, with the rest held fixed. z1 and z3 never called, so they have no coefficient. Strongest responses: kitchen 1.7 (z2) and 2.1 (z4), basement bedrooms NE 1.8 and SE 1.4 (z2) with 0.7 and 1.0 (z4), the office sensor 1.1 and 1.6, the office air-quality sensor 1.6 and 2.3, Z2 basement 1.3 and 1.3. The master bedroom and the N bedroom barely respond to either (0.0-0.4), and the upstairs bathroom only a little (0.2 and 0.4), consistent with them being at the far end of the supply runs. Zone membership of the other rooms can be read off these coefficients: the NE and SE basement bedrooms respond most to z2, the office sensor and the office air-quality sensor to z4.
+
+Extended matrix (`scripts/hvac_bleed_matrix.py`, 10 days, 70 episodes of 10 minutes or more: z4 alone 50, z2 and z4 together 14, z2 alone 6; z1 and z3 never called). Median extra warming, C per hour above prior drift, skipping episodes where a room's last reading was more than 15 minutes old:
+
+| Room | z4 alone | z2 + z4 | z2 alone |
+|---|---|---|---|
+| Z1 kitchen | +2.8 (44) | +2.4 (13) | +2.1 (6) |
+| Z2 basement | -0.2 (45) | +0.6 (13) | +2.0 (6) |
+| Z3 master | +0.2 (40) | -0.2 (13) | 0.0 (5) |
+| Z4 office | +1.2 (44) | +1.5 (13) | +0.6 (6) |
+| the office sensor | +2.9 (26) | +2.1 (13) | +0.3 (5) |
+| Office air-quality | +3.5 (45) | +3.1 (13) | +0.2 (6) |
+| N bedroom | +0.2 (13) | +0.3 (3) | +0.3 (1) |
+| Upstairs bathroom | +0.3 (17) | +0.5 (2) | -0.1 (1) |
+| NE / SE basement | 0.0 / +0.1 | +5.7 / +3.8 | +11.4 / +10.6 |
+
+Episode counts are in brackets. The kitchen is warmed about as much by z2 as by z4, so it is the common sink for bleed from both. The upstairs rooms (master, N bedroom, bathroom) get almost nothing from any combination. The NE and SE basement bedrooms read 3-5 times higher than the 30-minute regression suggests for a z2 call; I suspect those sensors report in coarse steps, so treat the +4 to +11 values as unconfirmed until checked against their raw readings. Several rooms (W bedroom, S basement) have too few episodes with fresh readings to say anything.

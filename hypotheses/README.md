@@ -58,5 +58,5 @@ Which room sensors belong to which zone (from the owner, checked against the fir
 | z3 | Master bedroom (`sensor.z3_temperature`), the N bedroom, upstairs bathroom |
 | z4 | Office (`sensor.z4_temperature`), the office sensor, the office air-quality sensor, the W bedroom |
 
-the W bedroom also has its own thermostat (`climate.w_bedroom_thermostat`), separate from the four-zone board.
+the W bedroom has a thermostat (`climate.w_bedroom_thermostat`), but it is non-functional and only used as a convenient way to measure the temperature there.
 

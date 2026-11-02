@@ -70,6 +70,27 @@ def value_at(series: list[tuple[datetime, float]], when: datetime) -> float | No
     return held
 
 
+def reading_age_minutes(
+    series: list[tuple[datetime, float]], when: datetime
+) -> float | None:
+    """Return how old the reading held at ``when`` is, in minutes.
+
+    Args:
+        series: Readings, oldest first.
+        when: The time to look up (timezone-aware).
+
+    Returns:
+        Minutes since the last reading at or before ``when``, or ``None`` if
+        there was none.
+    """
+    latest = None
+    for t, _ in series:
+        if t > when:
+            break
+        latest = t
+    return None if latest is None else (when - latest).total_seconds() / 60.0
+
+
 @dataclass(frozen=True)
 class RunResponse:
     """How one room's temperature responded to one heating episode.
@@ -115,6 +136,7 @@ def analyse_responses(
     own_runs: list[Run] | None = None,
     window_minutes: float = 60.0,
     min_minutes: float = 3.0,
+    max_age_minutes: float | None = None,
 ) -> list[RunResponse]:
     """Measure a room's response to each heating episode.
 
@@ -127,6 +149,10 @@ def analyse_responses(
         own_runs: Runs where this room's own thermostat called for heat.
         window_minutes: How long after the end to look for the peak.
         min_minutes: Shortest episode to analyse.
+        max_age_minutes: Skip episodes where the reading held at the start or
+            end is older than this. Sensors that only report now and then
+            otherwise credit the whole change since their last report to the
+            episode.
 
     Returns:
         One response per usable episode.
@@ -139,6 +165,11 @@ def analyse_responses(
         limit = ep.end + timedelta(minutes=window_minutes)
         if i + 1 < len(episodes):
             limit = min(limit, episodes[i + 1].start)
+        if max_age_minutes is not None and any(
+            (age := reading_age_minutes(series, t)) is None or age > max_age_minutes
+            for t in (ep.start, ep.end)
+        ):
+            continue
         t0 = value_at(series, ep.start)
         t1 = value_at(series, ep.end)
         if t0 is None or t1 is None:

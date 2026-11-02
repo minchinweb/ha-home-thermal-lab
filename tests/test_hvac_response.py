@@ -92,3 +92,15 @@ def test_solar_elevation():
     midnight = datetime(2025, 6, 21, 7, 0, tzinfo=UTC)
     assert solar_elevation_degrees(noon, 53.5, -113.5) == pytest.approx(60.0, abs=2.0)
     assert solar_elevation_degrees(midnight, 53.5, -113.5) < -6.0
+
+
+def test_stale_readings_are_skipped():
+    from custom_components.house_thermal_lab.hvac_response import reading_age_minutes
+
+    # the room last reported 40 minutes before the run starts
+    series = [(at(0), 20.0), (at(60), 21.0)]
+    run = Run(at(40), at(55))
+    assert reading_age_minutes(series, at(40)) == 40.0
+    assert reading_age_minutes([], at(5)) is None
+    assert analyse_responses([run], series, max_age_minutes=15) == []
+    assert len(analyse_responses([run], series)) == 1
