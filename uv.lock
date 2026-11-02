@@ -387,11 +387,13 @@ source = { virtual = "." }
 analysis = [
     { name = "aiohttp" },
     { name = "matplotlib" },
+    { name = "numpy" },
 ]
 dev = [
     { name = "aiohttp" },
     { name = "invoke" },
     { name = "matplotlib" },
+    { name = "numpy" },
     { name = "pytest" },
     { name = "ruff" },
     { name = "taplo" },
@@ -404,11 +406,13 @@ dev = [
 analysis = [
     { name = "aiohttp", specifier = ">=3.10" },
     { name = "matplotlib", specifier = ">=3.9" },
+    { name = "numpy", specifier = ">=2.0" },
 ]
 dev = [
     { name = "aiohttp", specifier = ">=3.10" },
     { name = "invoke", specifier = ">=2.2" },
     { name = "matplotlib", specifier = ">=3.9" },
+    { name = "numpy", specifier = ">=2.0" },
     { name = "pytest", specifier = ">=8" },
     { name = "ruff", specifier = ">=0.14" },
     { name = "taplo", specifier = ">=0.9" },

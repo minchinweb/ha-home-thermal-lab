@@ -15,7 +15,7 @@
 
 **Zone board:** fan-only calls only take effect when no zone calls for heat or AC, and then all zones are active, so fan periods are whole-house, not per zone. See the zone-board note in 05.
 
-**The register fan:** `fan.master_bedroom_ad3958` produces no heat. It is tied to the master bedroom thermostat (z3) and is there to increase airflow into the master bedroom, which sits at the end of a very long supply run. The comparison room is the N bedroom, which has no register fan.
+**The register fan:** `fan.master_bedroom_ad3958` produces no heat. It is tied to the master bedroom thermostat (z3) and is there to increase airflow into the master bedroom, which sits at the end of a very long supply run. It is mostly for cooling, so the heating-season data below is a weak test. The comparison room is the N bedroom, which has no register fan.
 
 ## Results
 

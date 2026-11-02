@@ -18,4 +18,4 @@
 
 ## Results
 
-_none yet_
+First regression (`scripts/regress_rooms.py`, 10 days from 23 October 2026, 30-minute bins, 12 room sensors; each room's rate of temperature change against outdoor minus indoor temperature, each zone's heat call, a sun term and whole-house power). The outdoor coupling `k` (per hour, so the time constant `tau` is 1/k) came out between 0.01 and 0.06 per hour, i.e. time constants of roughly 20 to 160 hours, shortest for the kitchen (about 23 h) and the office (about 18-45 h), longest for the upstairs rooms (Z3 master 121 h, N bedroom 161 h, but not significant for N bedroom). These are weakly determined: ten days of mild weather barely moves the outdoor term and it is correlated with the other terms, so treat them as a rough scale, not a result. The fits explain 10-63% of the variance (W bedroom 0.63, Z4 office 0.61, Z2 basement 0.53; upstairs bathroom 0.10).
