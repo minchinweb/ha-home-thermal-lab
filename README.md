@@ -34,8 +34,11 @@ location. The `.github/workflows/validate.yml` workflow runs the HACS and
 
 ### From the web interface
 
-Add the integration and choose the outdoor temperature sensor. Then add the
-sensors from the integration's page, with the buttons in this order:
+Add the integration and set the house once: the outdoor temperature sensor, the
+house rotation, and its roofs typed as `S 30, W 4:12` (face, then the pitch in
+degrees or as rise:run; one roof per face). Rooms then only tick which of those
+roofs they have windows in. Then add the sensors from the integration's page,
+with the buttons in this order:
 
 1. **Add heating-call statistics**: one per zone; only a thermostat is needed.
 2. **Add furnace energy**: one for the blower and one for the gas.
@@ -48,7 +51,7 @@ sensors from the integration's page, with the buttons in this order:
      to be clear; the fewer fan-only edges lost to heating calls, the better.
    - Gas: leave the power sensor empty, set the unit to **BTU/h** and type the
      furnace input (80,000 for the high stage, about 65% of that for low).
-3. **Add shadow zone**: one per zone. Leave **a** and **c** empty and the
+3. **Add shadow zone (with sun)**: one per zone. Leave **a** and **c** empty and the
    integration fits the zone's no-heat model on the last 14 days of idle
    history (the room temperature, the outdoor sensor and the sun on its
    windows), retries every 6 hours, and shows the result in the `a`, `c`, `g`
@@ -58,10 +61,10 @@ sensors from the integration's page, with the buttons in this order:
 
 Each is a sub-entry; the pencil icon edits it and the sensor reloads on save.
 The forms take the same settings as the YAML below, with these differences:
-roofs are typed as `S 30, W 4:12` (face, then the pitch in degrees or as
-rise:run), dimmed lights as `light.office_main_lights=105` (entity and watts at
-full), and the furnace powers are one box per state, in kW or BTU/h. Change the
-outdoor sensor with **Reconfigure** on the integration. Entities from the web
+the rotation and roofs are set once on the integration instead of per room, dimmed lights as `light.office_main_lights=105` (entity and watts at
+full), and the furnace powers are one box per state, in kW or BTU/h (cooling can
+also be given in tons, 12,000 BTU/h each: heat moved, not electricity). Change the
+outdoor sensor, rotation or roofs with **Reconfigure** on the integration. Entities from the web
 and from YAML can both exist; use one or the other so they do not duplicate.
 
 ### From YAML

@@ -45,9 +45,14 @@ _CLIMATE = selector.EntitySelector(selector.EntitySelectorConfig(domain="climate
 _CLIMATES = selector.EntitySelector(
     selector.EntitySelectorConfig(domain="climate", multiple=True)
 )
-_SENSOR = selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor"))
-_SENSORS = selector.EntitySelector(
-    selector.EntitySelectorConfig(domain="sensor", multiple=True)
+_TEMPERATURE = selector.EntitySelector(
+    selector.EntitySelectorConfig(domain="sensor", device_class="temperature")
+)
+_POWER = selector.EntitySelector(
+    selector.EntitySelectorConfig(domain="sensor", device_class="power")
+)
+_POWERS = selector.EntitySelector(
+    selector.EntitySelectorConfig(domain="sensor", device_class="power", multiple=True)
 )
 _UNITS = selector.SelectSelector(
     selector.SelectSelectorConfig(
@@ -63,33 +68,71 @@ _FACES = selector.SelectSelector(
 )
 
 
-def _sun_fields() -> dict:
-    """Window, roof and shading fields shared by zones and contributions."""
-    return {
-        vol.Optional("walls"): _FACES,
-        vol.Optional("roofs"): _TEXT,
-        vol.Optional("rotation"): _NUMBER,
-        vol.Optional("shade_below"): _NUMBER,
-    }
+def _sun_fields(roof_faces: list[str]) -> dict:
+    """Window, roof and shading fields shared by zones and contributions.
+
+    The house rotation and the roofs themselves are set once on the integration;
+    a room only says which of those roofs it has windows in.
+    """
+    fields: dict = {vol.Optional("walls"): _FACES}
+    if roof_faces:
+        fields[vol.Optional("roofs")] = selector.SelectSelector(
+            selector.SelectSelectorConfig(
+                options=roof_faces,
+                multiple=True,
+                mode=selector.SelectSelectorMode.LIST,
+            )
+        )
+    fields[vol.Optional("shade_below")] = _NUMBER
+    return fields
 
 
-def _zone_schema() -> vol.Schema:
+def _house_schema() -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Optional("outdoor_entity"): _TEMPERATURE,
+            vol.Optional("rotation"): _NUMBER,
+            vol.Optional("shade_below"): _NUMBER,
+            vol.Optional("roofs"): _TEXT,
+        }
+    )
+
+
+def _house_from_form(form: dict) -> dict:
+    data = {}
+    if form.get("outdoor_entity"):
+        data["outdoor_entity"] = form["outdoor_entity"]
+    data.update(_clean(form, ("rotation", "shade_below")))
+    if form.get("roofs"):
+        data["roofs"] = parse_roofs(form["roofs"])
+    return data
+
+
+def _house_to_form(data: dict) -> dict:
+    keys = ("outdoor_entity", "rotation", "shade_below")
+    out = {k: data[k] for k in keys if k in data}
+    if data.get("roofs"):
+        out["roofs"] = format_roofs(data["roofs"])
+    return out
+
+
+def _zone_schema(roof_faces: list[str]) -> vol.Schema:
     return vol.Schema(
         {
             vol.Required("name"): _TEXT,
             vol.Required("climate_entity"): _CLIMATE,
-            vol.Optional("room_entity"): _SENSOR,
+            vol.Optional("room_entity"): _TEMPERATURE,
             vol.Optional("a"): _NUMBER,
             vol.Optional("c"): _NUMBER,
             vol.Optional("g"): _NUMBER,
             vol.Optional("tolerance"): _NUMBER,
             vol.Optional("max_dip"): _NUMBER,
-            **_sun_fields(),
+            **_sun_fields(roof_faces),
         }
     )
 
 
-def _call_stats_schema() -> vol.Schema:
+def _call_stats_schema(_roof_faces: list[str]) -> vol.Schema:
     return vol.Schema(
         {
             vol.Required("name"): _TEXT,
@@ -100,27 +143,28 @@ def _call_stats_schema() -> vol.Schema:
     )
 
 
-def _energy_schema() -> vol.Schema:
+def _energy_schema(_roof_faces: list[str]) -> vol.Schema:
     return vol.Schema(
         {
             vol.Required("name"): _TEXT,
             vol.Required("climate_entities"): _CLIMATES,
-            vol.Optional("power_entity"): _SENSOR,
+            vol.Optional("power_entity"): _POWER,
             vol.Optional("learn_days"): _NUMBER,
             vol.Optional("power_unit", default="kW"): _UNITS,
             **{vol.Optional(mode): _NUMBER for mode in KW_MODES},
+            vol.Optional("cool_tons"): _NUMBER,
         }
     )
 
 
-def _contribution_schema() -> vol.Schema:
+def _contribution_schema(roof_faces: list[str]) -> vol.Schema:
     return vol.Schema(
         {
             vol.Required("name"): _TEXT,
             vol.Required("climate_entity"): _CLIMATE,
-            vol.Optional("room_entity"): _SENSOR,
+            vol.Optional("room_entity"): _TEMPERATURE,
             vol.Optional("other_climate_entities"): _CLIMATES,
-            vol.Optional("plug_entities"): _SENSORS,
+            vol.Optional("plug_entities"): _POWERS,
             vol.Optional("lights"): _TEXT,
             vol.Required("a"): _NUMBER,
             vol.Required("c"): _NUMBER,
@@ -131,7 +175,7 @@ def _contribution_schema() -> vol.Schema:
             vol.Optional("hours_back"): _NUMBER,
             vol.Optional("hours_ahead"): _NUMBER,
             vol.Optional("deadband"): _NUMBER,
-            **_sun_fields(),
+            **_sun_fields(roof_faces),
         }
     )
 
@@ -142,18 +186,19 @@ def _clean(form: dict, keys: tuple[str, ...]) -> dict:
 
 
 def _sun_from_form(form: dict) -> dict:
-    out = _clean(form, ("rotation", "shade_below"))
+    out = _clean(form, ("shade_below",))
     if form.get("walls"):
         out["walls"] = list(form["walls"])
     if form.get("roofs"):
-        out["roofs"] = parse_roofs(form["roofs"])
+        out["roofs"] = list(form["roofs"])
     return out
 
 
 def _sun_to_form(data: dict) -> dict:
-    out = {k: data[k] for k in ("walls", "rotation", "shade_below") if k in data}
-    if data.get("roofs"):
-        out["roofs"] = format_roofs(data["roofs"])
+    out = {k: data[k] for k in ("walls", "shade_below") if k in data}
+    faces = [r for r in data.get("roofs", []) if isinstance(r, str)]
+    if faces:
+        out["roofs"] = faces
     return out
 
 
@@ -174,7 +219,8 @@ def _zone_from_form(form: dict) -> dict:
 
 
 def _zone_to_form(data: dict) -> dict:
-    flat = {k: v for k, v in data.items() if k != "model"}
+    skip = ("model", "roofs", "rotation")
+    flat = {k: v for k, v in data.items() if k not in skip}
     return {**flat, **data.get("model", {}), **_sun_to_form(data)}
 
 
@@ -227,7 +273,7 @@ def _contribution_from_form(form: dict) -> dict:
 
 
 def _contribution_to_form(data: dict) -> dict:
-    skip = {"terms", "lights", "roofs"}
+    skip = {"terms", "lights", "roofs", "rotation"}
     flat = {k: v for k, v in data.items() if k not in skip}
     out = {**flat, **data.get("terms", {}), **_sun_to_form(data)}
     if data.get("lights"):
@@ -252,6 +298,15 @@ _KINDS = {
 }
 
 
+# the name suggested on the form for each kind
+_NAMES = {
+    ZONE: "Zone with sun",
+    CALL_STATS: "Heating calls",
+    ENERGY: "Furnace blower energy",
+    CONTRIBUTION: "Contributions",
+}
+
+
 class HomeThermalLabConfigFlow(ConfigFlow, domain=DOMAIN):
     """Create the single integration entry, with the outdoor temperature sensor."""
 
@@ -273,26 +328,36 @@ class HomeThermalLabConfigFlow(ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Ask for the outdoor temperature sensor."""
-        if user_input is not None:
-            return self.async_create_entry(title="Home Thermal Lab", data=user_input)
-        return self.async_show_form(
-            step_id="user",
-            data_schema=vol.Schema({vol.Optional("outdoor_entity"): _SENSOR}),
-        )
+        """Ask for the outdoor sensor and the house's rotation and roofs."""
+        return await self._house("user", user_input, {})
 
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
-        """Change the outdoor temperature sensor."""
+        """Change the outdoor sensor, rotation or roofs."""
         entry = self._get_reconfigure_entry()
+        return await self._house("reconfigure", user_input, _house_to_form(entry.data))
+
+    async def _house(
+        self, step_id: str, user_input: dict[str, Any] | None, current: dict
+    ) -> ConfigFlowResult:
+        errors: dict[str, str] = {}
         if user_input is not None:
-            return self.async_update_reload_and_abort(entry, data=user_input)
+            try:
+                data = _house_from_form(user_input)
+            except FieldError as err:
+                errors[err.field] = f"invalid_{err.field}"
+            else:
+                if step_id == "reconfigure":
+                    return self.async_update_reload_and_abort(
+                        self._get_reconfigure_entry(), data=data
+                    )
+                return self.async_create_entry(title="Home Thermal Lab", data=data)
+            current = user_input
         return self.async_show_form(
-            step_id="reconfigure",
-            data_schema=self.add_suggested_values_to_schema(
-                vol.Schema({vol.Optional("outdoor_entity"): _SENSOR}), entry.data
-            ),
+            step_id=step_id,
+            data_schema=self.add_suggested_values_to_schema(_house_schema(), current),
+            errors=errors,
         )
 
 
@@ -305,7 +370,7 @@ class _SensorSubentryFlow(ConfigSubentryFlow):
         self, user_input: dict[str, Any] | None = None
     ) -> SubentryFlowResult:
         """Add a sensor."""
-        return await self._step("user", user_input, {})
+        return await self._step("user", user_input, {"name": _NAMES[self.kind]})
 
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
@@ -320,7 +385,8 @@ class _SensorSubentryFlow(ConfigSubentryFlow):
         self, step_id: str, user_input: dict[str, Any] | None, current: dict
     ) -> SubentryFlowResult:
         schema_for, from_form, _ = _KINDS[self.kind]
-        schema = schema_for()
+        faces = [face for face, _pitch in self._get_entry().data.get("roofs", [])]
+        schema = schema_for(list(dict.fromkeys(faces)))
         errors: dict[str, str] = {}
         if user_input is not None:
             try:
