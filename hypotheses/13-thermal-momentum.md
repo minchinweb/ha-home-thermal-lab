@@ -47,3 +47,22 @@ From the thermostat's own reading (about 0.06 C steps), per call; overshoot, dip
 - Lag: heat reaches the z4 thermostat about 6 to 12 minutes after a call starts, and the median z4 low-stage call lasts only 9 minutes. 17 of 114 z4 calls ended before the reading moved at all. Most short calls stop just as the warm air arrives, and the room keeps rising about 0.2 C after the furnace stops. z2's thermostat responds in 3 minutes.
 - After a call: the overshoot (+0.2 to +0.45 C) comes first, then the reading falls back below the end value (-0.1 to -0.2 C) within 30 to 50 minutes. A rebound as surfaces give heat back is not visible at the thermostat's 0.06 C resolution (median 0 to +0.1 C). The dip may be ordinary cooling rather than the loss of forced warm air; separating them needs the room sensors at finer resolution or longer gaps between calls.
 - For control (17): the 6 to 12 minute lag plus about 0.2 C of overshoot is the momentum to anticipate. A controller that stops calls about 0.2 C early would land near the setpoint.
+
+### Effective heat capacity from the measured airflow (`scripts/room_capacity.py --days 15`, 18 October to 2 November 2026)
+
+Room sizes and supply airflow are now in `scripts/room_geometry.py`, from the owner's balancing check (see 06). A zone call brings a room `airflow x air heat x supply rise` watts. Dividing that by how fast the room warms during the call (the bleed or own-call rate, fitted over all bins with the window light as terms) gives the room's effective heat capacity. The supply rise (supply air minus room air, at the register) is not measured. The table uses 25 K, and the capacity scales with it (35 K gives 40% more).
+
+| Room | Air volume m3 | Air alone kJ/K | Warming C/h per call (cfm) | Effective capacity MJ/K | Times the air |
+|---|---|---|---|---|---|
+| Kitchen | 84.6 | 102 | z2 +1.92 (349), z4 +2.58 (330) | 7.9 | 78 |
+| Z4 office (main office) | 24.5 | 30 | z4 +1.65 (107) | 3.3 | 112 |
+| W bedroom | 21.5 | 26 | z4 +1.07 (119) | 5.7 | 220 |
+| S basement | 20.3 | 25 | z2 +1.30 (127) | 5.0 | 204 |
+| SE basement | 11.8 | 14 | z2 +2.27 (142) | 3.2 | 225 |
+| NE basement | 13.6 | 16 | z2 +2.32 (137) | 3.0 | 184 |
+
+- Each room acts like 80 to 230 times its air (the office 112, using its thermostat's reading). The rest is drywall, furniture and floors, plus the air that moves on to the rooms next door. Per cubic metre the kitchen is the lightest (93 kJ/K per m3 against about 250 for the bedrooms), probably because its heat spreads into the open entranceway and front room, and its high sloped ceiling holds air with little wall around it.
+- The two kitchen values differ (10.7 MJ/K from z2, 7.5 from z4), so the 25% agreement is the precision of the method, given the unmeasured supply rise and the single airflow test.
+- The master, N bedroom and upstairs bathroom get under 50 cfm from z2 and z4, and z3 never called, so they have no value yet.
+- The basement bedrooms warm 0.6 to 0.9 C/h during z4 calls with no z4 air reaching them (see 06 and 11).
+- With these capacities the window gains in 11 convert to apertures in m2.

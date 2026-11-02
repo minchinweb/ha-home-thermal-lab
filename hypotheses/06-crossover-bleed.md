@@ -43,3 +43,28 @@ Extended matrix (`scripts/hvac_bleed_matrix.py`, 10 days, 70 episodes of 10 minu
 | NE / SE basement | 0.0 / +0.1 | +5.7 / +3.8 | +11.4 / +10.6 |
 
 Episode counts are in brackets. The kitchen is warmed about as much by z2 as by z4, so it is the common sink for bleed from both. The upstairs rooms (master, N bedroom, bathroom) get almost nothing from any combination. The NE and SE basement bedrooms read 3-5 times higher than the 30-minute regression suggests for a z2 call; The owner confirms that the basement bedrooms heat very quickly (the NE bedroom is about 2 feet from the furnace), so these large values are probably real and not a sensor artefact. Several rooms (W bedroom, S basement) have too few episodes with fresh readings to say anything.
+
+### Airflow measurements (owner's balancing check, December 2025)
+
+Air speed was measured at every supply register with one zone calling at a time, before the registers were rebalanced on 23 December 2025. Flow is speed times register area. The furnace moves about 1,575 cfm. The kitchen has a different kind of zone damper from the others, and it does not close as tightly. A bypass returns air to the supply side when the pressure is too high.
+
+Flow into each room, in cfm, by the zone calling (rooms by the names used in this repo):
+
+| Room (zone) | Z1 only | Z2 only | Z3 only | Z4 only | Z2 after rebalancing |
+|---|---|---|---|---|---|
+| Kitchen + dining, 5 registers (Z1) | 485 | 427 | 388 | 330 | 349 |
+| NE basement (Z2) | 0 | 153 | 0 | 0 | 137 |
+| SE basement (Z2) | 0 | 16 | 0 | 0 | 142 |
+| S basement (Z2) | 4 | 82 | 4 | 0 | 127 |
+| Basement family room (Z2) | 0 | 38 | 0 | 0 | 126 |
+| Laundry (Z2) | 0 | 0 | 0 | 0 | 376 |
+| Entranceway, front room, two offices, W bedroom, main bathroom (Z4) | 47 | 52 | 20 | 705 | |
+| N bedroom, master, upstairs bathroom (Z3) | 33 | 24 | 474 | 14 | |
+| Total measured | 565 | 797 | 887 | 1,049 | 1,257 |
+| Lost to the bypass and leaks | 64% | 49% | 44% | 33% | 20% |
+
+- The kitchen gets 68 to 88% of its own-call flow whichever zone calls. Every other room gets 0 to 5% of its flow when its zone is not calling. In practice the kitchen is unzoned, and its thermostat has little say over it. This is the mechanism behind the kitchen's bleed above.
+- Before rebalancing, a z2 call sent more air to the kitchen (427 cfm) than to the whole basement (289). After it, z2 and z4 calls send the kitchen about the same (349 and 330). The fitted bleed now agrees: kitchen +1.9 C/h for a z2 call and +2.1 for z4 (`scripts/horizon_profile.py`, 15 days to 2 November 2026; see 11).
+- Air changes per hour on a room's own call: NE and SE basement 17 to 20, which is why they heat so fast. The master bedroom gets only 4.5, the fewest in the house, and is the coolest room.
+- Over a day the kitchen's air is replaced about as often as the Z4 rooms' air. On 2 November 2026 (Z4 calling 3.8 h, Z2 1.3 h) both came to about 36 room volumes. Z4's calls end when its thermostat reaches the setpoint, and the kitchen gets the same air with no thermostat of its own to stop it. The kitchen ends up about 3 C warmer than the Z4 thermostat and 1 C warmer than the other two sensors in the same office (lux and presence, air quality). The thermostat reads about 2 C below those two, so where it sits in the office matters, and which of the three is the room temperature is not known. The kitchen's last degree over the office is its own heat: the fridge, cooking and the sun on the patio door.
+- A small zone calling alone loses the most air to the bypass and leaks (64% for Z1, 33% for Z4).
