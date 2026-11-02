@@ -71,6 +71,7 @@ from .hvac import HIGH, runs_from_states, stage_runs
 from .hvac_response import merge_runs
 from .irradiance import fetch_irradiance, light_on_surfaces
 from .learn import bin_fraction, bin_held, blower_kw, edge_steps, fit_no_heat
+from .options import resolve_sun
 from .power import power_series
 from .shadow import ZoneModel, decide
 from .solar import solar_azimuth_degrees, solar_elevation_degrees
@@ -318,18 +319,19 @@ async def async_setup_entry(hass, entry, async_add_entities):
     """Create one sensor per sub-entry of the config entry."""
     forecast_cache = _Forecast(hass)
     outdoor = entry.data.get("outdoor_entity")
+    house = dict(entry.data)
     for subentry in entry.subentries.values():
         kind = subentry.subentry_type
         try:
             if kind == ZONE:
-                item = ZONE_SCHEMA(dict(subentry.data))
+                item = ZONE_SCHEMA(resolve_sun(dict(subentry.data), house))
                 entity = ShadowSensor(hass, forecast_cache, outdoor, item)
             elif kind == CALL_STATS:
                 entity = CallStatsSensor(hass, CALL_SCHEMA(dict(subentry.data)))
             elif kind == ENERGY:
                 entity = FurnaceEnergySensor(hass, ENERGY_SCHEMA(dict(subentry.data)))
             elif kind == CONTRIBUTION:
-                item = CONTRIBUTION_SCHEMA(dict(subentry.data))
+                item = CONTRIBUTION_SCHEMA(resolve_sun(dict(subentry.data), house))
                 entity = ContributionSensor(hass, forecast_cache, outdoor, item)
             else:
                 continue

@@ -9,6 +9,7 @@ from custom_components.home_thermal_lab.options import (
     kw_table,
     parse_lights,
     parse_roofs,
+    resolve_sun,
 )
 
 
@@ -61,6 +62,28 @@ def test_roof_ratio_rejects_bad_parts(text):
         parse_roofs(text)
 
 
+def test_kw_table_converts_tons():
+    table = kw_table({"cool": 9, "cool_tons": 3})
+    assert table == {"cool": pytest.approx(10.55052)}
+
+
 def test_kw_table_converts_btu():
     table = kw_table({"heat_high": 80000, "fan": ""}, "BTU/h")
     assert table == {"heat_high": pytest.approx(23.4456)}
+
+
+def test_resolve_sun_applies_house_settings():
+    house = {"rotation": 10.4, "shade_below": 18, "roofs": [["S", 30.0], ["W", 20.0]]}
+    out = resolve_sun({"walls": ["E"], "roofs": ["W", "N"]}, house)
+    assert out["roofs"] == [["W", 20.0]]
+    assert out["rotation"] == 10.4
+    assert out["shade_below"] == 18
+    assert out["walls"] == ["E"]
+
+
+def test_resolve_sun_room_shade_wins_and_old_data_works():
+    house = {"rotation": 5.0, "shade_below": 18}
+    out = resolve_sun({"shade_below": 10, "roofs": [["S", 30.0]]}, house)
+    assert out["shade_below"] == 10
+    assert out["roofs"] == [["S", 30.0]]
+    assert resolve_sun({}, {}) == {"roofs": []}
