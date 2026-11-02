@@ -3,7 +3,7 @@ Changelog
 
 .. release:: unreleased
 
-  - :feature:`-` Next-day room temperature backtest against persistence, yesterday and profile baselines (hypothesis 16).
+  - :feature:`-` Next-day room temperature backtest against persistence, yesterday and profile baselines, with outdoor and sun terms (hypothesis 16).
   - :feature:`-` Horizon-profile (shading) fit per room with leave-one-day-out validation.
   - :feature:`-` Per-room window and roof solar model with clear-sky term, tilted-plane irradiance and house rotation from OpenStreetMap.
   - :feature:`-` Irradiance loader, sun azimuth and solar-gain test by window face (hypothesis 11).

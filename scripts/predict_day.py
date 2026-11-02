@@ -1,24 +1,32 @@
 """Predict each room's temperature for the coming day (hypothesis 16).
 
 A rolling-origin backtest. At local midnight of every test day, using only data
-from before that moment, five predictors forecast the 24 hourly room
-temperatures of the day ahead:
+from before that moment, predictors forecast the 24 hourly room temperatures of
+the day ahead:
 
 * **A persistence**: the last hour's temperature, held.
 * **B yesterday**: the same hours as the day before.
 * **C profile**: the mean of the previous 7 days at each hour.
 * **D profile + offset**: C plus the gap between now and the profile at midnight,
   decaying with a time constant tau fitted per room on earlier days.
-* **E profile + offset + outdoor**: D plus a term for the outdoor temperature
-  that day compared with the profile's outdoor temperature (a running sum, since
-  a room responds to the accumulated difference). The outdoor temperature used
-  is the *measured* one, as if the forecast were perfect, so E shows the most that
-  weather information can add; a real forecast would do a little worse.
+* **E + outdoor**: D plus a term for the accumulated difference between that
+  day's outdoor temperature and the profile's.
+* **F + sun**: E plus the accumulated difference in sunlight on the room's
+  windows and roof faces (see ``scripts/solar_windows.py`` for the layout; rooms
+  without a layout get no sun term). Light is unshaded.
+* **G + shaded sun**: F with a fixed tree-and-house horizon: beam light is cut
+  when the sun is below ``--horizon`` degrees and between 120 and 210 degrees of
+  azimuth (the south-east to south block found in ``scripts/horizon_profile.py``).
+
+Outdoor temperature and sunlight are the *measured* values, as if the forecast
+were perfect, so E to G show the most weather information can add; a real
+forecast would do a little worse. The thermostat setpoint is deliberately not an
+input: it is what this prediction is meant to produce (hypothesis 17).
 
 Each score is the RMSE in C over the 24 hours, averaged over test days. the owner's
 office and the office air-quality sensor are one room. The first test day is
-the 10th day of data, and tau and the outdoor coefficient are fit on all earlier
-days only.
+the 10th day of data, and tau and the coefficients are fit on all earlier days
+only.
 
 Usage::
 
@@ -43,12 +51,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from envfile import load_env
 from regress_rooms import OUTDOOR, ROOMS, _bin_means
+from solar_windows import WINDOWS
 
 from custom_components.house_thermal_lab.ha_history import (
+    fetch_home_position,
     fetch_time_zone,
 )
 from custom_components.house_thermal_lab.ha_statistics import (
     fetch_statistics_from_url,
+)
+from custom_components.house_thermal_lab.irradiance import fetch_irradiance
+from custom_components.house_thermal_lab.solar import (
+    solar_azimuth_degrees,
+    solar_elevation_degrees,
 )
 
 TRAIL = 7
@@ -57,11 +72,16 @@ MIN_TRAIN = 3
 TAUS = [2.0, 4.0, 8.0, 16.0, 32.0, 64.0]
 SAME_ROOM = ("Office sensor", "Office AQ")
 HOURS = np.arange(24)
-METHODS = ["A persist", "B yesterday", "C profile", "D +offset", "E +outdoor"]
-
-
-def _hourly(series_fn, days: int) -> np.ndarray:
-    return series_fn().reshape(days, 24)
+METHODS = [
+    "A persist",
+    "B yesterday",
+    "C profile",
+    "D +offset",
+    "E +outdoor",
+    "F +sun",
+    "G +shaded",
+]
+SUN_ROOM = {"Office": "Z4 office"}  # merged series -> WINDOWS key
 
 
 def _trailing(values: np.ndarray, d: int, lag: int = 0) -> np.ndarray:
@@ -76,36 +96,78 @@ def _trailing(values: np.ndarray, d: int, lag: int = 0) -> np.ndarray:
         )
 
 
-def _features(room: np.ndarray, out: np.ndarray, d: int):
-    """Everything known at midnight of day ``d`` plus the outdoor day itself."""
+def _day_inputs(room: np.ndarray, extras: list[np.ndarray], d: int):
+    """What is known at midnight of day ``d`` (and the weather of day ``d``)."""
     profile = _trailing(room, d)
     start = room[d - 1, 23]
     base_start = _trailing(room[:, 23:24], d, lag=1)[0]
-    out_profile = _trailing(out, d)
-    cum_out = np.cumsum(out[d] - out_profile)
-    return profile, start, base_start, cum_out
+    cums = [np.cumsum(x[d] - _trailing(x, d)) for x in extras]
+    return profile, start, base_start, cums
 
 
-def _fit(room, out, days, tau, with_outdoor):
-    """Least-squares outdoor coefficient on the given training days."""
-    num = den = 0.0
+def _fit(room, extras, days, tau):
+    """Least-squares coefficients for the extras on the given days; and the SSE."""
+    rows, targets = [], []
     for j in days:
-        profile, start, base_start, cum_out = _features(room, out, j)
+        profile, start, base_start, cums = _day_inputs(room, extras, j)
         target = room[j] - profile - (start - base_start) * np.exp(-HOURS / tau)
-        ok = ~np.isnan(target) & ~np.isnan(cum_out)
+        ok = ~np.isnan(target)
+        for c in cums:
+            ok &= ~np.isnan(c)
         if not ok.any():
             continue
-        if with_outdoor:
-            num += float(np.sum(target[ok] * cum_out[ok]))
-            den += float(np.sum(cum_out[ok] ** 2))
-    k = num / den if (with_outdoor and den > 0) else 0.0
-    sse = 0.0
-    for j in days:
-        profile, start, base_start, cum_out = _features(room, out, j)
-        pred = profile + (start - base_start) * np.exp(-HOURS / tau) + k * cum_out
-        err = room[j] - pred
-        sse += float(np.nansum(err**2))
-    return k, sse
+        targets.append(target[ok])
+        rows.append(np.column_stack([c[ok] for c in cums]) if cums else None)
+    if not targets:
+        return np.zeros(len(extras)), np.inf
+    y = np.concatenate(targets)
+    if extras:
+        x = np.vstack(rows)
+        k, *_ = np.linalg.lstsq(x, y, rcond=None)
+        resid = y - x @ k
+    else:
+        k, resid = np.zeros(0), y
+    return k, float(np.sum(resid**2))
+
+
+def _predict(room, extras, d, tau, k):
+    profile, start, base_start, cums = _day_inputs(room, extras, d)
+    pred = profile + (start - base_start) * np.exp(-HOURS / tau)
+    for coef, c in zip(k, cums, strict=True):
+        pred = pred + coef * np.nan_to_num(c)
+    return pred
+
+
+def _best(room, extras, train):
+    """Pick tau on the training days; return (tau, coefficients)."""
+    tau = min(TAUS, key=lambda t: _fit(room, extras, train, t)[1])
+    return tau, _fit(room, extras, train, tau)[0]
+
+
+def _room_light(spec, held, azimuth, elevation, rotation, pitch, block):
+    """Hourly light on a room's windows and roof faces (W/m2, summed).
+
+    ``block`` is None for unshaded, else a function (azimuth, elevation) that
+    says whether the beam is blocked.
+    """
+    total = np.zeros(len(held))
+    for i, h in enumerate(held):
+        if h is None:
+            total[i] = np.nan
+            continue
+        rel = azimuth[i] - rotation
+        shaded = block is not None and block(azimuth[i], elevation[i])
+        scale = 0.0 if shaded else 1.0
+        for face in spec["walls"]:
+            total[i] += scale * h.beam_on_plane(
+                face, 90.0, rel, elevation[i]
+            ) + h.diffuse_on_plane(90.0, elevation[i])
+        for face, tilt in spec["roof"]:
+            tilt = pitch if tilt is None else tilt
+            total[i] += scale * h.beam_on_plane(
+                face, tilt, rel, elevation[i]
+            ) + h.diffuse_on_plane(tilt, elevation[i])
+    return total
 
 
 def main() -> None:
@@ -113,13 +175,16 @@ def main() -> None:
     load_env()
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--days", type=int, default=40)
+    p.add_argument("--rotation", type=float, default=10.4)
+    p.add_argument("--pitch", type=float, default=45.0)
+    p.add_argument("--horizon", type=float, default=18.0, help="degrees")
     p.add_argument("--ha-url", default=os.environ.get("HA_URL"))
     args = p.parse_args()
 
     token = os.environ["HA_TOKEN"]
     tz = ZoneInfo(fetch_time_zone(args.ha_url, token))
-    now_local = datetime.now(tz)
-    midnight = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+    lat, lon = fetch_home_position(args.ha_url, token)
+    midnight = datetime.now(tz).replace(hour=0, minute=0, second=0, microsecond=0)
     start = (midnight - timedelta(days=args.days)).astimezone(UTC)
     end = midnight.astimezone(UTC)
     width = timedelta(hours=1)
@@ -135,95 +200,108 @@ def main() -> None:
             period="hour",
         )
     )
-    out = _hourly(
-        lambda: _bin_means(stats.get(OUTDOOR, []), start, bins, width), args.days
-    )
-    rooms = {
-        name: _hourly(
-            lambda e=e: _bin_means(stats.get(e, []), start, bins, width), args.days
-        )
-        for name, e in ROOMS.items()
-    }
+
+    def hourly(entity: str) -> np.ndarray:
+        series = _bin_means(stats.get(entity, []), start, bins, width)
+        return series.reshape(args.days, 24)
+
+    out = hourly(OUTDOOR)
+    rooms = {name: hourly(e) for name, e in ROOMS.items()}
     pair = np.stack([rooms.pop(n) for n in SAME_ROOM])
     count = (~np.isnan(pair)).sum(axis=0)
     rooms["Office"] = np.where(
         count > 0, np.nansum(pair, axis=0) / np.maximum(count, 1), np.nan
     )
 
+    by_end = {r.time: r for r in fetch_irradiance(lat, lon, args.days + 2)}
+    mids = [start + (i + 0.5) * width for i in range(bins)]
+    elevation = np.array([solar_elevation_degrees(m, lat, lon) for m in mids])
+    azimuth = np.array([solar_azimuth_degrees(m, lat, lon) for m in mids])
+    held = [
+        by_end.get(m.replace(minute=0, second=0, microsecond=0) + width) for m in mids
+    ]
+
+    def block(az: float, el: float) -> bool:
+        return 120.0 <= az < 210.0 and el < args.horizon
+
+    light = {}
+    for name in rooms:
+        spec = WINDOWS.get(SUN_ROOM.get(name, name))
+        if spec is None:
+            continue
+        args_light = (held, azimuth, elevation, args.rotation, args.pitch)
+        light[name] = (
+            _room_light(spec, *args_light, None).reshape(args.days, 24),
+            _room_light(spec, *args_light, block).reshape(args.days, 24),
+        )
+
     print(
         f"{args.days} local days to {midnight:%Y-%m-%d} ({tz.key}); test days "
-        f"{FIRST_TEST} to {args.days - 1}; outdoor measured, standing in for a "
+        f"{FIRST_TEST} to {args.days - 1}; weather measured, standing in for a "
         "perfect forecast\n"
     )
-    print(
-        f"{'room':<14}{'days':>5}"
-        + "".join(f"{m:>13}" for m in METHODS)
-        + "   tau h   k"
-    )
+    print(f"{'room':<14}{'days':>5}" + "".join(f"{m:>12}" for m in METHODS))
     totals = {m: [] for m in METHODS}
-    horizon = {m: ([], []) for m in METHODS}
+    lead = {m: ([], []) for m in METHODS}
     for name, room in rooms.items():
-        if (~np.isnan(room).all(axis=1)).sum() < 18:
-            have = int((~np.isnan(room).all(axis=1)).sum())
+        have = int((~np.isnan(room).all(axis=1)).sum())
+        if have < 18:
             print(f"{name:<14}  too little data ({have} of {args.days} days)")
             continue
         scores = {m: [] for m in METHODS}
-        taus, ks = [], []
+        has_sun = name in light
         for d in range(FIRST_TEST, args.days):
             if np.isnan(room[d]).all() or np.isnan(room[d - 1, 23]):
                 continue
             train = [j for j in range(TRAIL, d) if not np.isnan(room[j]).all()]
-            profile, start_t, base_start, cum_out = _features(room, out, d)
+            profile, start_t, base_start, _ = _day_inputs(room, [], d)
             if np.isnan(profile).any() or np.isnan(base_start):
                 continue
+            if len(train) < MIN_TRAIN:
+                continue
+            feats = {
+                "D +offset": [],
+                "E +outdoor": [out],
+                "F +sun": [out, light[name][0]] if has_sun else [out],
+                "G +shaded": [out, light[name][1]] if has_sun else [out],
+            }
             preds = {
                 "A persist": np.full(24, start_t),
                 "B yesterday": room[d - 1],
                 "C profile": profile,
             }
-            if len(train) >= MIN_TRAIN:
-                best_d = min(TAUS, key=lambda t: _fit(room, out, train, t, False)[1])
-                preds["D +offset"] = profile + (start_t - base_start) * np.exp(
-                    -HOURS / best_d
-                )
-                best_e = min(TAUS, key=lambda t: _fit(room, out, train, t, True)[1])
-                k, _ = _fit(room, out, train, best_e, True)
-                preds["E +outdoor"] = (
-                    profile
-                    + (start_t - base_start) * np.exp(-HOURS / best_e)
-                    + k * np.nan_to_num(cum_out)
-                )
-                taus.append(best_e)
-                ks.append(k)
-            else:
+            for m, extras in feats.items():
+                tau, k = _best(room, extras, train)
+                preds[m] = _predict(room, extras, d, tau, k)
+            if any(np.isnan(v).any() for v in preds.values()):
                 continue
             for m, pred in preds.items():
                 err = room[d] - pred
-                if np.isnan(err).all() or np.isnan(pred).any():
-                    break
+                if np.isnan(err).all():
+                    continue
                 scores[m].append(np.sqrt(np.nanmean(err**2)))
-                horizon[m][0].append(np.sqrt(np.nanmean(err[:6] ** 2)))
-                horizon[m][1].append(np.sqrt(np.nanmean(err[6:] ** 2)))
+                lead[m][0].append(np.sqrt(np.nanmean(err[:6] ** 2)))
+                lead[m][1].append(np.sqrt(np.nanmean(err[6:] ** 2)))
         n = len(scores["E +outdoor"])
         if n == 0:
             print(f"{name:<14}  no usable test days")
             continue
         row = f"{name:<14}{n:>5}"
         for m in METHODS:
-            v = float(np.mean(scores[m][:n])) if scores[m] else float("nan")
+            v = float(np.mean(scores[m][:n]))
             totals[m].append(v)
-            row += f"{v:>13.2f}"
-        row += f"{np.median(taus):>8.0f}{np.median(ks):>8.3f}"
+            row += f"{v:>12.2f}"
+        row += "" if has_sun else "   (no window layout: F, G = E)"
         print(row)
     print(
         f"{'mean of rooms':<19}"
-        + "".join(f"{np.nanmean(totals[m]):>13.2f}" for m in METHODS)
+        + "".join(f"{np.nanmean(totals[m]):>12.3f}" for m in METHODS)
     )
-    print("\nmean RMSE by lead time:           " + "".join(f"{m:>13}" for m in METHODS))
+    print(f"\n{'mean RMSE by lead time':<26}" + "".join(f"{m:>12}" for m in METHODS))
     for label, i in (("hours 0-5", 0), ("hours 6-23", 1)):
         print(
-            f"  {label:<31}"
-            + "".join(f"{np.nanmean(horizon[m][i]):>13.2f}" for m in METHODS)
+            f"  {label:<24}"
+            + "".join(f"{np.nanmean(lead[m][i]):>12.3f}" for m in METHODS)
         )
 
 
