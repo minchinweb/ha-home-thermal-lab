@@ -60,3 +60,15 @@ def test_light_on_surfaces_sums_walls_and_roofs():
     assert light_on_surfaces(reading, 180.0, 20.0, ["S"], [], shaded=True) == (
         pytest.approx(20.0)
     )
+
+
+def test_ground_and_wall_terms_in_the_simulation():
+    cold = simulate(20.0, [0.0] * 4, [0.0] * 4, ZoneModel(0.0, 0.0), 0.25)
+    assert cold[-1] == 20.0
+    buried = ZoneModel(0.0, 0.0, b=0.1)
+    path = simulate(20.0, [0.0] * 4, [0.0] * 4, buried, 0.25, ground=10.0)
+    assert path[-1] < 20.0
+    assert path[-1] > 19.0
+    walled = ZoneModel(0.0, 0.0, w=0.01)
+    warm = simulate(20.0, [0.0] * 4, [0.0] * 4, walled, 0.25, wall=[100.0] * 4)
+    assert warm[-1] == pytest.approx(21.0)

@@ -168,9 +168,12 @@
             "g": "Sun gain g, optional",
             "tolerance": "Tolerance (degrees)",
             "max_dip": "Largest allowed dip (degrees)",
-            "walls": "Sunlit walls (windows face)",
+            "windows": "Window faces",
             "roofs": "Roofs with windows in this room",
-            "shade_below": "Shaded below sun elevation (degrees), optional"
+            "shade_below": "Shaded below sun elevation (degrees), optional",
+            "sunlit_walls": "Sunlit walls without windows",
+            "below_ground": "Below ground (basement)",
+            "ground_entity": "Ground temperature sensor"
           },
           "data_description": {
             "room_entity": "Used instead of the thermostat's own reading when set.",
@@ -178,10 +181,13 @@
             "c": "Leave both empty to learn them from the last 14 days of history (a few days of data are needed first).",
             "tolerance": "How far below the setpoint the room may drift.",
             "max_dip": "Skip a heating call only if the room stays within this of the setpoint.",
-            "walls": "Faces with windows that let the sun in.",
+            "windows": "Faces that have windows letting the sun in (the glass term).",
             "roofs": "Tick the house's roofs (set on the integration) that have windows or skylights in this room.",
             "shade_below": "Leave empty to use the house value.",
-            "g": "Only used with a and c."
+            "g": "Only used with a and c.",
+            "sunlit_walls": "Faces of solid wall the sun hits. Learned separately from the windows: sun on a wall warms it slowly.",
+            "below_ground": "Tick for a room whose walls are in the soil. The model then also learns how fast the room trades heat with the ground.",
+            "ground_entity": "Optional soil or ground temperature. Leave empty to use the average outdoor temperature of the last two weeks."
           }
         },
         "reconfigure": {
@@ -196,9 +202,12 @@
             "g": "Sun gain g, optional",
             "tolerance": "Tolerance (degrees)",
             "max_dip": "Largest allowed dip (degrees)",
-            "walls": "Sunlit walls (windows face)",
+            "windows": "Window faces",
             "roofs": "Roofs with windows in this room",
-            "shade_below": "Shaded below sun elevation (degrees), optional"
+            "shade_below": "Shaded below sun elevation (degrees), optional",
+            "sunlit_walls": "Sunlit walls without windows",
+            "below_ground": "Below ground (basement)",
+            "ground_entity": "Ground temperature sensor"
           },
           "data_description": {
             "room_entity": "Used instead of the thermostat's own reading when set.",
@@ -206,10 +215,13 @@
             "c": "Leave both empty to learn them from the last 14 days of history (a few days of data are needed first).",
             "tolerance": "How far below the setpoint the room may drift.",
             "max_dip": "Skip a heating call only if the room stays within this of the setpoint.",
-            "walls": "Faces with windows that let the sun in.",
+            "windows": "Faces that have windows letting the sun in (the glass term).",
             "roofs": "Tick the house's roofs (set on the integration) that have windows or skylights in this room.",
             "shade_below": "Leave empty to use the house value.",
-            "g": "Only used with a and c."
+            "g": "Only used with a and c.",
+            "sunlit_walls": "Faces of solid wall the sun hits. Learned separately from the windows: sun on a wall warms it slowly.",
+            "below_ground": "Tick for a room whose walls are in the soil. The model then also learns how fast the room trades heat with the ground.",
+            "ground_entity": "Optional soil or ground temperature. Leave empty to use the average outdoor temperature of the last two weeks."
           }
         }
       },
@@ -246,7 +258,7 @@
             "hours_back": "Hours back (1-72)",
             "hours_ahead": "Hours ahead (1-48)",
             "deadband": "Thermostat deadband (degrees)",
-            "walls": "Sunlit walls (windows face)",
+            "windows": "Window faces",
             "roofs": "Roofs with windows in this room",
             "shade_below": "Shaded below sun elevation (degrees), optional"
           },
@@ -255,7 +267,7 @@
             "plug_entities": "Their power is turned into heat.",
             "lights": "Light entity and watts at full brightness, for example: light.office_main_lights=105.",
             "a": "Fit the terms with scripts/fit_contributions.py.",
-            "walls": "Faces with windows that let the sun in.",
+            "windows": "Faces that have windows letting the sun in (the glass term).",
             "roofs": "Tick the house's roofs (set on the integration) that have windows or skylights in this room.",
             "shade_below": "Leave empty to use the house value."
           }
@@ -279,7 +291,7 @@
             "hours_back": "Hours back (1-72)",
             "hours_ahead": "Hours ahead (1-48)",
             "deadband": "Thermostat deadband (degrees)",
-            "walls": "Sunlit walls (windows face)",
+            "windows": "Window faces",
             "roofs": "Roofs with windows in this room",
             "shade_below": "Shaded below sun elevation (degrees), optional"
           },
@@ -288,7 +300,7 @@
             "plug_entities": "Their power is turned into heat.",
             "lights": "Light entity and watts at full brightness, for example: light.office_main_lights=105.",
             "a": "Fit the terms with scripts/fit_contributions.py.",
-            "walls": "Faces with windows that let the sun in.",
+            "windows": "Faces that have windows letting the sun in (the glass term).",
             "roofs": "Tick the house's roofs (set on the integration) that have windows or skylights in this room.",
             "shade_below": "Leave empty to use the house value."
           }

@@ -2,9 +2,11 @@
 
 Two fits the web setup can run on the recorder instead of asking for numbers:
 
-* ``fit_no_heat``: a zone's no-heat model ``dT/dt = a * (outdoor - room) + c +
-  g * light`` (hypothesis 17), by least squares on the bins where the furnace
-  was idle. ``scripts/shadow_control.py`` does the same with numpy.
+* ``fit_no_heat``: a zone's no-heat model ``dT/dt = a * (outdoor - room) +
+  b * (ground - room) + c + g * light + w * wall_light`` (hypothesis 17; the
+  ground and wall terms only when the room has them), by least squares on the
+  bins where the furnace was idle. ``scripts/shadow_control.py`` does the same
+  with numpy.
 * ``edge_steps`` and ``blower_kw``: the electrical power of the blower, from the
   steps in whole-house power when the furnace changes state
   (``scripts/blower_power.py`` prints the same steps).
@@ -15,11 +17,25 @@ from __future__ import annotations
 from bisect import bisect_left
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+import math
 import statistics
 
 from .hvac import Run
 
 Series = list[tuple[datetime, float]]
+
+WALL_TAU_HOURS = 3.0  # a sunlit wall soaks up the sun and gives it up slowly
+
+
+def lag(values: list[float], step_hours: float, tau_hours: float) -> list[float]:
+    """Smooth a series as a wall would: first-order lag, starting at its first value."""
+    if not values:
+        return []
+    alpha = 1.0 - math.exp(-step_hours / tau_hours)
+    out = [values[0]]
+    for value in values[1:]:
+        out.append(out[-1] + alpha * (value - out[-1]))
+    return out
 
 
 def bin_held(series: Series, start: datetime, bins: int, width: timedelta) -> list:
@@ -99,14 +115,21 @@ class NoHeatFit:
     Attributes:
         a: Cooling rate toward the outdoor temperature, per hour.
         c: Constant heat gain or loss, C per hour.
-        g: Warming per W/m2 of light on the room, C per hour.
+        g: Warming per W/m2 of light on the room's windows and roof, C per hour.
         bins: Idle bins used.
+        b: Coupling to the ground, per hour (0 for a room above ground).
+        w: Warming per W/m2 of (lagged) light on sunlit solid walls, C per hour.
+        ground: The fixed ground temperature the fit assumed, when it was
+            estimated rather than read from a sensor.
     """
 
     a: float
     c: float
     g: float
     bins: int
+    b: float = 0.0
+    w: float = 0.0
+    ground: float | None = None
 
 
 def fit_no_heat(
@@ -116,8 +139,10 @@ def fit_no_heat(
     heating: list[float],
     hours: float,
     min_bins: int = 60,
+    wall: list[float] | None = None,
+    ground: list | None = None,
 ) -> NoHeatFit | None:
-    """Fit ``dT/dt = a * (outdoor - room) + c + g * light`` on idle bins.
+    """Fit the no-heat model on idle bins.
 
     Args:
         room: Room temperature per bin (None when unknown).
@@ -126,6 +151,9 @@ def fit_no_heat(
         heating: Fraction of each bin the furnace heated this zone.
         hours: Bin width in hours.
         min_bins: Fewest idle bins to trust a fit.
+        wall: Lagged light on the room's sunlit solid walls per bin, if any.
+        ground: Ground temperature per bin (None when unknown), for a room
+            below ground.
 
     Returns:
         The fit, or None if there is too little idle data.
@@ -138,6 +166,7 @@ def fit_no_heat(
             or outdoor[i] is None
             or heating[i] > 0
             or (i > 0 and heating[i - 1] > 0)
+            or (ground is not None and ground[i] is None)
         ):
             continue
         rows.append(
@@ -145,19 +174,35 @@ def fit_no_heat(
                 outdoor[i] - room[i],
                 (room[i + 1] - room[i]) / hours,
                 light[i],
+                0.0 if wall is None else wall[i],
+                0.0 if ground is None else ground[i] - room[i],
             )
         )
     if len(rows) < min_bins:
         return None
     y = [r[1] for r in rows]
     cols = [[r[0] for r in rows], [1.0] * len(rows)]
-    use_light = any(r[2] > 0 for r in rows)
-    if use_light:
-        cols.append([r[2] for r in rows])
+    names = []
+    for name, index, wanted in (
+        ("g", 2, any(r[2] > 0 for r in rows)),
+        ("w", 3, any(r[3] > 0 for r in rows)),
+        ("b", 4, ground is not None),
+    ):
+        if wanted:
+            names.append(name)
+            cols.append([r[index] for r in rows])
     beta = least_squares(cols, y)
     if beta is None:
         return None
-    return NoHeatFit(beta[0], beta[1], beta[2] if use_light else 0.0, len(rows))
+    got = dict(zip(names, beta[2:], strict=True))
+    return NoHeatFit(
+        beta[0],
+        beta[1],
+        got.get("g", 0.0),
+        len(rows),
+        got.get("b", 0.0),
+        got.get("w", 0.0),
+    )
 
 
 def _window(

@@ -3,6 +3,7 @@ Changelog
 
 .. release:: unreleased
 
+  - :feature:`-` Shadow zones tell window faces (``windows``, was ``walls``) from sunlit solid walls (``sunlit_walls``, own lagged gain ``w``), and can be marked ``below_ground`` with an optional ``ground_entity``, adding a ground-coupling term ``b``. Breaking: ``walls`` is now ``windows``.
   - :feature:`-` Web setup: the sensor buttons are numbered in the order to add them; furnace powers can be given in BTU/h and cooling in tons; a furnace energy sensor learns the blower powers from a whole-house power sensor; a shadow zone learns its no-heat model from the recorder when ``a`` and ``c`` are left out; roof pitches can be a rise:run ratio such as ``4:12``; each form suggests a name; house rotation and roofs are set once on the integration, and temperature and power pickers show only matching sensors; roofs are named, so a room keeps its link when a pitch is edited or the roof renamed, and two roofs may share a face; the house rotation is measured from the OpenStreetMap building outline and drawn on the setup form.
   - :feature:`-` Set up from the web interface: the integration holds the outdoor sensor, and each sensor (shadow zone, heating-call statistics, furnace energy, contribution chart) is added as a sub-entry. YAML still works. Needs Home Assistant 2025.3.
   - :feature:`-` Renamed: repository ``ha-home-thermal-lab``, integration domain ``home_thermal_lab`` (was ``house_thermal_lab``); household names replaced by room labels, with real entity ids in ``.env`` (``HA_ENTITY_ALIASES``).

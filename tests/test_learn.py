@@ -12,6 +12,7 @@ from custom_components.home_thermal_lab.learn import (
     blower_kw,
     edge_steps,
     fit_no_heat,
+    lag,
     least_squares,
 )
 
@@ -134,3 +135,46 @@ def test_edge_steps_and_blower_kw():
 
 def test_blower_kw_needs_edges():
     assert blower_kw({"fan on": [0.05, 0.06]}, min_edges=5)[0] == {}
+
+
+def test_lag_smooths_a_step():
+    out = lag([0.0, 10.0, 10.0, 10.0], 1.0, 1.0)
+    assert out[0] == 0.0
+    assert out[1] == pytest.approx(10 * (1 - 2.718281828**-1))
+    assert out[1] < out[2] < out[3] < 10.0
+    assert lag([], 1.0, 1.0) == []
+    assert lag([5.0, 5.0], 1.0, 3.0) == [5.0, 5.0]
+
+
+def test_fit_no_heat_recovers_wall_and_ground_terms():
+    rng = random.Random(2)
+    a, b, c, g, w = 0.04, 0.03, 0.01, 0.003, 0.002
+    hours = 0.25
+    n = 600
+    outdoor = [-10.0 + 20 * rng.random() for _ in range(n)]
+    ground = [6.0 + 0.5 * rng.random() for _ in range(n)]
+    light = [max(0.0, 300 * rng.random() - 150) for _ in range(n)]
+    wall = [max(0.0, 200 * rng.random() - 80) for _ in range(n)]
+    room = [18.0]
+    for i in range(n - 1):
+        rate = (
+            a * (outdoor[i] - room[i])
+            + b * (ground[i] - room[i])
+            + c
+            + g * light[i]
+            + w * wall[i]
+        )
+        room.append(room[i] + rate * hours)
+    fit = fit_no_heat(room, outdoor, light, [0.0] * n, hours, wall=wall, ground=ground)
+    assert fit is not None
+    assert (fit.a, fit.b, fit.c, fit.g, fit.w) == pytest.approx(
+        (a, b, c, g, w), abs=1e-6
+    )
+
+
+def test_fit_no_heat_without_wall_or_ground_leaves_them_zero():
+    room = [20.0 + 0.01 * i for i in range(100)]
+    outdoor = [float(i % 7) for i in range(100)]
+    fit = fit_no_heat(room, outdoor, [0.0] * 100, [0.0] * 100, 0.25)
+    assert fit is not None
+    assert (fit.b, fit.w, fit.ground) == (0.0, 0.0, None)

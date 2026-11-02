@@ -83,7 +83,7 @@ def _sun_fields(roof_labels: list[dict]) -> dict:
     The house rotation and the roofs themselves are set once on the integration;
     a room only says which of those roofs it has windows in.
     """
-    fields: dict = {vol.Optional("walls"): _FACES}
+    fields: dict = {vol.Optional("windows"): _FACES}
     if roof_labels:
         fields[vol.Optional("roofs")] = selector.SelectSelector(
             selector.SelectSelectorConfig(
@@ -139,6 +139,9 @@ def _zone_schema(roof_labels: list[dict]) -> vol.Schema:
             vol.Optional("tolerance"): _NUMBER,
             vol.Optional("max_dip"): _NUMBER,
             **_sun_fields(roof_labels),
+            vol.Optional("sunlit_walls"): _FACES,
+            vol.Optional("below_ground", default=False): selector.BooleanSelector(),
+            vol.Optional("ground_entity"): _TEMPERATURE,
         }
     )
 
@@ -198,15 +201,15 @@ def _clean(form: dict, keys: tuple[str, ...]) -> dict:
 
 def _sun_from_form(form: dict) -> dict:
     out = _clean(form, ("shade_below",))
-    if form.get("walls"):
-        out["walls"] = list(form["walls"])
+    if form.get("windows"):
+        out["windows"] = list(form["windows"])
     if form.get("roofs"):
         out["roofs"] = list(form["roofs"])
     return out
 
 
 def _sun_to_form(data: dict) -> dict:
-    out = {k: data[k] for k in ("walls", "shade_below") if k in data}
+    out = {k: data[k] for k in ("windows", "shade_below") if k in data}
     faces = [r for r in data.get("roofs", []) if isinstance(r, str)]
     if faces:
         out["roofs"] = faces
@@ -220,13 +223,19 @@ def _zone_from_form(form: dict) -> dict:
     model = {k: form[k] for k in given}
     if model:
         model.update(_clean(form, ("g",)))
-    return {
+    out = {
         "name": form["name"],
         "climate_entity": form["climate_entity"],
         "model": model,
         **_clean(form, ("room_entity", "tolerance", "max_dip")),
         **_sun_from_form(form),
     }
+    if form.get("sunlit_walls"):
+        out["sunlit_walls"] = list(form["sunlit_walls"])
+    if form.get("below_ground"):
+        out["below_ground"] = True
+        out.update(_clean(form, ("ground_entity",)))
+    return out
 
 
 def _zone_to_form(data: dict) -> dict:

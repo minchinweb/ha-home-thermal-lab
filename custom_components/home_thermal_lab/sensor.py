@@ -31,6 +31,7 @@ logic it calls is.
 from __future__ import annotations
 
 import contextlib
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from functools import partial
 import logging
@@ -70,7 +71,15 @@ from .forecast import ForecastHour, fetch_forecast
 from .hvac import HIGH, runs_from_states, stage_runs
 from .hvac_response import merge_runs
 from .irradiance import fetch_irradiance, light_on_surfaces
-from .learn import bin_fraction, bin_held, blower_kw, edge_steps, fit_no_heat
+from .learn import (
+    WALL_TAU_HOURS,
+    bin_fraction,
+    bin_held,
+    blower_kw,
+    edge_steps,
+    fit_no_heat,
+    lag,
+)
 from .options import resolve_sun
 from .power import power_series
 from .shadow import ZoneModel, decide
@@ -88,7 +97,9 @@ LEARN_DAYS = 14
 FACES = ["N", "E", "S", "W"]
 
 SUN_SCHEMA = {
-    vol.Optional("walls", default=[]): [vol.In(FACES)],
+    # faces with windows (sun through glass) and faces of solid walls the sun hits
+    vol.Optional("windows", default=[]): [vol.In(FACES)],
+    vol.Optional("sunlit_walls", default=[]): [vol.In(FACES)],
     vol.Optional("roofs", default=[]): [
         vol.ExactSequence([vol.In(FACES), vol.Coerce(float)])
     ],
@@ -107,8 +118,14 @@ ZONE_SCHEMA = vol.Schema(
                 vol.Optional("a"): vol.Coerce(float),
                 vol.Optional("c"): vol.Coerce(float),
                 vol.Optional("g", default=0.0): vol.Coerce(float),
+                vol.Optional("b", default=0.0): vol.Coerce(float),
+                vol.Optional("w", default=0.0): vol.Coerce(float),
             }
         ),
+        # a room (partly) below ground: its walls trade heat with the soil. Give a
+        # ground temperature sensor, or leave it out to use the recent outdoor mean.
+        vol.Optional("below_ground", default=False): cv.boolean,
+        vol.Optional("ground_entity"): cv.entity_id,
         vol.Optional("tolerance", default=0.5): vol.Coerce(float),
         vol.Optional("max_dip", default=0.5): vol.Coerce(float),
         **SUN_SCHEMA,
@@ -217,7 +234,7 @@ def _light_at(hass, zone: dict, by_end: dict, moment: datetime) -> tuple:
 
 
 def _surface_light(lat: float, lon: float, zone: dict, reading, moment) -> float:
-    """Light (W/m2) on the zone's walls and roofs from an hour's irradiance."""
+    """Light (W/m2) on the zone's windows and roofs from an hour's irradiance."""
     az = solar_azimuth_degrees(moment, lat, lon)
     el = solar_elevation_degrees(moment, lat, lon)
     shaded = 120.0 <= az < 210.0 and el < zone["shade_below"]
@@ -225,10 +242,22 @@ def _surface_light(lat: float, lon: float, zone: dict, reading, moment) -> float
         reading,
         az,
         el,
-        zone["walls"],
+        zone["windows"],
         [(f, t) for f, t in zone["roofs"]],
         zone["rotation"],
         shaded,
+    )
+
+
+def _wall_light(lat: float, lon: float, zone: dict, reading, moment) -> float:
+    """Light (W/m2) on the zone's sunlit solid walls (before the wall's lag)."""
+    if not zone["sunlit_walls"]:
+        return 0.0
+    az = solar_azimuth_degrees(moment, lat, lon)
+    el = solar_elevation_degrees(moment, lat, lon)
+    shaded = 120.0 <= az < 210.0 and el < zone["shade_below"]
+    return light_on_surfaces(
+        reading, az, el, zone["sunlit_walls"], [], zone["rotation"], shaded
     )
 
 
@@ -297,7 +326,7 @@ def _fit_zone(zone, rows, irradiance, lat, lon, start, end):
         runs_from_states(climate, end, {"heating"}, "hvac_action"), start, bins, width
     )
     by_end = {r.time: r for r in irradiance}
-    light = []
+    light, wall = [], []
     for i in range(bins):
         mid = start + (i + 0.5) * width
         reading = by_end.get(
@@ -306,13 +335,30 @@ def _fit_zone(zone, rows, irradiance, lat, lon, start, end):
         light.append(
             0.0 if reading is None else _surface_light(lat, lon, zone, reading, mid)
         )
-    return fit_no_heat(
+        wall.append(
+            0.0 if reading is None else _wall_light(lat, lon, zone, reading, mid)
+        )
+    hours = width.total_seconds() / 3600.0
+    outdoor_bins = bin_held(outdoor, start, bins, width)
+    ground, ground_ref = None, None
+    if zone["below_ground"]:
+        if zone.get("ground_entity"):
+            ground = bin_held(_numbers(rows[zone["ground_entity"]]), start, bins, width)
+        else:  # no sensor: the soil sits near the recent average outdoor temperature
+            known = [t for t in outdoor_bins if t is not None]
+            if known:
+                ground_ref = sum(known) / len(known)
+                ground = [ground_ref] * bins
+    fit = fit_no_heat(
         bin_held(room, start, bins, width),
-        bin_held(outdoor, start, bins, width),
+        outdoor_bins,
         light,
         heating,
-        width.total_seconds() / 3600.0,
+        hours,
+        wall=lag(wall, hours, WALL_TAU_HOURS) if zone["sunlit_walls"] else None,
+        ground=ground,
     )
+    return None if fit is None else replace(fit, ground=ground_ref)
 
 
 async def async_setup_entry(hass, entry, async_add_entities):
@@ -386,8 +432,15 @@ class ShadowSensor(SensorEntity):
         self._model = (
             None
             if self._learned
-            else ZoneModel(model["a"], model["c"], model.get("g", 0.0))
+            else ZoneModel(
+                model["a"],
+                model["c"],
+                model.get("g", 0.0),
+                model.get("b", 0.0),
+                model.get("w", 0.0),
+            )
         )
+        self._ground_ref: float | None = None  # estimated by the fit, no sensor
         self._model_note = "given" if self._model else "waiting to learn"
 
     async def _learn(self, _now=None) -> None:
@@ -396,6 +449,8 @@ class ShadowSensor(SensorEntity):
         climate_id = zone["climate_entity"]
         room_id = zone.get("room_entity")
         ids = [climate_id, self._outdoor_entity] + ([room_id] if room_id else [])
+        if zone["below_ground"] and zone.get("ground_entity"):
+            ids.append(zone["ground_entity"])
         end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
         start = end - timedelta(days=LEARN_DAYS)
         lat, lon = self._hass.config.latitude, self._hass.config.longitude
@@ -413,7 +468,8 @@ class ShadowSensor(SensorEntity):
         if fit is None:
             self._model_note = "not enough idle history yet"
         else:
-            self._model = ZoneModel(fit.a, fit.c, fit.g)
+            self._model = ZoneModel(fit.a, fit.c, fit.g, fit.b, fit.w)
+            self._ground_ref = fit.ground
             self._model_note = f"learned from {fit.bins} idle bins of 15 minutes"
         await self._refresh(None)
 
@@ -454,8 +510,14 @@ class ShadowSensor(SensorEntity):
             setpoint = attrs.get("target_temp_low")
         outdoor_now = self._number(self._outdoor_entity)
         hours = await self._forecast.hours()
+        ground = 0.0
+        if self._model is not None and self._model.b:
+            ground = self._number(zone.get("ground_entity"))
+            if ground is None:
+                ground = self._ground_ref
         if (
             self._model is None
+            or ground is None
             or room is None
             or setpoint is None
             or outdoor_now is None
@@ -468,14 +530,17 @@ class ShadowSensor(SensorEntity):
 
         now = datetime.now(UTC)
         by_end = {h.time: h for h in hours}
-        outdoor, light = [], []
+        outdoor, light, wall = [], [], []
+        lat, lon = self._hass.config.latitude, self._hass.config.longitude
         for k in range(LOOK_AHEAD_STEPS):
             moment = now + timedelta(hours=STEP_HOURS * (k + 0.5))
             slot, lit = _light_at(self._hass, zone, by_end, moment)
             if slot is None:
                 break
             light.append(lit)
+            wall.append(_wall_light(lat, lon, zone, slot.light, moment))
             outdoor.append(outdoor_now if k == 0 else slot.temperature)
+        wall = lag(wall, STEP_HOURS, WALL_TAU_HOURS)
         if not outdoor:
             self._attr_native_value = "unknown"
             self.async_write_ha_state()
@@ -489,6 +554,8 @@ class ShadowSensor(SensorEntity):
             STEP_HOURS,
             zone["tolerance"],
             zone["max_dip"],
+            wall,
+            ground,
         )
         self._attr_native_value = "skip" if decision.skip else "heat"
         self._attr_extra_state_attributes = {
@@ -506,6 +573,11 @@ class ShadowSensor(SensorEntity):
             "c": round(self._model.c, 5),
             "g": round(self._model.g, 7),
         }
+        if zone["sunlit_walls"]:
+            self._attr_extra_state_attributes["w"] = round(self._model.w, 7)
+        if zone["below_ground"]:
+            self._attr_extra_state_attributes["b"] = round(self._model.b, 5)
+            self._attr_extra_state_attributes["ground"] = round(ground, 2)
         self.async_write_ha_state()
 
 

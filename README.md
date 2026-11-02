@@ -61,6 +61,13 @@ with the buttons in this order:
    history (the room temperature, the outdoor sensor and the sun on its
    windows), retries every 6 hours, and shows the result in the `a`, `c`, `g`
    and `model` attributes. Type them in to pin the numbers instead.
+   - **Window faces** are the faces with glass (the `g` term). **Sunlit walls
+     without windows** are faces of solid wall the sun hits; they get their own
+     gain `w`, with a 3 hour lag because a wall soaks up the sun slowly.
+   - Tick **Below ground** for a basement room: the model adds `b`, how fast the
+     room trades heat with the soil, against a ground temperature sensor (or,
+     if you give none, the average outdoor temperature of the last 14 days).
+   - The contribution chart does not use sunlit walls or the ground yet.
 4. **Add contribution chart**: one per zone. Its terms still come from
    `scripts/fit_contributions.py`.
 
@@ -89,7 +96,9 @@ sensor:
         climate_entity: climate.z4
         room_entity: sensor.z4_temperature
         model: {a: 0.0106, c: 0.0032, g: 0.000229}   # leave out to learn it
-        walls: [E]
+        windows: [E]
+        # sunlit_walls: [S]            # solid walls the sun hits (own gain w, 3 h lag)
+        # below_ground: true          # basement room; ground_entity: sensor.soil_temp (optional)
         rotation: 10.4
         shade_below: 18
 
@@ -125,7 +134,7 @@ sensor:
         plug_entities: [sensor.office_office_computer_plug_power]
         lights: {light.office_main_lights: 105}   # 7 x 15 W LEDs, scaled by the dimmer
         terms: {a: 0.0174, c: -0.069, g: 0.00005, h: 1.67, x: 0.31, p: 1.15}
-        walls: [E]
+        windows: [E]
         rotation: 10.4
         shade_below: 18
 ```

@@ -98,11 +98,11 @@ def test_resolve_sun_applies_house_settings():
         "shade_below": 18,
         "roofs": [["Front", "S", 30.0], ["Back", "W", 20.0]],
     }
-    out = resolve_sun({"walls": ["E"], "roofs": ["Back", "Gone"]}, house)
+    out = resolve_sun({"windows": ["E"], "roofs": ["Back", "Gone"]}, house)
     assert out["roofs"] == [["W", 20.0]]
     assert out["rotation"] == 10.4
     assert out["shade_below"] == 18
-    assert out["walls"] == ["E"]
+    assert out["windows"] == ["E"]
 
 
 def test_resolve_sun_room_shade_wins_and_old_data_works():
