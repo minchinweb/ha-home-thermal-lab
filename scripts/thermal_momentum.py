@@ -14,15 +14,16 @@ Three measurements per room sensor:
   zone is calling for heat and the sun is down, after removing the cool-down
   term.
 
-If ``--furnace-kw`` (furnace heat output) is given, whole-house conductance
-UA is estimated from the furnace duty over the period (heat in = heat out), and
+If ``--furnace-btu`` (rated input, high stage) is given, whole-house conductance
+UA is estimated from the stage-weighted furnace output over the period (heat in
+= heat out), and
 tau then gives an overall thermal mass C = tau * UA. That is a rough number: it
 assumes the house is in balance over the period and ignores solar gain, people
 and appliances.
 
 Usage::
 
-    uv run python scripts/thermal_momentum.py --days 10 --bin 15 --furnace-kw 20
+    uv run python scripts/thermal_momentum.py --days 10 --bin 15 \n        --furnace-btu 80000 --afue 0.95 --low-fraction 0.5
 """
 
 from __future__ import annotations
@@ -42,6 +43,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from envfile import load_env
+from furnace_stages import HIGH, LOW, stage_runs
 from regress_rooms import (
     OUTDOOR,
     ROOMS,
@@ -101,7 +103,9 @@ def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--days", type=int, default=10)
     p.add_argument("--bin", type=int, default=15, help="minutes")
-    p.add_argument("--furnace-kw", type=float, default=None)
+    p.add_argument("--furnace-btu", type=float, default=None, help="high-stage input")
+    p.add_argument("--afue", type=float, default=0.95)
+    p.add_argument("--low-fraction", type=float, default=0.5, help="low / high input")
     p.add_argument("--ha-url", default=os.environ.get("HA_URL"))
     args = p.parse_args()
 
@@ -196,16 +200,32 @@ def main() -> None:
         means.append(np.nanmean(room))
         print(row)
 
-    if args.furnace_kw and taus:
+    if args.furnace_btu and taus:
+        high_out_kw = args.furnace_btu * args.afue * 0.00029307
+        high = _overlap_fraction(
+            merge_runs([r for z in ZONES for r in stage_runs(climate[z], end, HIGH)]),
+            start,
+            bins,
+            width,
+        )
+        low = _overlap_fraction(
+            merge_runs([r for z in ZONES for r in stage_runs(climate[z], end, LOW)]),
+            start,
+            bins,
+            width,
+        )
+        low_only = np.clip(low - high, 0.0, 1.0)
+        mean_kw = high_out_kw * (args.low_fraction * low_only.mean() + high.mean())
         indoor = float(np.mean(means))
         outdoor = float(np.nanmean(t_out))
         delta = indoor - outdoor
         if delta > 1:
-            ua = args.furnace_kw * furnace.mean() / delta  # kW per C
+            ua = mean_kw / delta  # kW per C
             tau = statistics.median(taus)
             print(
                 f"\nwhole house: indoor {indoor:.1f} C, outdoor {outdoor:.1f} C, "
-                f"furnace duty {furnace.mean():.0%} of {args.furnace_kw:.0f} kW"
+                f"mean furnace output {mean_kw:.2f} kW "
+                f"(high stage {high_out_kw:.1f} kW)"
                 f"\n  UA ~ {ua * 1000:.0f} W/C; median tau {tau:.1f} h"
                 f"\n  C ~ {tau * ua:.1f} kWh/C (rough; ignores sun, people, appliances)"
             )

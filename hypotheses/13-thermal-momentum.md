@@ -25,3 +25,7 @@ First look (see 05 for the table): after the furnace stops, the office (z4) stop
 - Wave lag: most rooms peak 2 to 3 hours before the outdoor wave, not after. So over these days the indoor wave is driven by the sun, thermostat schedules and heating rather than by outdoor air.
 - Heat-up rates at night exist only for z4 (+1.7 to +3.4 C/h), because only z4 called for heat overnight.
 - Watts: needs `--furnace-kw`; not run, as the furnace output is not yet recorded.
+
+### First whole-house estimate (80,000 BTU/h input, 95% efficiency, low stage taken as half)
+
+High stage output 22.3 kW; stage-weighted mean output over the 10 days 2.13 kW against a 21 C to -0.5 C difference gives UA of about 100 W/C (about 0.04 W/C per sq ft over roughly 2400 sq ft, four zones of about 600). With a median tau of 60 h, thermal mass C is about 6 kWh/C. Rough: it ignores sun, people and appliances, and the low-stage fraction is unconfirmed (see 05). Because UA scales with the low-stage fraction and C with UA, a 0.65 low stage would raise both by roughly 15%.
