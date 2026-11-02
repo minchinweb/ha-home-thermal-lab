@@ -38,3 +38,11 @@ First response look (10 days, late October 2026; `scripts/hvac_response.py`, the
 Cautions: short episodes (the median is 9 minutes, about 16 a day) are within the thermostat's resolution (about 0.1 C), so only the 20-minute-plus episodes are usable. The kitchen warms by 2 C during long episodes although its thermostat never calls for heat. That is either air arriving through the zone board (several zones calling) or daytime solar gain through the south and west windows, and this data cannot separate them yet; it needs the solar term from 11. The rate is the room's rise per hour, not power in watts; converting needs the thermal mass.
 
 Crossover bleed into the other zones during a call is its own hypothesis, 06.
+
+### Heating stage from the Ecobees (`scripts/furnace_stages.py`, 10 days to 2026-11-01)
+
+The Ecobee climate entities report `equipment_running` (`auxHeat1,fan` = W1, low stage; `auxHeat2,fan` = W2, high stage). Furnace: 80,000 BTU/h rated, roughly half at low stage (user's figures). Each zone is about 600 sq ft.
+
+- Only z2 and z4 called for heat in this period. z2: 474 min low, 6 min high. z4: 1841 min low, 293 min high.
+- Whole-house episodes (3+ min): 142 low only (median 9 min), 2 high only, 16 that stepped up (median 66 min long). The step to high came after a median 47 min (range 21 to 63 min), so the thermostat escalates only after a long, unsatisfied call; short calls stay on low, as expected.
+- Whole-house power is the same in both stages (about 1.3 kW), so the blower does not change speed; the stage cannot be seen in electricity, only in the Ecobee state.
