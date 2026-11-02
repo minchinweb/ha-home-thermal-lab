@@ -3,6 +3,7 @@ Changelog
 
 .. release:: unreleased
 
+  - :feature:`-` Wind loader and wind-loss test (hypothesis 12).
   - :feature:`-` Furnace stage (W1/W2) summary from Ecobee equipment state.
   - :feature:`-` Thermal momentum script: cool-down tau, wave lag, static flux.
   - :feature:`-` Hypothesis tracker, Open-Meteo loader and sine-wave fit.
