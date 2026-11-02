@@ -53,6 +53,7 @@ from custom_components.house_thermal_lab.ha_statistics import (
 )
 from custom_components.house_thermal_lab.hvac import Run, runs_from_states
 from custom_components.house_thermal_lab.irradiance import fetch_irradiance
+from custom_components.house_thermal_lab.shadow import ZoneModel, simulate
 from custom_components.house_thermal_lab.solar import (
     solar_azimuth_degrees,
     solar_elevation_degrees,
@@ -87,16 +88,6 @@ def _setpoints(states: list[dict], start: datetime, bins: int, width: timedelta)
             j += 1
         out[i] = current
     return out
-
-
-def _simulate(t0, weather, light, a, c, g, steps, hours):
-    """Forward Euler no-heat forecast; returns the temperature at each step."""
-    path = np.empty(steps + 1)
-    path[0] = t0
-    for k in range(steps):
-        t = path[k]
-        path[k + 1] = t + hours * (a * (weather[k] - t) + c + g * light[k])
-    return path
 
 
 def main() -> None:
@@ -159,6 +150,7 @@ def main() -> None:
         f"{'hold 1h':>10}{'2h':>6}{'3h':>6}"
     )
     summary = []
+    fitted = {}
     for zone in ZONES:
         room_name = ZONE_ROOM[zone]
         states = fetch_states(
@@ -191,6 +183,7 @@ def main() -> None:
         beta, _, _ = _ols(np.column_stack(cols), y[sel])
         a, c = beta[0], beta[1]
         g = beta[2] if spec else 0.0
+        fitted[zone] = (a, c, g)
 
         # check on idle stretches long enough to forecast across
         errs = {h: [] for h in (1, 2, 3)}
@@ -201,7 +194,15 @@ def main() -> None:
                 continue
             if np.isnan(t_out[i : i + steps]).any():
                 continue
-            path = _simulate(room[i], t_out[i:], light[i:], a, c, g, steps, hours)
+            path = np.array(
+                simulate(
+                    room[i],
+                    list(t_out[i : i + steps]),
+                    list(light[i : i + steps]),
+                    ZoneModel(a, c, g),
+                    hours,
+                )
+            )
             starts += 1
             for lead_h, lead_errs in errs.items():
                 k = int(lead_h / hours)
@@ -242,7 +243,15 @@ def main() -> None:
             if np.isnan(sp) or np.isnan(t0) or np.isnan(t_out[i : i + steps]).any():
                 no_setpoint += 1
                 continue
-            path = _simulate(t0, t_out[i:], light[i:], a, c, g, steps, hours)
+            path = np.array(
+                simulate(
+                    t0,
+                    list(t_out[i : i + steps]),
+                    list(light[i : i + steps]),
+                    ZoneModel(a, c, g),
+                    hours,
+                )
+            )
             floor = sp - args.tolerance
             shortfall = float(np.sum(np.clip(floor - path, 0, None)) * hours)
             lowest = float(path.min() - sp)
@@ -296,6 +305,9 @@ def main() -> None:
         f"{'all':<6}{tot[0]:>7.0f}{tot[1]:>11.0f}{'':>13}{tot[2]:>9.0f}{tot[3]:>11.0f}"
         f"{tot[4]:>7.1f}{tot[5]:>11.1f}"
     )
+    print("\nfitted no-heat models for the sensor configuration (per hour):")
+    for zone, (a, c, g) in fitted.items():
+        print(f"  {zone}: model: {{a: {a:.4f}, c: {c:.4f}, g: {g:.6f}}}")
     print(
         "\nNothing was switched. The energy is an upper bound (zone calls overlap). "
         "A skipped call\nis only as good as the section 1 forecast."

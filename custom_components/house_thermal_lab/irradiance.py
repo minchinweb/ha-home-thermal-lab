@@ -136,3 +136,38 @@ def horizontal(reading: Irradiance, elevation: float) -> float:
     if elevation <= 0:
         return 0.0
     return reading.direct_normal * math.sin(math.radians(elevation)) + reading.diffuse
+
+
+def light_on_surfaces(
+    reading: Irradiance,
+    azimuth: float,
+    elevation: float,
+    walls: list[str],
+    roofs: list[tuple[str, float]],
+    rotation: float = 0.0,
+    shaded: bool = False,
+) -> float:
+    """Summed light (W/m2) on the window walls and roof faces of one room.
+
+    Args:
+        reading: The hour's irradiance.
+        azimuth: Sun compass azimuth in degrees.
+        elevation: Sun elevation in degrees.
+        walls: Window faces, each one of ``N``, ``E``, ``S``, ``W``.
+        roofs: Roof faces as ``(face, tilt in degrees)``.
+        rotation: Degrees the house is turned clockwise from the compass grid.
+        shaded: Drop the beam light (trees and neighbours block the sun), keeping
+            the diffuse sky light.
+    """
+    rel = azimuth - rotation
+    scale = 0.0 if shaded else 1.0
+    total = 0.0
+    for face in walls:
+        total += scale * reading.beam_on_plane(
+            face, 90.0, rel, elevation
+        ) + reading.diffuse_on_plane(90.0, elevation)
+    for face, tilt in roofs:
+        total += scale * reading.beam_on_plane(
+            face, tilt, rel, elevation
+        ) + reading.diffuse_on_plane(tilt, elevation)
+    return total

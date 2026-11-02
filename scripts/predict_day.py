@@ -60,7 +60,10 @@ from custom_components.house_thermal_lab.ha_history import (
 from custom_components.house_thermal_lab.ha_statistics import (
     fetch_statistics_from_url,
 )
-from custom_components.house_thermal_lab.irradiance import fetch_irradiance
+from custom_components.house_thermal_lab.irradiance import (
+    fetch_irradiance,
+    light_on_surfaces,
+)
 from custom_components.house_thermal_lab.solar import (
     solar_azimuth_degrees,
     solar_elevation_degrees,
@@ -145,28 +148,21 @@ def _best(room, extras, train):
 
 
 def _room_light(spec, held, azimuth, elevation, rotation, pitch, block):
-    """Hourly light on a room's windows and roof faces (W/m2, summed).
+    """Hourly light on a room windows and roof faces (W/m2, summed).
 
     ``block`` is None for unshaded, else a function (azimuth, elevation) that
     says whether the beam is blocked.
     """
+    roofs = [(face, pitch if tilt is None else tilt) for face, tilt in spec["roof"]]
     total = np.zeros(len(held))
     for i, h in enumerate(held):
         if h is None:
             total[i] = np.nan
             continue
-        rel = azimuth[i] - rotation
         shaded = block is not None and block(azimuth[i], elevation[i])
-        scale = 0.0 if shaded else 1.0
-        for face in spec["walls"]:
-            total[i] += scale * h.beam_on_plane(
-                face, 90.0, rel, elevation[i]
-            ) + h.diffuse_on_plane(90.0, elevation[i])
-        for face, tilt in spec["roof"]:
-            tilt = pitch if tilt is None else tilt
-            total[i] += scale * h.beam_on_plane(
-                face, tilt, rel, elevation[i]
-            ) + h.diffuse_on_plane(tilt, elevation[i])
+        total[i] = light_on_surfaces(
+            h, azimuth[i], elevation[i], spec["walls"], roofs, rotation, shaded
+        )
     return total
 
 
