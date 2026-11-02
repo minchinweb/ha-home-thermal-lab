@@ -39,7 +39,9 @@ house rotation (measured from the building outline on OpenStreetMap, which
 needs one request to the Overpass service with your home position, and drawn on
 the form so you can check it; tick **Redraw the map** and submit to see another
 rotation without saving), and its roofs typed as `S 30, W 4:12` (face, then the pitch in
-degrees or as rise:run; one roof per face). Rooms then only tick which of those
+degrees or as rise:run; give each roof a name, such as
+`Front=S 30, Back=W 4:12, Garage=W 8:12`, and two roofs on one face are fine). Renaming a roof
+(on the same face) updates the rooms that use it; deleting one unlinks them. Rooms then only tick which of those
 roofs they have windows in. Then add the sensors from the integration's page,
 with the buttons in this order:
 

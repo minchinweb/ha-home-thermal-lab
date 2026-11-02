@@ -36,8 +36,11 @@ from .options import (
     format_lights,
     format_roofs,
     kw_table,
+    normalise_roofs,
     parse_lights,
     parse_roofs,
+    roof_label,
+    roof_renames,
 )
 from .orientation import choose_outline, fetch_outlines, wall_rotation
 
@@ -74,17 +77,17 @@ _FACES = selector.SelectSelector(
 )
 
 
-def _sun_fields(roof_faces: list[str]) -> dict:
+def _sun_fields(roof_labels: list[dict]) -> dict:
     """Window, roof and shading fields shared by zones and contributions.
 
     The house rotation and the roofs themselves are set once on the integration;
     a room only says which of those roofs it has windows in.
     """
     fields: dict = {vol.Optional("walls"): _FACES}
-    if roof_faces:
+    if roof_labels:
         fields[vol.Optional("roofs")] = selector.SelectSelector(
             selector.SelectSelectorConfig(
-                options=roof_faces,
+                options=roof_labels,
                 multiple=True,
                 mode=selector.SelectSelectorMode.LIST,
             )
@@ -124,7 +127,7 @@ def _house_to_form(data: dict) -> dict:
     return out
 
 
-def _zone_schema(roof_faces: list[str]) -> vol.Schema:
+def _zone_schema(roof_labels: list[dict]) -> vol.Schema:
     return vol.Schema(
         {
             vol.Required("name"): _TEXT,
@@ -135,12 +138,12 @@ def _zone_schema(roof_faces: list[str]) -> vol.Schema:
             vol.Optional("g"): _NUMBER,
             vol.Optional("tolerance"): _NUMBER,
             vol.Optional("max_dip"): _NUMBER,
-            **_sun_fields(roof_faces),
+            **_sun_fields(roof_labels),
         }
     )
 
 
-def _call_stats_schema(_roof_faces: list[str]) -> vol.Schema:
+def _call_stats_schema(_roof_labels: list[dict]) -> vol.Schema:
     return vol.Schema(
         {
             vol.Required("name"): _TEXT,
@@ -151,7 +154,7 @@ def _call_stats_schema(_roof_faces: list[str]) -> vol.Schema:
     )
 
 
-def _energy_schema(_roof_faces: list[str]) -> vol.Schema:
+def _energy_schema(_roof_labels: list[dict]) -> vol.Schema:
     return vol.Schema(
         {
             vol.Required("name"): _TEXT,
@@ -165,7 +168,7 @@ def _energy_schema(_roof_faces: list[str]) -> vol.Schema:
     )
 
 
-def _contribution_schema(roof_faces: list[str]) -> vol.Schema:
+def _contribution_schema(roof_labels: list[dict]) -> vol.Schema:
     return vol.Schema(
         {
             vol.Required("name"): _TEXT,
@@ -183,7 +186,7 @@ def _contribution_schema(roof_faces: list[str]) -> vol.Schema:
             vol.Optional("hours_back"): _NUMBER,
             vol.Optional("hours_ahead"): _NUMBER,
             vol.Optional("deadband"): _NUMBER,
-            **_sun_fields(roof_faces),
+            **_sun_fields(roof_labels),
         }
     )
 
@@ -346,7 +349,12 @@ class HomeThermalLabConfigFlow(ConfigFlow, domain=DOMAIN):
     ) -> ConfigFlowResult:
         """Change the outdoor sensor, rotation or roofs."""
         entry = self._get_reconfigure_entry()
-        return await self._house("reconfigure", user_input, _house_to_form(entry.data))
+        current = _house_to_form(entry.data)
+        if "rotation" not in current:  # nothing saved yet: suggest the measured one
+            measured = (await self._outline()).get("rotation")
+            if measured is not None:
+                current["rotation"] = measured
+        return await self._house("reconfigure", user_input, current)
 
     async def _outline(self) -> dict:
         """The building outline at the home position, fetched once from OSM."""
@@ -386,11 +394,27 @@ class HomeThermalLabConfigFlow(ConfigFlow, domain=DOMAIN):
         url = f"{OutlineMapView.url}?rotation={shown}&v={int(time.time())}"
         return (
             f"![House outline]({url})\n\nMeasured from the building outline on "
-            f"OpenStreetMap: rotated {info['rotation']:+.1f} degrees. The orange "
-            f"arrow is where the south wall faces at {shown:+.1f} degrees. The "
+            f"OpenStreetMap: rotated {info['rotation']:+.1f} degrees. The "
+            f"orange cross is the compass cross turned by {shown:+.1f} degrees "
+            "(the dashed grey one is true north); the walls should run along it. The "
             'picture does not update as you type: tick "Redraw the map" and '
             "press Submit to see another value without saving."
         )
+
+    def _follow_renamed_roofs(self, entry: ConfigEntry, data: dict) -> None:
+        """Point rooms at a roof's new name when the roof was renamed."""
+        renames = roof_renames(entry.data.get("roofs", []), data.get("roofs", []))
+        if not renames:
+            return
+        for subentry in list(entry.subentries.values()):
+            roofs = subentry.data.get("roofs")
+            if not roofs:
+                continue
+            updated = [renames.get(r, r) if isinstance(r, str) else r for r in roofs]
+            if updated != list(roofs):
+                self.hass.config_entries.async_update_subentry(
+                    entry, subentry, data={**subentry.data, "roofs": updated}
+                )
 
     async def _house(
         self, step_id: str, user_input: dict[str, Any] | None, current: dict
@@ -407,9 +431,9 @@ class HomeThermalLabConfigFlow(ConfigFlow, domain=DOMAIN):
                 errors[err.field] = f"invalid_{err.field}"
             else:
                 if step_id == "reconfigure":
-                    return self.async_update_reload_and_abort(
-                        self._get_reconfigure_entry(), data=data
-                    )
+                    entry = self._get_reconfigure_entry()
+                    self._follow_renamed_roofs(entry, data)
+                    return self.async_update_reload_and_abort(entry, data=data)
                 return self.async_create_entry(title="Home Thermal Lab", data=data)
             current = user_input
         return self.async_show_form(
@@ -446,8 +470,12 @@ class _SensorSubentryFlow(ConfigSubentryFlow):
         self, step_id: str, user_input: dict[str, Any] | None, current: dict
     ) -> SubentryFlowResult:
         schema_for, from_form, _ = _KINDS[self.kind]
-        faces = [face for face, _pitch in self._get_entry().data.get("roofs", [])]
-        schema = schema_for(list(dict.fromkeys(faces)))
+        house_roofs = normalise_roofs(self._get_entry().data.get("roofs", []))
+        options = [
+            {"value": name, "label": f"{name} ({roof_label(face, pitch)})"}
+            for name, face, pitch in house_roofs
+        ]
+        schema = schema_for(options)
         errors: dict[str, str] = {}
         if user_input is not None:
             try:

@@ -15,7 +15,7 @@
           "outdoor_entity": "Used by the shadow zone and the contribution chart.",
           "rotation": "Degrees the house is turned clockwise from true north: the measured value is filled in. Set once here, for every room.",
           "shade_below": "Treat the south-east to south-west sun as blocked below this elevation (trees, neighbours). A room can set its own.",
-          "roofs": "Each roof of the house with windows or skylights, as face and pitch, for example: S 30, W 4:12. The pitch is in degrees or as rise:run. One roof per face; each room then picks which it has.",
+          "roofs": "Each roof of the house with windows or skylights: face and pitch, with a name you choose, for example: Front=S 30, Back=W 4:12, Garage=W 8:12. The pitch is in degrees or as rise:run. Rooms refer to a roof by its name, so you can change a pitch later and every room keeps its link. Without a name a roof is called after its face (West, West 2); the form then shows the names. If you rename a roof (keep its face), the rooms that use it follow the new name. Deleting a roof unlinks them.",
           "preview": "Tick and press Submit to redraw the map with the rotation typed above. Nothing is saved until you submit with this unticked."
         }
       },
@@ -33,7 +33,7 @@
           "outdoor_entity": "Used by the shadow zone and the contribution chart.",
           "rotation": "Degrees the house is turned clockwise from true north: the measured value is filled in. Set once here, for every room.",
           "shade_below": "Treat the south-east to south-west sun as blocked below this elevation (trees, neighbours). A room can set its own.",
-          "roofs": "Each roof of the house with windows or skylights, as face and pitch, for example: S 30, W 4:12. The pitch is in degrees or as rise:run. One roof per face; each room then picks which it has.",
+          "roofs": "Each roof of the house with windows or skylights: face and pitch, with a name you choose, for example: Front=S 30, Back=W 4:12, Garage=W 8:12. The pitch is in degrees or as rise:run. Rooms refer to a roof by its name, so you can change a pitch later and every room keeps its link. Without a name a roof is called after its face (West, West 2); the form then shows the names. If you rename a roof (keep its face), the rooms that use it follow the new name. Deleting a roof unlinks them.",
           "preview": "Tick and press Submit to redraw the map with the rotation typed above. Nothing is saved until you submit with this unticked."
         }
       }
@@ -43,7 +43,7 @@
       "reconfigure_successful": "Saved."
     },
     "error": {
-      "invalid_roofs": "Write roofs as face and pitch, for example: S 30, W 4:12."
+      "invalid_roofs": "Write each roof as [name=]face pitch, for example: Front=S 30, Back=W 4:12 (names must differ)."
     }
   },
   "config_subentries": {
