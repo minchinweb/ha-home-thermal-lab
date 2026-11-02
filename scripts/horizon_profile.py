@@ -15,6 +15,11 @@ a wall; a thin spruce passes some), fitted from a grid in the same descent. It
 is 0 except in the "partial" model. Roof faces are treated as unshaded (they sit
 above the trees and the house to the south).
 
+The house's own shading (the main block beside the kitchen's patio door and
+east window, ``scripts/house_shading.py``) multiplies the beam on those windows
+before any horizon is fitted; ``--no-house`` leaves it out. The fitted horizon
+then stands for the trees and the neighbours.
+
 Heat that leaks in from the other zones' calls (hypothesis 06; the kitchen's
 damper hardly closes) is a term per other zone, ``+ sum_z b_z * call_z``, in
 every model. Without it the window terms take up that heat whenever the calls
@@ -50,6 +55,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import itertools
 
 from envfile import load_env
+from house_shading import house_shade
 from regress_rooms import (
     OUTDOOR,
     ROOMS,
@@ -192,6 +198,11 @@ def main() -> None:
     p.add_argument("--bin", type=int, default=15, help="minutes")
     p.add_argument("--rotation", type=float, default=10.4, help="degrees clockwise")
     p.add_argument("--pitch", type=float, default=45.0, help="main roof tilt, degrees")
+    p.add_argument(
+        "--no-house",
+        action="store_true",
+        help="leave out the house's own shading (scripts/house_shading.py)",
+    )
     p.add_argument("--ha-url", default=os.environ.get("HA_URL"))
     args = p.parse_args()
 
@@ -282,7 +293,15 @@ def main() -> None:
             print(f"{name:<13}{int(rows.sum()):>5}  too little data")
             continue
         walls = [
-            (np.nan_to_num(beam(f, 90.0)), np.nan_to_num(diffuse(90.0)))
+            (
+                np.nan_to_num(beam(f, 90.0))
+                * (
+                    1.0
+                    if args.no_house
+                    else house_shade(name, f, azimuth, elevation, args.rotation)
+                ),
+                np.nan_to_num(diffuse(90.0)),
+            )
             for f in spec["walls"]
         ]
         roofs = []

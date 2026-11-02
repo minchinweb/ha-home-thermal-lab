@@ -44,6 +44,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from envfile import load_env
+from house_shading import wall_light
 from regress_rooms import (
     OUTDOOR,
     ROOMS,
@@ -68,7 +69,6 @@ from custom_components.home_thermal_lab.solar import (
     solar_azimuth_degrees,
     solar_elevation_degrees,
 )
-from custom_components.home_thermal_lab.wind import FACES
 
 # room -> window faces and roof faces (face, tilt in degrees; None = --pitch)
 WINDOWS = {
@@ -119,16 +119,6 @@ def main() -> None:
         for m in mids
     ]
     known = np.array([h is not None for h in held])
-    # a wall turned `rotation` degrees clockwise sees the sun at azimuth - rotation
-    face = {
-        f: np.array(
-            [
-                h.on_face(f, azimuth[i] - args.rotation, elevation[i]) if h else np.nan
-                for i, h in enumerate(held)
-            ]
-        )
-        for f in FACES
-    }
     planes: dict[tuple[str, float], np.ndarray] = {}
 
     def plane(face_name: str, tilt: float) -> np.ndarray:
@@ -194,7 +184,10 @@ def main() -> None:
         labels = [f"{f} wall" for f in spec["walls"]]
         others = [o for o in ZONES if o != z]
         cols = [diff[sel], np.ones(sel.sum()), *(heat[o][sel] for o in others)]
-        cols += [face[f][sel] for f in spec["walls"]]
+        cols += [
+            wall_light(name, f, held, azimuth, elevation, args.rotation)[sel]
+            for f in spec["walls"]
+        ]
         for f, tilt in spec["roof"]:
             tilt = args.pitch if tilt is None else tilt
             labels.append(f"{f} roof {tilt:.0f}")

@@ -46,6 +46,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from envfile import load_env
+from house_shading import wall_light
 from regress_rooms import OUTDOOR, ROOMS, ZONES, _bin_means, _ols, _overlap_fraction
 from room_geometry import ROOM_GEOMETRY
 from solar_windows import WINDOWS
@@ -64,7 +65,6 @@ from custom_components.home_thermal_lab.solar import (
     solar_azimuth_degrees,
     solar_elevation_degrees,
 )
-from custom_components.home_thermal_lab.wind import FACES
 
 MIN_CFM = 50.0
 MIN_BINS = 40
@@ -99,15 +99,6 @@ def main() -> None:
         by_end.get(m.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1))
         for m in mids
     ]
-    face = {
-        f: np.array(
-            [
-                h.on_face(f, azimuth[i] - args.rotation, elevation[i]) if h else np.nan
-                for i, h in enumerate(held)
-            ]
-        )
-        for f in FACES
-    }
     known = np.array([h is not None for h in held])
     day = (elevation > 3.0) & known
 
@@ -147,6 +138,10 @@ def main() -> None:
         y[:-1] = (room[1:] - room[:-1]) / hours
         diff = t_out - room
         walls = WINDOWS.get(name, {}).get("walls", [])
+        light = {
+            f: wall_light(name, f, held, azimuth, elevation, args.rotation)
+            for f in walls
+        }
         sel = ~np.isnan(y) & ~np.isnan(diff) & known
         if sel.sum() < MIN_BINS:
             continue
@@ -155,7 +150,7 @@ def main() -> None:
                 diff[sel],
                 np.ones(sel.sum()),
                 *(heat[z][sel] for z in called),
-                *(np.nan_to_num(face[f])[sel] for f in walls),
+                *(np.nan_to_num(light[f])[sel] for f in walls),
             ]
         )
         b, s, _ = _ols(x, y[sel])
@@ -196,7 +191,10 @@ def main() -> None:
             continue
         others = [o for o in called if o != z]
         cols = [diff[sel], np.ones(sel.sum()), *(heat[o][sel] for o in others)]
-        cols += [face[f][sel] for f in spec["walls"]]
+        cols += [
+            wall_light(name, f, held, azimuth, elevation, args.rotation)[sel]
+            for f in spec["walls"]
+        ]
         b, _, _ = _ols(np.column_stack(cols), y[sel])
         for i, f in enumerate(spec["walls"]):
             g = b[2 + len(others) + i]

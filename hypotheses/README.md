@@ -19,7 +19,7 @@ Home Assistant, so they can be re-run later or by others.
 | [08](08-fan-flux.md) | Heat flux of running the furnace fan | B | revised: the blower is never off long enough; no-fan nights running 2-16 Nov |
 | [09](09-door-state.md) | Door open/closed from inter-room gradients | B | two runs: too few clean door edges |
 | [10](10-static-flux.md) | Static heat flux between rooms/floors | B | revised: no fan-off data; no-fan nights running 2-16 Nov |
-| [11](11-solar-gain.md) | Predict room solar gain | C. Disturbances | horizon fits checked against window photos and sizes; with the other zones' calls as terms the windows add little (3% in the kitchen); apertures a tenth to a half of the glass |
+| [11](11-solar-gain.md) | Predict room solar gain | C. Disturbances | horizon fits checked against window photos and sizes; with the other zones' calls as terms the windows add little (3% in the kitchen); apertures a tenth to a half of the glass; the house shades the kitchen's east window from late September to mid-March, and the kitchen's sun gain cannot be measured from autumn data |
 | [12](12-wind-loss.md) | Predict heat loss from wind speed/direction | C | first run: no wind effect detectable |
 | [13](13-thermal-momentum.md) | Measure the house's thermal momentum (inertia, time constant) | B | in progress: tau about 54 h; furnace lag 6-12 min, overshoot 0.2 C; a delivery lag does not help the 15 min forecast; effective room capacity 80-230 times the air |
 | [14](14-electrical-heat.md) | Electrical use becomes indoor heat | B | in progress: blower +0.2 kW when heating; small plug loads not resolvable |
