@@ -194,7 +194,7 @@ Z4 did not call after 13:15, and Z2 made only short calls (a quarter of the time
 
 The question was whether the attic's south window (48 x 55 in) shows a gain. Z3 did not call all day. The comparison room is the N bedroom: same attic and roof, north window. Rates are fitted in 15-minute bins; the sun terms are clear-sky-model light on the S wall (vertical) and the W roof face (45 degrees), without the house's or trees' shading.
 
-The blinds (all three cover entities agree, except where noted) were open to 96% from 07:17, closed at 10:11 by the "Nighttime" button, and opened to 96% at 14:14 by the "Daytime" button. They were not closed all afternoon. `cover.master_bedroom_blinds_2` reports 40% after 14:14 while the other two report 96%. The blinds' battery is at 12%. The register fan ran 12:04 to 14:14 and switched off with the blinds.
+The blinds (all three cover entities agree, except where noted) were open to 96% from 07:17, closed at 10:11 by the "Nighttime" button, and opened to 96% at 14:14 by the "Daytime" button. They were not closed all afternoon. The three entities are the same blind reached by different communication paths. `cover.master_bedroom_blinds` and `cover.blinds_master_bedroom` agree throughout; `cover.master_bedroom_blinds_2` reports 40% after 14:14 while the other two report 96%, and it also missed the 07:17 opening (it reached 96% only at 09:55), so that path drops some position updates. The blinds' battery is at 12%. The register fan ran 12:04 to 14:14 and switched off with the blinds.
 
 | Period | Master | N bedroom | Master minus N bedroom | S wall | W roof | Outdoor |
 |---|---|---|---|---|---|---|
