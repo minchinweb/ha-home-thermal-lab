@@ -3,18 +3,20 @@
     "step": {
       "user": {
         "title": "Home Thermal Lab",
-        "description": "Set the house once: the outdoor temperature sensor, how the house is turned and its roofs. Then, on the integration's page, add the sensors in this order:\n1. Heating-call statistics: one per zone (thermostat only).\n2. Furnace energy: one for the blower (pick your whole-house power sensor and it learns the blower power) and one for the gas (type the furnace input in BTU/h).\n3. Shadow zone (with sun): one per zone. Leave the model blank and it learns it from the last 14 days.\n4. Contribution chart: one per zone, once you have its fitted terms.",
+        "description": "Set the house once: the outdoor temperature sensor, how the house is turned and its roofs.\n\n{map}\n\nThen, on the integration's page, add the sensors in this order:\n1. Heating-call statistics: one per zone (thermostat only).\n2. Furnace energy: one for the blower (pick your whole-house power sensor and it learns the blower power) and one for the gas (type the furnace input in BTU/h).\n3. Shadow zone (with sun): one per zone. Leave the model blank and it learns it from the last 14 days.\n4. Contribution chart: one per zone, once you have its fitted terms.",
         "data": {
           "outdoor_entity": "Outdoor temperature sensor",
           "rotation": "House rotation (degrees)",
           "shade_below": "Shaded below sun elevation (degrees)",
-          "roofs": "Roofs (face and pitch)"
+          "roofs": "Roofs (face and pitch)",
+          "preview": "Redraw the map (does not save)"
         },
         "data_description": {
           "outdoor_entity": "Used by the shadow zone and the contribution chart.",
-          "rotation": "Degrees the house is turned from true north (see scripts/house_orientation.py). Set once here, for every room.",
+          "rotation": "Degrees the house is turned clockwise from true north: the measured value is filled in. Set once here, for every room.",
           "shade_below": "Treat the south-east to south-west sun as blocked below this elevation (trees, neighbours). A room can set its own.",
-          "roofs": "Each roof of the house with windows or skylights, as face and pitch, for example: S 30, W 4:12. The pitch is in degrees or as rise:run. One roof per face; each room then picks which it has."
+          "roofs": "Each roof of the house with windows or skylights, as face and pitch, for example: S 30, W 4:12. The pitch is in degrees or as rise:run. One roof per face; each room then picks which it has.",
+          "preview": "Tick and press Submit to redraw the map with the rotation typed above. Nothing is saved until you submit with this unticked."
         }
       },
       "reconfigure": {
@@ -23,14 +25,16 @@
           "outdoor_entity": "Outdoor temperature sensor",
           "rotation": "House rotation (degrees)",
           "shade_below": "Shaded below sun elevation (degrees)",
-          "roofs": "Roofs (face and pitch)"
+          "roofs": "Roofs (face and pitch)",
+          "preview": "Redraw the map (does not save)"
         },
-        "description": "Change the outdoor sensor, the house rotation or the roofs. Rooms pick up the change.",
+        "description": "Change the outdoor sensor, the house rotation or the roofs. Rooms pick up the change.\n\n{map}",
         "data_description": {
           "outdoor_entity": "Used by the shadow zone and the contribution chart.",
-          "rotation": "Degrees the house is turned from true north (see scripts/house_orientation.py). Set once here, for every room.",
+          "rotation": "Degrees the house is turned clockwise from true north: the measured value is filled in. Set once here, for every room.",
           "shade_below": "Treat the south-east to south-west sun as blocked below this elevation (trees, neighbours). A room can set its own.",
-          "roofs": "Each roof of the house with windows or skylights, as face and pitch, for example: S 30, W 4:12. The pitch is in degrees or as rise:run. One roof per face; each room then picks which it has."
+          "roofs": "Each roof of the house with windows or skylights, as face and pitch, for example: S 30, W 4:12. The pitch is in degrees or as rise:run. One roof per face; each room then picks which it has.",
+          "preview": "Tick and press Submit to redraw the map with the rotation typed above. Nothing is saved until you submit with this unticked."
         }
       }
     },

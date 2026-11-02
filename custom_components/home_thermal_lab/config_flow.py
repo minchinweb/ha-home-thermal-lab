@@ -12,6 +12,8 @@ covered by the unit tests; the parsing it calls is.
 
 from __future__ import annotations
 
+import logging
+import time
 from typing import Any
 
 from homeassistant.config_entries import (
@@ -25,6 +27,7 @@ from homeassistant.helpers import selector
 import voluptuous as vol
 
 from . import CALL_STATS, CONTRIBUTION, DOMAIN, ENERGY, ZONE
+from .map_view import OutlineMapView
 from .options import (
     FACES,
     KW_MODES,
@@ -36,6 +39,9 @@ from .options import (
     parse_lights,
     parse_roofs,
 )
+from .orientation import choose_outline, fetch_outlines, wall_rotation
+
+_LOGGER = logging.getLogger(__name__)
 
 _TEXT = selector.TextSelector()
 _NUMBER = selector.NumberSelector(
@@ -94,6 +100,8 @@ def _house_schema() -> vol.Schema:
             vol.Optional("rotation"): _NUMBER,
             vol.Optional("shade_below"): _NUMBER,
             vol.Optional("roofs"): _TEXT,
+            # a form has no extra buttons: ticking this and submitting redraws
+            vol.Optional("preview", default=False): selector.BooleanSelector(),
         }
     )
 
@@ -329,7 +337,9 @@ class HomeThermalLabConfigFlow(ConfigFlow, domain=DOMAIN):
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Ask for the outdoor sensor and the house's rotation and roofs."""
-        return await self._house("user", user_input, {})
+        measured = (await self._outline()).get("rotation")
+        current = {} if measured is None else {"rotation": measured}
+        return await self._house("user", user_input, current)
 
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
@@ -338,10 +348,53 @@ class HomeThermalLabConfigFlow(ConfigFlow, domain=DOMAIN):
         entry = self._get_reconfigure_entry()
         return await self._house("reconfigure", user_input, _house_to_form(entry.data))
 
+    async def _outline(self) -> dict:
+        """The building outline at the home position, fetched once from OSM."""
+        store = self.hass.data.setdefault(DOMAIN, {})
+        if "outline" in store:
+            return store["outline"]
+        lat, lon = self.hass.config.latitude, self.hass.config.longitude
+        try:
+            outlines = await self.hass.async_add_executor_job(fetch_outlines, lat, lon)
+        except (OSError, ValueError, KeyError):
+            _LOGGER.warning("Could not fetch the building outline from OpenStreetMap")
+            return {}  # not cached, so a later form tries again
+        points = choose_outline(outlines, (lat, lon))
+        info: dict = {}
+        if points:
+            info = {"points": points, "rotation": round(wall_rotation(points)[0], 1)}
+        store["outline"] = info
+        if "view" not in store:
+            self.hass.http.register_view(OutlineMapView(self.hass))
+            store["view"] = True
+        return info
+
+    async def _map_text(self, rotation: float | None) -> str:
+        """Markdown for the form: the drawing, or why there is none."""
+        info = await self._outline()
+        if not info.get("points"):
+            return (
+                "No building was found at your home position on OpenStreetMap, "
+                "so type the rotation if you know it."
+            )
+        shown = info["rotation"] if rotation is None else rotation
+        url = f"{OutlineMapView.url}?rotation={shown}&v={int(time.time())}"
+        return (
+            f"![House outline]({url})\n\nMeasured from the building outline on "
+            f"OpenStreetMap: rotated {info['rotation']:+.1f} degrees. The orange "
+            f"arrow is where the south wall faces at {shown:+.1f} degrees. The "
+            'picture does not update as you type: tick "Redraw the map" and '
+            "press Submit to see another value without saving."
+        )
+
     async def _house(
         self, step_id: str, user_input: dict[str, Any] | None, current: dict
     ) -> ConfigFlowResult:
         errors: dict[str, str] = {}
+        if user_input is not None and user_input.get("preview"):
+            # redraw the map for the values typed so far; nothing is saved
+            current = {k: v for k, v in user_input.items() if k != "preview"}
+            user_input = None
         if user_input is not None:
             try:
                 data = _house_from_form(user_input)
@@ -357,6 +410,9 @@ class HomeThermalLabConfigFlow(ConfigFlow, domain=DOMAIN):
         return self.async_show_form(
             step_id=step_id,
             data_schema=self.add_suggested_values_to_schema(_house_schema(), current),
+            description_placeholders={
+                "map": await self._map_text(current.get("rotation"))
+            },
             errors=errors,
         )
 
