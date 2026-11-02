@@ -4,12 +4,12 @@ from datetime import UTC, datetime
 
 import pytest
 
-from custom_components.house_thermal_lab.forecast import parse_forecast
-from custom_components.house_thermal_lab.irradiance import (
+from custom_components.home_thermal_lab.forecast import parse_forecast
+from custom_components.home_thermal_lab.irradiance import (
     Irradiance,
     light_on_surfaces,
 )
-from custom_components.house_thermal_lab.shadow import ZoneModel, decide, simulate
+from custom_components.home_thermal_lab.shadow import ZoneModel, decide, simulate
 
 
 def test_simulation_cools_toward_outdoors():

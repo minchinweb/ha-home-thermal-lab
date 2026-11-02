@@ -1,4 +1,4 @@
-"""House Thermal Lab: experiments on house thermal behaviour, run inside Home Assistant.
+"""Home Thermal Lab: experiments on house thermal behaviour, run inside Home Assistant.
 
 Configured in YAML through its ``sensor`` platform (see ``sensor.py`` and the
 README). See ``hypotheses/`` at the repository root for the experiments.
@@ -9,4 +9,4 @@ this file defines no ``async_setup`` (Home Assistant does not need one for a
 platform-only integration).
 """
 
-DOMAIN = "house_thermal_lab"
+DOMAIN = "home_thermal_lab"

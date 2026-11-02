@@ -4,7 +4,7 @@ import math
 
 import pytest
 
-from custom_components.house_thermal_lab import wave_fit
+from custom_components.home_thermal_lab import wave_fit
 
 
 def _day(mean, amp, peak, step=1.0):

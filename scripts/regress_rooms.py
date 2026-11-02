@@ -39,15 +39,15 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from envfile import load_env, real_entity
 
-from custom_components.house_thermal_lab.ha_history import (
+from custom_components.home_thermal_lab.ha_history import (
     fetch_home_position,
     fetch_states,
 )
-from custom_components.house_thermal_lab.ha_statistics import (
+from custom_components.home_thermal_lab.ha_statistics import (
     fetch_statistics_from_url,
 )
-from custom_components.house_thermal_lab.hvac import Run, runs_from_states
-from custom_components.house_thermal_lab.solar import solar_elevation_degrees
+from custom_components.home_thermal_lab.hvac import Run, runs_from_states
+from custom_components.home_thermal_lab.solar import solar_elevation_degrees
 
 OUTDOOR = "sensor.edmonton_temperature"
 POWER = "sensor.eagle_00bb9c_power_demand"

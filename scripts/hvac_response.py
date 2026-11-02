@@ -27,9 +27,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from envfile import load_env
 
-from custom_components.house_thermal_lab.ha_history import fetch_states
-from custom_components.house_thermal_lab.hvac import runs_from_states
-from custom_components.house_thermal_lab.hvac_response import (
+from custom_components.home_thermal_lab.ha_history import fetch_states
+from custom_components.home_thermal_lab.hvac import runs_from_states
+from custom_components.home_thermal_lab.hvac_response import (
     analyse_responses,
     merge_runs,
     temperature_series,

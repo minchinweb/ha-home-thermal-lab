@@ -15,7 +15,7 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from custom_components.house_thermal_lab.experiments import (
+from custom_components.home_thermal_lab.experiments import (
     average_fit,
     group_results,
     profile_bands,
@@ -24,8 +24,8 @@ from custom_components.house_thermal_lab.experiments import (
 if TYPE_CHECKING:
     from pathlib import Path
 
-    from custom_components.house_thermal_lab.experiments import DayResult
-    from custom_components.house_thermal_lab.locations import Location
+    from custom_components.home_thermal_lab.experiments import DayResult
+    from custom_components.home_thermal_lab.locations import Location
 
 
 def plot_location(

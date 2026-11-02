@@ -4,8 +4,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from custom_components.house_thermal_lab.hvac import Run
-from custom_components.house_thermal_lab.hvac_response import (
+from custom_components.home_thermal_lab.hvac import Run
+from custom_components.home_thermal_lab.hvac_response import (
     analyse_responses,
     merge_runs,
     temperature_series,
@@ -85,7 +85,7 @@ def test_baseline_unknown_when_previous_episode_is_close():
 
 
 def test_solar_elevation():
-    from custom_components.house_thermal_lab.solar import solar_elevation_degrees
+    from custom_components.home_thermal_lab.solar import solar_elevation_degrees
 
     # Edmonton, summer solstice: about 60 degrees at noon, below -6 at midnight
     noon = datetime(2025, 6, 21, 19, 0, tzinfo=UTC)
@@ -95,7 +95,7 @@ def test_solar_elevation():
 
 
 def test_stale_readings_are_skipped():
-    from custom_components.house_thermal_lab.hvac_response import reading_age_minutes
+    from custom_components.home_thermal_lab.hvac_response import reading_age_minutes
 
     # the room last reported 40 minutes before the run starts
     series = [(at(0), 20.0), (at(60), 21.0)]

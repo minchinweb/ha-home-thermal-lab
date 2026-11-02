@@ -1,10 +1,10 @@
-"""House Thermal Lab sensors. Nothing here switches anything.
+"""Home Thermal Lab sensors. Nothing here switches anything.
 
 Four kinds, all configured under one ``sensor:`` platform entry (see the README
 for a full example)::
 
     sensor:
-      - platform: house_thermal_lab
+      - platform: home_thermal_lab
         outdoor_entity: sensor.edmonton_temperature
         zones: [...]          # shadow controller, one sensor per zone (17)
         call_stats: [...]     # heating-call statistics per zone (05, 13)
@@ -279,7 +279,7 @@ class ShadowSensor(SensorEntity):
         self._outdoor_entity = outdoor_entity
         self._zone = zone
         self._attr_name = f"Shadow {zone['name']}"
-        self._attr_unique_id = f"house_thermal_lab_shadow_{zone['climate_entity']}"
+        self._attr_unique_id = f"home_thermal_lab_shadow_{zone['climate_entity']}"
         self._attr_native_value = None
         self._attr_extra_state_attributes = {}
 
@@ -372,7 +372,7 @@ class CallStatsSensor(SensorEntity):
         self._hass = hass
         self._item = item
         self._attr_name = item["name"]
-        self._attr_unique_id = f"house_thermal_lab_calls_{item['climate_entity']}"
+        self._attr_unique_id = f"home_thermal_lab_calls_{item['climate_entity']}"
         self._last_action = None
 
     async def async_added_to_hass(self) -> None:
@@ -428,7 +428,7 @@ class FurnaceEnergySensor(RestoreSensor):
         self._item = item
         self._attr_name = item["name"]
         slug = item["name"].lower().replace(" ", "_")
-        self._attr_unique_id = f"house_thermal_lab_energy_{slug}"
+        self._attr_unique_id = f"home_thermal_lab_energy_{slug}"
         self._meter = Meter(dict(item["kw"]))
 
     def _mode(self) -> str:
@@ -483,7 +483,7 @@ class ContributionSensor(SensorEntity):
         self._outdoor = outdoor
         self._item = item
         self._attr_name = f"Contributions {item['name']}"
-        self._attr_unique_id = f"house_thermal_lab_contrib_{item['climate_entity']}"
+        self._attr_unique_id = f"home_thermal_lab_contrib_{item['climate_entity']}"
 
     async def async_added_to_hass(self) -> None:
         self.async_on_remove(

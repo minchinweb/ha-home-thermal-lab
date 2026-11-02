@@ -27,12 +27,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from envfile import load_env
 from regress_rooms import POWER, ROOMS
 
-from custom_components.house_thermal_lab.ha_history import (
+from custom_components.home_thermal_lab.ha_history import (
     fetch_states,
     fetch_time_zone,
     urllib_fetch_auth,
 )
-from custom_components.house_thermal_lab.power import power_series, time_weighted_mean
+from custom_components.home_thermal_lab.power import power_series, time_weighted_mean
 
 
 def _parse(text: str, tz: ZoneInfo) -> datetime:

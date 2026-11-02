@@ -4,7 +4,7 @@ from datetime import UTC, datetime
 
 import pytest
 
-from custom_components.house_thermal_lab.wind import build_url, parse_wind
+from custom_components.home_thermal_lab.wind import build_url, parse_wind
 
 BODY = {
     "hourly": {

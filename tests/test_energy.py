@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from custom_components.house_thermal_lab.energy import Meter, furnace_mode
+from custom_components.home_thermal_lab.energy import Meter, furnace_mode
 
 T0 = datetime(2026, 11, 2, tzinfo=UTC)
 

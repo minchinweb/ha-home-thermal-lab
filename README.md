@@ -3,7 +3,7 @@
 Home Assistant custom components for modelling a target daily temperature
 wave, and for testing hypotheses about how a house behaves thermally.
 
-- `custom_components/house_thermal_lab/`: runs the experiments inside Home
+- `custom_components/home_thermal_lab/`: runs the experiments inside Home
   Assistant, using data already in its recorder.
 - `hypotheses/`: one file per hypothesis (claim, data, method, results).
 - `scripts/`: command-line runners and reports. Copy `.env.example` to `.env` (git-ignored) and fill in your Home Assistant URL, token and sensor.
@@ -17,10 +17,10 @@ The button adds this repository to HACS as a custom repository. By hand:
 1. In HACS, open the menu (three dots) and choose **Custom repositories**. Add
    `https://github.com/MinchinWeb/ha-home-thermal-lab` with the type
    **Integration**.
-2. Find **House Thermal Lab** in HACS, download it, and restart Home Assistant.
+2. Find **Home Thermal Lab** in HACS, download it, and restart Home Assistant.
 3. Add the sensors to `configuration.yaml` (below) and restart again.
 
-Without HACS, copy `custom_components/house_thermal_lab/` into your Home
+Without HACS, copy `custom_components/home_thermal_lab/` into your Home
 Assistant `custom_components/` folder.
 
 The integration is configured in YAML only and switches nothing. It needs the
@@ -35,7 +35,7 @@ where noted; `sensor.py` documents each one.
 
 ```yaml
 sensor:
-  - platform: house_thermal_lab
+  - platform: home_thermal_lab
     outdoor_entity: sensor.edmonton_temperature   # needed for zones and contributions
 
     # Shadow controller (hypothesis 17): `skip` or `heat` for a call starting now.

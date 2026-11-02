@@ -3,8 +3,8 @@
 Each file states one claim, the data needed, the method, and a result log.
 Status values: `untested`, `in progress`, `supported`, `refuted`, `revised`.
 
-The experiments are meant to be run by the `house_thermal_lab` custom
-component (`custom_components/house_thermal_lab/`), using data already in
+The experiments are meant to be run by the `home_thermal_lab` custom
+component (`custom_components/home_thermal_lab/`), using data already in
 Home Assistant, so they can be re-run later or by others.
 
 | # | Hypothesis | Stage | Status |

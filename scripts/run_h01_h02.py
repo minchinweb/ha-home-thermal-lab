@@ -35,7 +35,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from envfile import load_env
 
-from custom_components.house_thermal_lab.experiments import (
+from custom_components.home_thermal_lab.experiments import (
     GROUP_BY,
     analyse_with_external_weather,
     format_table,
@@ -43,18 +43,18 @@ from custom_components.house_thermal_lab.experiments import (
     run,
     summarise,
 )
-from custom_components.house_thermal_lab.ha_history import (
+from custom_components.home_thermal_lab.ha_history import (
     fetch_home_position,
     fetch_sensor_history,
     list_temperature_sensors,
 )
-from custom_components.house_thermal_lab.ha_statistics import fetch_statistics_from_url
-from custom_components.house_thermal_lab.locations import (
+from custom_components.home_thermal_lab.ha_statistics import fetch_statistics_from_url
+from custom_components.home_thermal_lab.locations import (
     EXAMPLE_LOCATIONS,
     Location,
     home_location,
 )
-from custom_components.house_thermal_lab.open_meteo import fetch_hourly
+from custom_components.home_thermal_lab.open_meteo import fetch_hourly
 
 
 def _parse_location(text: str) -> Location:

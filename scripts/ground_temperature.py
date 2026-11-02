@@ -32,8 +32,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from envfile import load_env
 
-from custom_components.house_thermal_lab.ha_history import fetch_home_position
-from custom_components.house_thermal_lab.open_meteo import ARCHIVE_URL, urllib_fetch
+from custom_components.home_thermal_lab.ha_history import fetch_home_position
+from custom_components.home_thermal_lab.open_meteo import ARCHIVE_URL, urllib_fetch
 
 BANDS = {
     "soil_temperature_0_to_7cm": 0.035,

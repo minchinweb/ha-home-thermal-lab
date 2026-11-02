@@ -1,7 +1,7 @@
 """Furnace start lag, and the dip and rebound after a call (hypotheses 05, 13).
 
 For every heating call of each zone, from the thermostat's own reading
-(``custom_components/house_thermal_lab/calls.py`` does the measuring):
+(``custom_components/home_thermal_lab/calls.py`` does the measuring):
 
 * how long until the heat shows at the thermostat (lag);
 * how much it rose during the call;
@@ -31,12 +31,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from envfile import load_env
 from regress_rooms import ZONES
 
-from custom_components.house_thermal_lab.calls import (
+from custom_components.home_thermal_lab.calls import (
     calls_from_states,
     responses,
     temperature_series,
 )
-from custom_components.house_thermal_lab.ha_history import fetch_states
+from custom_components.home_thermal_lab.ha_history import fetch_states
 
 LENGTHS = [(0, 10), (10, 20), (20, 40), (40, 1e9)]
 

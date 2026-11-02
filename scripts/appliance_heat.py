@@ -42,16 +42,16 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from envfile import load_env
 from regress_rooms import OUTDOOR, ROOMS, _bin_means, _ols, _overlap_fraction
 
-from custom_components.house_thermal_lab.contributions import dimmer_kw, held_values
-from custom_components.house_thermal_lab.ha_history import (
+from custom_components.home_thermal_lab.contributions import dimmer_kw, held_values
+from custom_components.home_thermal_lab.ha_history import (
     fetch_home_position,
     fetch_states,
 )
-from custom_components.house_thermal_lab.ha_statistics import (
+from custom_components.home_thermal_lab.ha_statistics import (
     fetch_statistics_from_url,
 )
-from custom_components.house_thermal_lab.hvac import runs_from_states
-from custom_components.house_thermal_lab.solar import solar_elevation_degrees
+from custom_components.home_thermal_lab.hvac import runs_from_states
+from custom_components.home_thermal_lab.solar import solar_elevation_degrees
 
 PLUGS = {
     "fridge": "sensor.kitchen_fridge_plug_power",

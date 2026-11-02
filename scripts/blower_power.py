@@ -36,9 +36,9 @@ from envfile import load_env
 from furnace_stages import HIGH, stage_runs
 from regress_rooms import POWER, ZONES
 
-from custom_components.house_thermal_lab.ha_history import fetch_states
-from custom_components.house_thermal_lab.hvac import runs_from_states
-from custom_components.house_thermal_lab.hvac_response import merge_runs
+from custom_components.home_thermal_lab.ha_history import fetch_states
+from custom_components.home_thermal_lab.hvac import runs_from_states
+from custom_components.home_thermal_lab.hvac_response import merge_runs
 
 
 def _power_series(states: list[dict]) -> list[tuple[datetime, float]]:

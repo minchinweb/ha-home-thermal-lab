@@ -5,12 +5,12 @@ import math
 
 import pytest
 
-from custom_components.house_thermal_lab import experiments, open_meteo, solar
-from custom_components.house_thermal_lab.locations import (
+from custom_components.home_thermal_lab import experiments, open_meteo, solar
+from custom_components.home_thermal_lab.locations import (
     Location,
     locations_from_config,
 )
-from custom_components.house_thermal_lab.readings import Reading, SolarReading
+from custom_components.home_thermal_lab.readings import Reading, SolarReading
 
 
 def _fake_body(lon, start, days, peak_after_noon=3.0, amp=5.0, mean=10.0):

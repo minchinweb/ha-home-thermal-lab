@@ -27,7 +27,7 @@ import itertools
 
 from envfile import load_env
 
-from custom_components.house_thermal_lab.ha_history import fetch_home_position
+from custom_components.home_thermal_lab.ha_history import fetch_home_position
 
 OVERPASS = "https://overpass-api.de/api/interpreter"
 
@@ -46,7 +46,7 @@ def main() -> None:
     query = f'[out:json];way(around:40,{lat},{lon})["building"];out geom;'
     data = urllib.parse.urlencode({"data": query}).encode()
     request = urllib.request.Request(
-        OVERPASS, data, headers={"User-Agent": "house-thermal-lab/0.1"}
+        OVERPASS, data, headers={"User-Agent": "home-thermal-lab/0.1"}
     )
     with urllib.request.urlopen(request, timeout=60) as resp:
         ways = json.load(resp)["elements"]

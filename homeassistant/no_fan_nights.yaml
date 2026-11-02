@@ -19,10 +19,10 @@
 # `uv run python scripts/blower_power.py --days 14 --edge 5`.
 
 automation:
-  - id: house_thermal_lab_no_fan_night_start
+  - id: home_thermal_lab_no_fan_night_start
     alias: "No-fan night: start"
     description: >-
-      Hypotheses 08 and 10 (house_thermal_lab): on even days of the year, set
+      Hypotheses 08 and 10 (home_thermal_lab): on even days of the year, set
       every zone's fan minimum on-time to 0 for the night.
     mode: single
     triggers:
@@ -44,7 +44,7 @@ automation:
         data:
           fan_mode: auto
 
-  - id: house_thermal_lab_no_fan_night_end
+  - id: home_thermal_lab_no_fan_night_end
     alias: "No-fan night: end"
     description: >-
       Restore the usual fan minimum on-times (z2 40 min/h, the others 15) after

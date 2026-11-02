@@ -55,16 +55,16 @@ from furnace_stages import stage_runs
 from regress_rooms import ROOMS, ZONES, _bin_means, _ols, _overlap_fraction
 from thermal_momentum import NIGHT_ELEVATION
 
-from custom_components.house_thermal_lab.ha_history import (
+from custom_components.home_thermal_lab.ha_history import (
     fetch_home_position,
     fetch_states,
 )
-from custom_components.house_thermal_lab.ha_statistics import (
+from custom_components.home_thermal_lab.ha_statistics import (
     fetch_statistics_from_url,
 )
-from custom_components.house_thermal_lab.hvac import runs_from_states
-from custom_components.house_thermal_lab.hvac_response import merge_runs
-from custom_components.house_thermal_lab.solar import solar_elevation_degrees
+from custom_components.home_thermal_lab.hvac import runs_from_states
+from custom_components.home_thermal_lab.hvac_response import merge_runs
+from custom_components.home_thermal_lab.solar import solar_elevation_degrees
 
 REGISTER_FAN = "fan.master_bedroom_ad3958"
 SAME_ROOM = ("Office sensor", "Office AQ")

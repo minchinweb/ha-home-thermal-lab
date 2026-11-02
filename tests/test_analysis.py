@@ -5,9 +5,9 @@ import math
 
 import pytest
 
-from custom_components.house_thermal_lab import experiments, ha_history, stats, weather
-from custom_components.house_thermal_lab.locations import Location
-from custom_components.house_thermal_lab.readings import Reading, SolarReading
+from custom_components.home_thermal_lab import experiments, ha_history, stats, weather
+from custom_components.home_thermal_lab.locations import Location
+from custom_components.home_thermal_lab.readings import Reading, SolarReading
 
 HERE = Location("Here", 50.0, 0.0, "home")
 
@@ -241,7 +241,7 @@ def test_list_includes_weather_entities():
 def test_runs_and_daily_use():
     from zoneinfo import ZoneInfo
 
-    from custom_components.house_thermal_lab import hvac
+    from custom_components.home_thermal_lab import hvac
 
     states = [
         {"state": "off", "last_changed": "2025-01-01T00:00:00+00:00"},
@@ -268,7 +268,7 @@ def test_runs_and_daily_use():
 
 
 def test_runs_from_climate_attribute():
-    from custom_components.house_thermal_lab import hvac
+    from custom_components.home_thermal_lab import hvac
 
     def row(action, when):
         return {"attributes": {"hvac_action": action}, "last_updated": when}

@@ -53,16 +53,16 @@ from regress_rooms import (
     _overlap_fraction,
 )
 
-from custom_components.house_thermal_lab.ha_history import (
+from custom_components.home_thermal_lab.ha_history import (
     fetch_home_position,
     fetch_states,
 )
-from custom_components.house_thermal_lab.ha_statistics import (
+from custom_components.home_thermal_lab.ha_statistics import (
     fetch_statistics_from_url,
 )
-from custom_components.house_thermal_lab.hvac import runs_from_states
-from custom_components.house_thermal_lab.hvac_response import merge_runs
-from custom_components.house_thermal_lab.solar import solar_elevation_degrees
+from custom_components.home_thermal_lab.hvac import runs_from_states
+from custom_components.home_thermal_lab.hvac_response import merge_runs
+from custom_components.home_thermal_lab.solar import solar_elevation_degrees
 
 NIGHT_ELEVATION = -6.0
 MIN_BINS = 30

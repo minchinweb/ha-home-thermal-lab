@@ -28,10 +28,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from envfile import load_env
 from regress_rooms import POWER, ZONES
 
-from custom_components.house_thermal_lab.ha_history import fetch_states
-from custom_components.house_thermal_lab.hvac import Run
-from custom_components.house_thermal_lab.hvac_response import merge_runs
-from custom_components.house_thermal_lab.power import power_series, time_weighted_mean
+from custom_components.home_thermal_lab.ha_history import fetch_states
+from custom_components.home_thermal_lab.hvac import Run
+from custom_components.home_thermal_lab.hvac_response import merge_runs
+from custom_components.home_thermal_lab.power import power_series, time_weighted_mean
 
 LOW = "auxHeat1"
 HIGH = "auxHeat2"

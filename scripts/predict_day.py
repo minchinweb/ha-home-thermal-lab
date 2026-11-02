@@ -53,18 +53,18 @@ from envfile import load_env
 from regress_rooms import OUTDOOR, ROOMS, _bin_means
 from solar_windows import WINDOWS
 
-from custom_components.house_thermal_lab.ha_history import (
+from custom_components.home_thermal_lab.ha_history import (
     fetch_home_position,
     fetch_time_zone,
 )
-from custom_components.house_thermal_lab.ha_statistics import (
+from custom_components.home_thermal_lab.ha_statistics import (
     fetch_statistics_from_url,
 )
-from custom_components.house_thermal_lab.irradiance import (
+from custom_components.home_thermal_lab.irradiance import (
     fetch_irradiance,
     light_on_surfaces,
 )
-from custom_components.house_thermal_lab.solar import (
+from custom_components.home_thermal_lab.solar import (
     solar_azimuth_degrees,
     solar_elevation_degrees,
 )

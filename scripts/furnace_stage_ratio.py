@@ -30,8 +30,8 @@ from hvac_bleed_matrix import _sensor_series
 from regress_rooms import ROOMS, ZONES
 from thermal_momentum import ZONE_OF_ROOM
 
-from custom_components.house_thermal_lab.ha_history import fetch_states
-from custom_components.house_thermal_lab.hvac_response import value_at
+from custom_components.home_thermal_lab.ha_history import fetch_states
+from custom_components.home_thermal_lab.hvac_response import value_at
 
 
 def _rate(series, a: datetime, b: datetime) -> float | None:

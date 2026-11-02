@@ -42,8 +42,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from envfile import load_env
 from regress_rooms import ROOMS, _bin_means
 
-from custom_components.house_thermal_lab.ha_history import fetch_time_zone
-from custom_components.house_thermal_lab.ha_statistics import (
+from custom_components.home_thermal_lab.ha_history import fetch_time_zone
+from custom_components.home_thermal_lab.ha_statistics import (
     fetch_statistics_from_url,
 )
 

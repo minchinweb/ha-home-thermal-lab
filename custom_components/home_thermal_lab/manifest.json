@@ -1,6 +1,6 @@
 {
-  "domain": "house_thermal_lab",
-  "name": "House Thermal Lab",
+  "domain": "home_thermal_lab",
+  "name": "Home Thermal Lab",
   "codeowners": ["@MinchinWeb"],
   "config_flow": false,
   "dependencies": ["recorder"],

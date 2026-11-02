@@ -47,17 +47,17 @@ from regress_rooms import (
     _overlap_fraction,
 )
 
-from custom_components.house_thermal_lab.ha_history import (
+from custom_components.home_thermal_lab.ha_history import (
     fetch_home_position,
     fetch_states,
     fetch_time_zone,
 )
-from custom_components.house_thermal_lab.ha_statistics import (
+from custom_components.home_thermal_lab.ha_statistics import (
     fetch_statistics_from_url,
 )
-from custom_components.house_thermal_lab.hvac import runs_from_states
-from custom_components.house_thermal_lab.hvac_response import merge_runs
-from custom_components.house_thermal_lab.solar import solar_elevation_degrees
+from custom_components.home_thermal_lab.hvac import runs_from_states
+from custom_components.home_thermal_lab.hvac_response import merge_runs
+from custom_components.home_thermal_lab.solar import solar_elevation_degrees
 
 WASHER_POWER = "sensor.washing_machine_plug_power"  # watts
 DRYER_STATUS = "sensor.dryer_current_status"

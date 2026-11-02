@@ -49,16 +49,16 @@ from regress_rooms import (
 from solar_windows import WINDOWS
 from thermal_momentum import ZONE_OF_ROOM
 
-from custom_components.house_thermal_lab.ha_history import (
+from custom_components.home_thermal_lab.ha_history import (
     fetch_home_position,
     fetch_states,
 )
-from custom_components.house_thermal_lab.ha_statistics import (
+from custom_components.home_thermal_lab.ha_statistics import (
     fetch_statistics_from_url,
 )
-from custom_components.house_thermal_lab.hvac import runs_from_states
-from custom_components.house_thermal_lab.irradiance import fetch_irradiance
-from custom_components.house_thermal_lab.solar import (
+from custom_components.home_thermal_lab.hvac import runs_from_states
+from custom_components.home_thermal_lab.irradiance import fetch_irradiance
+from custom_components.home_thermal_lab.solar import (
     solar_azimuth_degrees,
     solar_elevation_degrees,
 )

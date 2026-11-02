@@ -1,6 +1,6 @@
 """Fit the contribution-chart terms per zone and print them as YAML.
 
-The coefficients of ``custom_components/house_thermal_lab/contributions.py``::
+The coefficients of ``custom_components/home_thermal_lab/contributions.py``::
 
     dT/dt = a * (outdoor - T) + c + g * light + h * own_heat
           + x * other_heat + p * plug_kw
@@ -37,16 +37,16 @@ from predict_day import _room_light
 from regress_rooms import OUTDOOR, ROOMS, ZONES, _bin_means, _ols, _overlap_fraction
 from solar_windows import WINDOWS
 
-from custom_components.house_thermal_lab.ha_history import (
+from custom_components.home_thermal_lab.ha_history import (
     fetch_home_position,
     fetch_states,
 )
-from custom_components.house_thermal_lab.ha_statistics import (
+from custom_components.home_thermal_lab.ha_statistics import (
     fetch_statistics_from_url,
 )
-from custom_components.house_thermal_lab.hvac import runs_from_states
-from custom_components.house_thermal_lab.irradiance import fetch_irradiance
-from custom_components.house_thermal_lab.solar import (
+from custom_components.home_thermal_lab.hvac import runs_from_states
+from custom_components.home_thermal_lab.irradiance import fetch_irradiance
+from custom_components.home_thermal_lab.solar import (
     solar_azimuth_degrees,
     solar_elevation_degrees,
 )

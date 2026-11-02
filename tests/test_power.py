@@ -4,8 +4,8 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from custom_components.house_thermal_lab.hvac import Run
-from custom_components.house_thermal_lab.power import (
+from custom_components.home_thermal_lab.hvac import Run
+from custom_components.home_thermal_lab.power import (
     power_series,
     steps_around,
     time_weighted_mean,

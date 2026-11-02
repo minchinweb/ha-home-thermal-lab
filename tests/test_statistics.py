@@ -5,8 +5,8 @@ from datetime import UTC, datetime
 
 import pytest
 
-from custom_components.house_thermal_lab import ha_statistics
-from custom_components.house_thermal_lab.readings import Reading
+from custom_components.home_thermal_lab import ha_statistics
+from custom_components.home_thermal_lab.readings import Reading
 
 
 class FakeSocket:

@@ -52,16 +52,16 @@ from regress_rooms import (
 )
 from thermal_momentum import NIGHT_ELEVATION, ZONE_OF_ROOM
 
-from custom_components.house_thermal_lab.ha_history import (
+from custom_components.home_thermal_lab.ha_history import (
     fetch_home_position,
     fetch_states,
 )
-from custom_components.house_thermal_lab.ha_statistics import (
+from custom_components.home_thermal_lab.ha_statistics import (
     fetch_statistics_from_url,
 )
-from custom_components.house_thermal_lab.hvac import runs_from_states
-from custom_components.house_thermal_lab.hvac_response import merge_runs
-from custom_components.house_thermal_lab.solar import solar_elevation_degrees
+from custom_components.home_thermal_lab.hvac import runs_from_states
+from custom_components.home_thermal_lab.hvac_response import merge_runs
+from custom_components.home_thermal_lab.solar import solar_elevation_degrees
 
 ZONE_OCCUPANCY = {
     "z1": "binary_sensor.kitchen_occupancy",

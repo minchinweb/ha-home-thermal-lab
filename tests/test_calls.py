@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from custom_components.house_thermal_lab.calls import (
+from custom_components.home_thermal_lab.calls import (
     Call,
     calls_from_states,
     respond,

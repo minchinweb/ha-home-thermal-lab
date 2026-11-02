@@ -1,7 +1,7 @@
 """Compare the shadow sensors' log with what the thermostats actually did (17).
 
 Reads the history of each shadow sensor (``sensor.shadow_<zone name>``, created by
-``custom_components/house_thermal_lab/sensor.py``) and of the matching thermostat.
+``custom_components/home_thermal_lab/sensor.py``) and of the matching thermostat.
 For every heating call that started after the sensor began logging, it takes the
 last decision made before the call and reports whether the controller would have
 skipped it, how long and how large the call was, and how far the room fell
@@ -27,8 +27,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from envfile import load_env
 
-from custom_components.house_thermal_lab.ha_history import fetch_states
-from custom_components.house_thermal_lab.hvac import runs_from_states
+from custom_components.home_thermal_lab.ha_history import fetch_states
+from custom_components.home_thermal_lab.hvac import runs_from_states
 
 
 def _when(row: dict) -> datetime:

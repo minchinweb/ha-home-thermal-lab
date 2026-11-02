@@ -24,11 +24,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from envfile import load_env
 
-from custom_components.house_thermal_lab.ha_history import (
+from custom_components.home_thermal_lab.ha_history import (
     fetch_states,
     fetch_time_zone,
 )
-from custom_components.house_thermal_lab.hvac import (
+from custom_components.home_thermal_lab.hvac import (
     daily_use,
     run_summary,
     runs_from_states,

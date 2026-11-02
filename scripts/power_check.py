@@ -27,13 +27,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from envfile import load_env
 
-from custom_components.house_thermal_lab.ha_history import (
+from custom_components.home_thermal_lab.ha_history import (
     fetch_states,
     fetch_time_zone,
 )
-from custom_components.house_thermal_lab.hvac import Run, runs_from_states
-from custom_components.house_thermal_lab.hvac_response import merge_runs
-from custom_components.house_thermal_lab.power import (
+from custom_components.home_thermal_lab.hvac import Run, runs_from_states
+from custom_components.home_thermal_lab.hvac_response import merge_runs
+from custom_components.home_thermal_lab.power import (
     median_or_nan,
     power_series,
     steps_around,

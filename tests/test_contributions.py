@@ -4,7 +4,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from custom_components.house_thermal_lab.contributions import (
+from custom_components.home_thermal_lab.contributions import (
     Inputs,
     ZoneTerms,
     chart_points,

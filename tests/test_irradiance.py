@@ -4,11 +4,11 @@ from datetime import UTC, datetime
 
 import pytest
 
-from custom_components.house_thermal_lab.irradiance import (
+from custom_components.home_thermal_lab.irradiance import (
     Irradiance,
     parse_irradiance,
 )
-from custom_components.house_thermal_lab.solar import solar_azimuth_degrees
+from custom_components.home_thermal_lab.solar import solar_azimuth_degrees
 
 BODY = {
     "hourly": {

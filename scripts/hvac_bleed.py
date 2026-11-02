@@ -25,17 +25,17 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from envfile import load_env
 
-from custom_components.house_thermal_lab.ha_history import (
+from custom_components.home_thermal_lab.ha_history import (
     fetch_home_position,
     fetch_states,
 )
-from custom_components.house_thermal_lab.hvac import Run, runs_from_states
-from custom_components.house_thermal_lab.hvac_response import (
+from custom_components.home_thermal_lab.hvac import Run, runs_from_states
+from custom_components.home_thermal_lab.hvac_response import (
     analyse_responses,
     merge_runs,
     temperature_series,
 )
-from custom_components.house_thermal_lab.solar import solar_elevation_degrees
+from custom_components.home_thermal_lab.solar import solar_elevation_degrees
 
 NIGHT_BELOW = -6.0
 DAY_ABOVE = 5.0
