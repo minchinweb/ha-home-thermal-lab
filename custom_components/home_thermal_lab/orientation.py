@@ -140,10 +140,11 @@ def fetch_outlines(lat: float, lon: float, radius: int = 40) -> list[list[Point]
 
 
 def outline_svg(outline: list[Point], rotation: float, size: int = 280) -> str:
-    """A drawing of the building with true north and the rotated south wall.
+    """A drawing of the building with true north and the house's own axes.
 
-    The faint cross is true north-south and east-west; the arrow points the way
-    the house's south wall faces with the given rotation.
+    The faint dashed cross is true north-south and east-west. The orange cross
+    is that cross turned by ``rotation``: if it lines up with the walls, the
+    rotation is right. The dot marks where the south wall faces.
     """
     home = outline[0]
     xs, ys = [], []
@@ -160,8 +161,19 @@ def outline_svg(outline: list[Point], rotation: float, size: int = 280) -> str:
         return f"{mid + (east - cx_m) * scale:.1f},{mid - (north - cy_m) * scale:.1f}"
 
     polygon = " ".join(at(x, y) for x, y in zip(xs, ys, strict=True))
+    turn = math.radians(rotation)
+    reach = size * 0.46
+    # the house's own north-south and east-west axes, turned by the rotation
+    axes = "".join(
+        f'<line x1="{mid - reach * dx:.1f}" y1="{mid + reach * dy:.1f}" '
+        f'x2="{mid + reach * dx:.1f}" y2="{mid - reach * dy:.1f}" '
+        f'stroke="#e0562b" stroke-width="2.5"/>'
+        for dx, dy in (
+            (math.sin(turn), math.cos(turn)),
+            (math.cos(turn), -math.sin(turn)),
+        )
+    )
     azimuth = math.radians(180.0 + rotation)
-    reach = size * 0.42
     tip_x = mid + reach * math.sin(azimuth)
     tip_y = mid - reach * math.cos(azimuth)
     return (
@@ -173,8 +185,7 @@ def outline_svg(outline: list[Point], rotation: float, size: int = 280) -> str:
         f'stroke-width="1" stroke-dasharray="4 4"/>'
         f'<polygon points="{polygon}" fill="rgba(110,150,220,0.35)" '
         f'stroke="#4a78c8" stroke-width="2"/>'
-        f'<line x1="{mid}" y1="{mid}" x2="{tip_x:.1f}" y2="{tip_y:.1f}" '
-        f'stroke="#e0562b" stroke-width="3"/>'
+        f"{axes}"
         f'<circle cx="{tip_x:.1f}" cy="{tip_y:.1f}" r="5" fill="#e0562b"/>'
         f'<text x="{mid + 6}" y="18" fill="#888">N</text>'
         f'<text x="6" y="{size - 8}" fill="#e0562b">'
