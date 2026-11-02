@@ -46,3 +46,17 @@ forecast, and only makes sense once B and C hold up.
 - The "Home Performance" integration publishes its own per-room heating-active flags, window-open sensors and daily estimated energy. Use it as a cross-check on our results for 05, 10 and 13; it is not an input.
 - AC and oven are not individually metered, so they are unexplained terms
   in the electrical-to-heat balance (#14).
+
+## Zone map (this house)
+
+Which room sensors belong to which zone (from the owner, checked against the first regression, where each room responds most to its own zone's calls):
+
+| Zone | Rooms and sensors |
+|---|---|
+| z1 | Kitchen (`sensor.z1_temperature`) |
+| z2 | Basement (`sensor.z2_temperature`), NE and SE basement bedrooms, the S basement bedroom |
+| z3 | Master bedroom (`sensor.z3_temperature`), the N bedroom, upstairs bathroom |
+| z4 | Office (`sensor.z4_temperature`), the office sensor, the office air-quality sensor, the W bedroom |
+
+the W bedroom also has its own thermostat (`climate.w_bedroom_thermostat`), separate from the four-zone board.
+
