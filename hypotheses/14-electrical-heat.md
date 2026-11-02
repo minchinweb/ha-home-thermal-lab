@@ -36,3 +36,13 @@ The burst signature (+1.2 to +2.3 kW, 30-75 minutes) in the history matches this
 
 First reading of the cooking session (`scripts/event_response.py`, 18:14 to about 18:30, range hood off, front-right burner on high, rear-left added at about 18:20 and later turned down to 3): about 0.37 kWh above the 1.27 kW house level beforehand (2.71 kW during). The furnace was only calling for the fan. The kitchen thermostat was drifting down at -0.89 C/h in the half hour before and at -0.44 C/h during, so its cooling slowed by about +0.45 C/h, but it was still lower at the end (-0.11 C), and the change is about one 0.06 C reading step. Not a clear warming signal. Other rooms moved by similar small amounts in both directions, so none of this is distinguishable from noise yet.
 
+
+### Cooking session, whole run (18:08 to 18:59 local, 2026-11-01; range hood off)
+
+Note: Home Assistant's time zone is America/Regina (UTC-6 all year), which is what the scripts use as "local".
+
+- Whole-house power: 1.08 kW before, 3.08 kW during; extra energy about 1.70 kWh over 51 minutes (kettle and burners together). Power fell from 3.9 to 2.1 kW at 18:59.
+- Kitchen: net -0.11 C over the event (+0.11 C/h before, -0.13 during). No warming is visible.
+- Other rooms: noisy and mixed. Master bedroom +0.5 C (fan-only calls, probably unrelated), the S basement bedroom -0.6 C, basement rooms cooling less than before.
+- Scale check: with roughly 6 kWh/C for the whole house (13) and 1.5 kWh/C per zone, 1.7 kWh retained in the kitchen zone would give about +1 C; spread over the house about +0.3 C. Neither is seen, so most of the stove's heat is not showing up as warmer air at the sensors (heat in food and water, pans, vented moisture, fans mixing it through the house).
+- Follow-up: re-run `event_response.py 18:08 18:59 --follow 60` after 20:00 to see any slow warming after the load stopped.
