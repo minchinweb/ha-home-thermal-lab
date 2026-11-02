@@ -13,3 +13,7 @@
 ## Results
 
 _none yet_
+
+### First measurement (see 13)
+
+Intercepts of the night cool-down fit (heat the room gains from elsewhere in the house, in C/h with the room at outdoor temperature): +0.06 to +0.25 C/h in every room, largest in the SE basement (+0.25) and basement (+0.20), smallest in the master (+0.07) and office (+0.06). Positive everywhere, as expected when the house is warmer than outdoors.
