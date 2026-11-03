@@ -240,3 +240,70 @@ def kw_table(values: dict, unit: str = "kW") -> dict[str, float]:
     if values.get("cool_tons") not in (None, ""):
         table["cool"] = float(values["cool_tons"]) * TON_TO_KW
     return table
+
+
+# House Structure (https://github.com/minchinweb/ha-house-structure) publishes
+# each room's parts in ``hass.data[STRUCTURE_DOMAIN]``, version 1.
+STRUCTURE_DOMAIN = "house_structure"
+STRUCTURE_EVENT = "house_structure_updated"
+STRUCTURE_VERSION = 1
+
+
+def structure_rooms(data: dict | None) -> dict[str, dict]:
+    """House Structure's rooms by area id, or nothing if it is not set up."""
+    if not data or data.get("version") != STRUCTURE_VERSION:
+        return {}
+    return data.get("rooms") or {}
+
+
+def _planes(parts: list[dict]) -> list[list[float]]:
+    """Distinct ``[azimuth, tilt, shade_below]`` planes, in order."""
+    out: list[list[float]] = []
+    for part in parts:
+        plane = [
+            float(part["azimuth"]),
+            float(part["tilt"]),
+            float(part.get("shade_below") or 0.0),
+        ]
+        if plane not in out:
+            out.append(plane)
+    return out
+
+
+def from_structure(data: dict, room: dict | None, ground: bool = True) -> dict:
+    """A zone's settings, filled in from its area's room in House Structure.
+
+    The room's windows and roofs become the zone's window planes (the ``g``
+    term) and its windowless outside walls its sunlit walls (``w``), replacing
+    any faces typed on the zone. The thermostat comes from the room's first
+    register and the room sensor from the area, unless the zone names its own;
+    ``below_ground`` comes from the room unless the zone sets it.
+
+    Args:
+        data: The zone's own settings (after ``resolve_sun``).
+        room: The room's summary, or ``None`` when the area has no parts.
+        ground: Whether this kind of sensor takes ``below_ground``.
+    """
+    if not room:
+        return data
+    out = dict(data)
+    if not out.get("climate_entity"):
+        climates = [r["climate"] for r in room.get("registers", []) if r.get("climate")]
+        if climates:
+            out["climate_entity"] = climates[0]
+    if not out.get("room_entity") and room.get("temperature_entity"):
+        out["room_entity"] = room["temperature_entity"]
+    if ground and "below_ground" not in data and room.get("below_ground"):
+        out["below_ground"] = True
+    windows = room.get("windows", []) + room.get("roofs", [])
+    walls = [w for w in room.get("walls", []) if not w.get("glass_m2")]
+    if windows or walls:
+        out["windows"], out["roofs"], out["sunlit_walls"] = [], [], []
+        out["window_planes"] = _planes(windows)
+        out["wall_planes"] = _planes(walls)
+    return out
+
+
+def has_walls(zone: dict) -> bool:
+    """Whether the zone has sunlit solid walls (the lagged ``w`` term)."""
+    return bool(zone.get("sunlit_walls") or zone.get("wall_planes"))

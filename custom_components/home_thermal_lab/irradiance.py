@@ -171,3 +171,34 @@ def light_on_surfaces(
             face, tilt, rel, elevation
         ) + reading.diffuse_on_plane(tilt, elevation)
     return total
+
+
+def light_on_planes(
+    reading: Irradiance,
+    azimuth: float,
+    elevation: float,
+    planes: list,
+) -> float:
+    """Summed light (W/m2) on planes given by compass azimuth.
+
+    Args:
+        reading: The hour's irradiance.
+        azimuth: Sun compass azimuth in degrees.
+        elevation: Sun elevation in degrees.
+        planes: ``[azimuth, tilt, shade_below]`` for each plane: the compass
+            bearing it faces, degrees from horizontal, and the sun elevation
+            below which the south-east to south-west beam is blocked.
+    """
+    if elevation <= 0:
+        return 0.0
+    total = 0.0
+    el = math.radians(elevation)
+    for plane_azimuth, tilt, shade_below in planes:
+        tl = math.radians(tilt)
+        cos_incidence = math.sin(el) * math.cos(tl) + math.cos(el) * math.sin(
+            tl
+        ) * math.cos(math.radians(azimuth - plane_azimuth))
+        if not (120.0 <= azimuth < 210.0 and elevation < shade_below):
+            total += reading.direct_normal * max(cos_incidence, 0.0)
+        total += reading.diffuse_on_plane(tilt, elevation)
+    return total

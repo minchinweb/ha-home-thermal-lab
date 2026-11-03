@@ -55,6 +55,7 @@ _NUMBER = selector.NumberSelector(
     selector.NumberSelectorConfig(mode=selector.NumberSelectorMode.BOX, step="any")
 )
 _CLIMATE = selector.EntitySelector(selector.EntitySelectorConfig(domain="climate"))
+_AREA = selector.AreaSelector()
 _CLIMATES = selector.EntitySelector(
     selector.EntitySelectorConfig(domain="climate", multiple=True)
 )
@@ -138,7 +139,8 @@ def _zone_schema(roof_labels: list[dict]) -> vol.Schema:
     return vol.Schema(
         {
             vol.Required("name"): _TEXT,
-            vol.Required("climate_entity"): _CLIMATE,
+            vol.Optional("area_id"): _AREA,
+            vol.Optional("climate_entity"): _CLIMATE,
             vol.Optional("room_entity"): _TEMPERATURE,
             vol.Optional("a"): _NUMBER,
             vol.Optional("c"): _NUMBER,
@@ -161,7 +163,8 @@ def _call_stats_schema(_roof_labels: list[dict]) -> vol.Schema:
     return vol.Schema(
         {
             vol.Required("name"): _TEXT,
-            vol.Required("climate_entity"): _CLIMATE,
+            vol.Optional("area_id"): _AREA,
+            vol.Optional("climate_entity"): _CLIMATE,
             vol.Optional("days"): _NUMBER,
             vol.Optional("after_minutes"): _NUMBER,
         }
@@ -186,7 +189,8 @@ def _contribution_schema(roof_labels: list[dict]) -> vol.Schema:
     return vol.Schema(
         {
             vol.Required("name"): _TEXT,
-            vol.Required("climate_entity"): _CLIMATE,
+            vol.Optional("area_id"): _AREA,
+            vol.Optional("climate_entity"): _CLIMATE,
             vol.Optional("room_entity"): _TEMPERATURE,
             vol.Optional("other_climate_entities"): _CLIMATES,
             vol.Optional("plug_entities"): _POWERS,
@@ -210,6 +214,17 @@ def _contribution_schema(roof_labels: list[dict]) -> vol.Schema:
 def _clean(form: dict, keys: tuple[str, ...]) -> dict:
     """The filled-in fields among ``keys`` (a cleared optional number is dropped)."""
     return {k: form[k] for k in keys if form.get(k) not in (None, "")}
+
+
+def _place(form: dict) -> dict:
+    """The area and thermostat; one of them is needed.
+
+    With an area, House Structure fills in the thermostat (from the room's
+    register), the room sensor and the sun when the sensors are set up.
+    """
+    if not form.get("area_id") and not form.get("climate_entity"):
+        raise FieldError("climate_entity", "choose a room (area) or a thermostat")
+    return _clean(form, ("area_id", "climate_entity"))
 
 
 def _sun_from_form(form: dict) -> dict:
@@ -239,7 +254,7 @@ def _zone_from_form(form: dict) -> dict:
     model.update(_clean(form, ("h",)))  # a heating rate can be pinned on its own
     out = {
         "name": form["name"],
-        "climate_entity": form["climate_entity"],
+        **_place(form),
         "model": model,
         **_clean(
             form, ("room_entity", "tolerance", "max_dip", "deadband", *TARGET_KEYS)
@@ -263,7 +278,7 @@ def _zone_to_form(data: dict) -> dict:
 
 
 def _call_stats_from_form(form: dict) -> dict:
-    data = {"name": form["name"], "climate_entity": form["climate_entity"]}
+    data = {"name": form["name"], **_place(form)}
     if form.get("days") is not None:
         data["days"] = int(form["days"])
     return {**data, **_clean(form, ("after_minutes",))}
@@ -290,7 +305,7 @@ def _energy_to_form(data: dict) -> dict:
 def _contribution_from_form(form: dict) -> dict:
     data = {
         "name": form["name"],
-        "climate_entity": form["climate_entity"],
+        **_place(form),
         "terms": {
             "a": form["a"],
             "c": form["c"],

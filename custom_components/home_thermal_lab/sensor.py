@@ -95,7 +95,7 @@ from .house import (
 )
 from .hvac import HIGH, runs_from_states, stage_runs
 from .hvac_response import merge_runs
-from .irradiance import fetch_irradiance, light_on_surfaces
+from .irradiance import fetch_irradiance, light_on_planes, light_on_surfaces
 from .learn import (
     WALL_TAU_HOURS,
     NoHeatFit,
@@ -115,7 +115,13 @@ from .learn import (
     refine_multistep,
     skill,
 )
-from .options import resolve_sun
+from .options import (
+    STRUCTURE_DOMAIN,
+    from_structure,
+    has_walls,
+    resolve_sun,
+    structure_rooms,
+)
 from .outlook import (
     band_at,
     outlook_from_path,
@@ -158,6 +164,16 @@ SUN_SCHEMA = {
     ],
     vol.Optional("rotation", default=0.0): vol.Coerce(float),
     vol.Optional("shade_below", default=0.0): vol.Coerce(float),
+    # from House Structure: [compass azimuth, tilt, shade_below] of the
+    # room's windows and roofs, and of its windowless outside walls
+    vol.Optional("window_planes", default=[]): [
+        vol.ExactSequence([vol.Coerce(float)] * 3)
+    ],
+    vol.Optional("wall_planes", default=[]): [
+        vol.ExactSequence([vol.Coerce(float)] * 3)
+    ],
+    # the area (room) whose House Structure parts fill in the above
+    vol.Optional("area_id"): cv.string,
 }
 
 GROUND_SCHEMA = {
@@ -209,6 +225,7 @@ ZONE_SCHEMA = vol.Schema(
 CALL_SCHEMA = vol.Schema(
     {
         vol.Required("name"): cv.string,
+        vol.Optional("area_id"): cv.string,
         vol.Required("climate_entity"): cv.entity_id,
         vol.Optional("days", default=7): vol.All(vol.Coerce(int), vol.Range(1, 60)),
         vol.Optional("after_minutes", default=90): vol.Coerce(float),
@@ -321,7 +338,7 @@ def _surface_light(lat: float, lon: float, zone: dict, reading, moment) -> float
         [(f, t) for f, t in zone["roofs"]],
         zone["rotation"],
         shaded,
-    )
+    ) + light_on_planes(reading, az, el, zone["window_planes"])
 
 
 def _ground_at(zone: dict, moment: datetime) -> float:
@@ -336,14 +353,14 @@ def _ground_at(zone: dict, moment: datetime) -> float:
 
 def _wall_light(lat: float, lon: float, zone: dict, reading, moment) -> float:
     """Light (W/m2) on the zone's sunlit solid walls (before the wall's lag)."""
-    if not zone["sunlit_walls"]:
+    if not has_walls(zone):
         return 0.0
     az = solar_azimuth_degrees(moment, lat, lon)
     el = solar_elevation_degrees(moment, lat, lon)
     shaded = 120.0 <= az < 210.0 and el < zone["shade_below"]
     return light_on_surfaces(
         reading, az, el, zone["sunlit_walls"], [], zone["rotation"], shaded
-    )
+    ) + light_on_planes(reading, az, el, zone["wall_planes"])
 
 
 def _learn_blower(rows, item, end, watts):
@@ -447,7 +464,7 @@ def _fit_one(
         "neighbour": neighbour,
         "other": other,
     }
-    if zone["sunlit_walls"]:
+    if has_walls(zone):
         fit, tau = fit_with_wall_lag(*args, s.raw_wall, WALL_TAUS, **extra)
         wall = lag(s.raw_wall, hours, tau)
     else:
@@ -835,7 +852,7 @@ class ZoneBrain:
             "model": self.note,
             "problem": None if self.given else found.problem,
             "fitted_at": datetime.now(UTC).isoformat(),
-            "wall_tau": self.wall_tau if self.zone["sunlit_walls"] else None,
+            "wall_tau": self.wall_tau if has_walls(self.zone) else None,
             "h": round(self.model.h, 3) if self.model else None,
             "furnace_lag": self.model.lag if self.model else None,
             "neighbours": self.names(self.neighbours),
@@ -935,20 +952,28 @@ async def async_setup_entry(hass, entry, async_add_entities):
     outdoor = entry.data.get("outdoor_entity")
     house = dict(entry.data)
     zones = House(hass, forecast_cache, outdoor)
+    rooms = structure_rooms(hass.data.get(STRUCTURE_DOMAIN))
     for subentry in entry.subentries.values():
         kind = subentry.subentry_type
         try:
             if kind == ZONE:
-                item = ZONE_SCHEMA(resolve_sun(dict(subentry.data), house))
+                item = ZONE_SCHEMA(
+                    _with_room(rooms, resolve_sun(dict(subentry.data), house))
+                )
                 entities = _zone_entities(hass, zones, item)
             elif kind == CALL_STATS:
-                entities = [CallStatsSensor(hass, CALL_SCHEMA(dict(subentry.data)))]
+                item = CALL_SCHEMA(_with_room(rooms, dict(subentry.data), sun=False))
+                entities = [CallStatsSensor(hass, item)]
             elif kind == ENERGY:
                 entities = [
                     FurnaceEnergySensor(hass, ENERGY_SCHEMA(dict(subentry.data)))
                 ]
             elif kind == CONTRIBUTION:
-                item = CONTRIBUTION_SCHEMA(resolve_sun(dict(subentry.data), house))
+                item = CONTRIBUTION_SCHEMA(
+                    _with_room(
+                        rooms, resolve_sun(dict(subentry.data), house), ground=False
+                    )
+                )
                 entities = [ContributionSensor(hass, forecast_cache, outdoor, item)]
             else:
                 continue
@@ -964,6 +989,36 @@ async def async_setup_entry(hass, entry, async_add_entities):
             continue
         async_add_entities(entities, config_subentry_id=subentry.subentry_id)
     await _register_panel(hass)
+
+
+def _with_room(rooms: dict, data: dict, ground: bool = True, sun: bool = True) -> dict:
+    """A sub-entry's settings, filled in from House Structure for its area.
+
+    Args:
+        rooms: House Structure's rooms by area id.
+        data: The sub-entry's settings.
+        ground: Whether this kind takes ``below_ground``.
+        sun: Whether this kind takes the room's sun and room sensor; heating-call
+            statistics only take the thermostat.
+    """
+    area = data.get("area_id")
+    if not area:
+        return data
+    if area not in rooms:
+        _LOGGER.warning(
+            "%s: House Structure has no parts in area %r; using the settings "
+            "typed on it",
+            data.get("name"),
+            area,
+        )
+        return data
+    if not sun:
+        filled = from_structure({}, rooms[area], ground=False)
+        out = dict(data)
+        if not out.get("climate_entity") and filled.get("climate_entity"):
+            out["climate_entity"] = filled["climate_entity"]
+        return out
+    return from_structure(data, rooms[area], ground=ground)
 
 
 async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
@@ -1096,7 +1151,7 @@ class ShadowSensor(SensorEntity):
             "c": round(model.c, 5),
             "g": round(model.g, 7),
         }
-        if zone["sunlit_walls"]:
+        if has_walls(zone):
             self._attr_extra_state_attributes["w"] = round(model.w, 7)
         if zone["below_ground"]:
             self._attr_extra_state_attributes["b"] = round(model.b, 5)

@@ -24,9 +24,23 @@ CONTRIBUTION = "contribution"
 
 
 async def async_setup_entry(hass, entry) -> bool:
-    """Create the sensors for a config entry and reload when it changes."""
+    """Create the sensors for a config entry and reload when it changes.
+
+    It also reloads when House Structure's rooms change, since zones with an
+    area take their windows, walls, thermostat and room sensor from there.
+    """
+    from homeassistant.core import callback
+
+    from .options import STRUCTURE_EVENT
+
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
     entry.async_on_unload(entry.add_update_listener(_reload))
+
+    @callback  # runs in the event loop, as the reload needs
+    def _rooms_changed(event) -> None:
+        hass.config_entries.async_schedule_reload(entry.entry_id)
+
+    entry.async_on_unload(hass.bus.async_listen(STRUCTURE_EVENT, _rooms_changed))
     return True
 
 

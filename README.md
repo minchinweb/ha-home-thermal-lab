@@ -5,9 +5,10 @@ wave, and for testing hypotheses about how a house behaves thermally.
 
 - `custom_components/home_thermal_lab/`: runs the experiments inside Home
   Assistant, using data already in its recorder.
-- `custom_components/house_structure/`: describes the house itself (rooms,
-  walls, roofs, windows, internal walls, heating registers), each part a device
-  in a Home Assistant area. See [House Structure](#house-structure).
+- The house itself (rooms, walls, roofs, windows, internal walls, heating
+  registers) is described once in
+  [House Structure](https://github.com/minchinweb/ha-house-structure), a
+  separate integration; the zones here read their room from it.
 - `hypotheses/`: one file per hypothesis (claim, data, method, results).
 - `scripts/`: command-line runners and reports. Copy `.env.example` to `.env` (git-ignored) and fill in your Home Assistant URL, token and sensor.
 
@@ -33,37 +34,26 @@ recorder (default), and fetches an hourly forecast from Open-Meteo for the home
 location. The `.github/workflows/validate.yml` workflow runs the HACS and
 `hassfest` checks on every push.
 
-## House Structure
+## Using House Structure
 
-A second, standalone integration that describes the house once, so other
-integrations need little setting up of their own. Its rooms are Home
-Assistant's areas: each part of the house is a device in a room's area.
+With [House Structure](https://github.com/minchinweb/ha-house-structure)
+installed and the house's parts added there, a zone, contribution chart or
+heating-call statistics sensor only needs its **Room (area)**. From that room
+it takes:
 
-Install it by copying `custom_components/house_structure/` into Home
-Assistant's `custom_components/` folder and restarting (HACS installs one
-integration per repository, so it is not yet in HACS). Then add **House
-Structure** (Settings > Devices & services > Add integration) and set the
-house rotation, the sun elevation below which trees and neighbours to the south
-block the sun, and the unit sizes are typed in. Add the parts from the
-integration's page:
+- the thermostat, from the room's heating register;
+- the room temperature sensor, from the area;
+- the sun: the room's windows and roofs (the `g` term) and its windowless
+  outside walls (the lagged `w` term), each at its own compass bearing, tilt
+  and shading, in place of the window faces, roofs and sunlit walls typed on
+  the zone;
+- whether the room is below ground.
 
-| Part | Settings | Sensor |
-|---|---|---|
-| Room | area, floor area, ceiling height, volume (for a sloped ceiling) | solar gain through all its windows (W) |
-| Outside wall | area, face, length, height | sun on it (W/m2) |
-| Roof | area, face, pitch (`45` or `12:12`), length, slope length | sun on it (W/m2) |
-| Window | the wall or roof it is in, glass size, transmittance, blind (a cover) | solar gain (W), less what the blind keeps out |
-| Internal wall | the two areas, length, height | this room minus the other (C), from each area's temperature sensor |
-| Heating register | area, thermostat, its fan or damper | heating (on while the thermostat heats) |
-
-A window takes its room and the way it faces from its wall or roof. A part not
-square to the house can give its own compass bearing (**Facing**). Each
-sensor's attributes give the part's geometry (azimuth, tilt, areas in m2,
-rooms), so another integration can find a room's parts by its area. Sizes are
-kept in metres, so changing the unit later keeps them. The light on each plane
-comes from Open-Meteo every 15 minutes (beam and diffuse), with the sun's
-position computed locally. An internal wall uses the temperature sensor chosen
-in each area's settings, or the area's only temperature sensor.
+A thermostat, room sensor or below-ground setting typed on the zone wins over
+the room's. The sensors reload when House Structure's rooms change. Without
+House Structure, or for an area with no parts in it, the settings typed on the
+zone are used as before. A pinned `g` or `w` was fitted to the old faces, so
+leave them empty to have them learned again when a zone moves to a room.
 
 ## Sensors
 

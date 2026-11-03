@@ -27,6 +27,7 @@ import voluptuous as vol
 from . import DOMAIN
 from .calls import temperature_series
 from .ha_rows import numbers, recorded
+from .options import has_walls
 from .panel_data import archive, future, heating_spans, ms, series
 
 STATIC_URL = "/home_thermal_lab_static"
@@ -190,7 +191,7 @@ async def ws_zone(hass, connection, msg) -> None:
                     "x": model.x,
                     "lag": model.lag,
                 },
-                "has_walls": bool(zone["sunlit_walls"]),
+                "has_walls": has_walls(zone),
                 "below_ground": bool(zone["below_ground"]),
                 "wave": None
                 if brain.wave is None

@@ -70,6 +70,7 @@
           "title": "Heating-call statistics",
           "description": "Length, rise, lag, overshoot, dip and rebound of one zone's heating calls. Add one per zone.",
           "data": {
+            "area_id": "Room (area)",
             "name": "Name",
             "climate_entity": "Thermostat",
             "days": "Days of history (1-60)",
@@ -77,13 +78,16 @@
           },
           "data_description": {
             "days": "How many days of calls to summarise.",
-            "after_minutes": "How long to follow the room after each call."
+            "after_minutes": "How long to follow the room after each call.",
+            "area_id": "With House Structure set up, the thermostat comes from the room's register. Or pick the thermostat below.",
+            "climate_entity": "Needed unless the room (area) has a register in House Structure."
           }
         },
         "reconfigure": {
           "title": "Heating-call statistics",
           "description": "Length, rise, lag, overshoot, dip and rebound of one zone's heating calls. Add one per zone.",
           "data": {
+            "area_id": "Room (area)",
             "name": "Name",
             "climate_entity": "Thermostat",
             "days": "Days of history (1-60)",
@@ -91,11 +95,15 @@
           },
           "data_description": {
             "days": "How many days of calls to summarise.",
-            "after_minutes": "How long to follow the room after each call."
+            "after_minutes": "How long to follow the room after each call.",
+            "area_id": "With House Structure set up, the thermostat comes from the room's register. Or pick the thermostat below.",
+            "climate_entity": "Needed unless the room (area) has a register in House Structure."
           }
         }
       },
-      "error": {},
+      "error": {
+        "invalid_climate_entity": "Choose a room (area) or a thermostat."
+      },
       "abort": {
         "reconfigure_successful": "Saved."
       }
@@ -172,6 +180,7 @@
           "title": "Shadow zone (with sun)",
           "description": "Says whether a heating call starting now could be skipped, counting the sun on this room's windows and roofs (hypothesis 17), and forecasts the room for the next day with a simulated thermostat (hypothesis 16). Nothing is switched. With a and c left empty, the model is learned from the recorder and refreshed every 6 hours; the shadow sensor's attributes show what it learned and how well it forecasts. Each zone also gets a Forecast and a Target sensor, and appears in the Thermal Lab panel.",
           "data": {
+            "area_id": "Room (area)",
             "name": "Name",
             "climate_entity": "Thermostat",
             "room_entity": "Room temperature sensor",
@@ -213,13 +222,16 @@
             "target_swing": "Default 0: a flat target.",
             "target_peak_hour": "Default 15 (3 pm): the outdoor wave peaks 1 to 3 hours after solar noon (hypothesis 02).",
             "target_band": "Default 0.5.",
-            "neighbours": "Zones whose temperature and heating calls warm this one, for its learned model and forecast. Leave empty: the zone that heats most is every other zone's neighbour, and all the others are its."
+            "neighbours": "Zones whose temperature and heating calls warm this one, for its learned model and forecast. Leave empty: the zone that heats most is every other zone's neighbour, and all the others are its.",
+            "area_id": "With House Structure set up, the room's windows, roofs, sunlit walls, thermostat (from its register), room sensor and below-ground setting come from there, and the window, roof and wall fields below are ignored. A thermostat or room sensor picked below wins.",
+            "climate_entity": "Needed unless the room (area) has a register in House Structure."
           }
         },
         "reconfigure": {
           "title": "Shadow zone (with sun)",
           "description": "Says whether a heating call starting now could be skipped, counting the sun on this room's windows and roofs (hypothesis 17), and forecasts the room for the next day with a simulated thermostat (hypothesis 16). Nothing is switched. With a and c left empty, the model is learned from the recorder and refreshed every 6 hours; the shadow sensor's attributes show what it learned and how well it forecasts. Each zone also gets a Forecast and a Target sensor, and appears in the Thermal Lab panel.",
           "data": {
+            "area_id": "Room (area)",
             "name": "Name",
             "climate_entity": "Thermostat",
             "room_entity": "Room temperature sensor",
@@ -261,12 +273,15 @@
             "target_swing": "Default 0: a flat target.",
             "target_peak_hour": "Default 15 (3 pm): the outdoor wave peaks 1 to 3 hours after solar noon (hypothesis 02).",
             "target_band": "Default 0.5.",
-            "neighbours": "Zones whose temperature and heating calls warm this one, for its learned model and forecast. Leave empty: the zone that heats most is every other zone's neighbour, and all the others are its."
+            "neighbours": "Zones whose temperature and heating calls warm this one, for its learned model and forecast. Leave empty: the zone that heats most is every other zone's neighbour, and all the others are its.",
+            "area_id": "With House Structure set up, the room's windows, roofs, sunlit walls, thermostat (from its register), room sensor and below-ground setting come from there, and the window, roof and wall fields below are ignored. A thermostat or room sensor picked below wins.",
+            "climate_entity": "Needed unless the room (area) has a register in House Structure."
           }
         }
       },
       "error": {
-        "invalid_a": "Fill in both a and c, or leave both empty."
+        "invalid_a": "Fill in both a and c, or leave both empty.",
+        "invalid_climate_entity": "Choose a room (area) or a thermostat."
       },
       "abort": {
         "reconfigure_successful": "Saved."
@@ -283,6 +298,7 @@
           "title": "Contribution chart",
           "description": "Splits one zone's temperature into what moved it, past and forecast.",
           "data": {
+            "area_id": "Room (area)",
             "name": "Name",
             "climate_entity": "Thermostat",
             "room_entity": "Room temperature sensor",
@@ -312,13 +328,16 @@
             "windows": "Faces that have windows letting the sun in (the glass term).",
             "roofs": "Tick the house's roofs (set on the integration) that have windows or skylights in this room.",
             "shade_below": "Leave empty to use the house value.",
-            "sunlit_walls": "Faces of solid wall the sun hits (the 'walls' term, lagged 3 hours)."
+            "sunlit_walls": "Faces of solid wall the sun hits (the 'walls' term, lagged 3 hours).",
+            "area_id": "With House Structure set up, the room's windows, roofs, sunlit walls, thermostat (from its register), room sensor and below-ground setting come from there, and the window, roof and wall fields below are ignored. A thermostat or room sensor picked below wins.",
+            "climate_entity": "Needed unless the room (area) has a register in House Structure."
           }
         },
         "reconfigure": {
           "title": "Contribution chart",
           "description": "Splits one zone's temperature into what moved it, past and forecast.",
           "data": {
+            "area_id": "Room (area)",
             "name": "Name",
             "climate_entity": "Thermostat",
             "room_entity": "Room temperature sensor",
@@ -348,12 +367,15 @@
             "windows": "Faces that have windows letting the sun in (the glass term).",
             "roofs": "Tick the house's roofs (set on the integration) that have windows or skylights in this room.",
             "shade_below": "Leave empty to use the house value.",
-            "sunlit_walls": "Faces of solid wall the sun hits (the 'walls' term, lagged 3 hours)."
+            "sunlit_walls": "Faces of solid wall the sun hits (the 'walls' term, lagged 3 hours).",
+            "area_id": "With House Structure set up, the room's windows, roofs, sunlit walls, thermostat (from its register), room sensor and below-ground setting come from there, and the window, roof and wall fields below are ignored. A thermostat or room sensor picked below wins.",
+            "climate_entity": "Needed unless the room (area) has a register in House Structure."
           }
         }
       },
       "error": {
-        "invalid_lights": "Write lights as light.id=watts, for example: light.office=105."
+        "invalid_lights": "Write lights as light.id=watts, for example: light.office=105.",
+        "invalid_climate_entity": "Choose a room (area) or a thermostat."
       },
       "abort": {
         "reconfigure_successful": "Saved."
