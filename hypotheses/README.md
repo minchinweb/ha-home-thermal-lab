@@ -14,7 +14,7 @@ Home Assistant, so they can be re-run later or by others.
 | [03](03-ground-temperature.md) | Ground temperature follows a damped, lagged wave of air temperature | B. Characterise house | first run: fits the 1.8 m soil roughly (RMSE 1.5 C with an offset) |
 | [04](04-envelope-flux.md) | Heat flux through the envelope from inside and outside (or ground) temperatures | B | untested on its own (envelope terms are in 13, 16 and 17) |
 | [05](05-furnace-power.md) | Furnace heating power from room gradient | B. Characterise house | in progress: stages, call lengths and rise measured; call statistics sensor |
-| [06](06-crossover-bleed.md) | Heat crosses over between zones during a call (strongest into the kitchen) | B | in progress: register airflow measured; the kitchen gets 68-88% of its own flow whichever zone calls, so it is in practice unzoned |
+| [06](06-crossover-bleed.md) | Heat crosses over between zones during a call (strongest into the kitchen) | B | in progress: register airflow measured; the kitchen gets 68-88% of its own flow whichever zone calls, so it is in practice unzoned; on 3 Nov bleed was about 80% of the kitchen overheating, and opening its windows removed about 300 W/K |
 | [07](07-ac-power.md) | AC cooling power from room gradient | B | waiting for the cooling season |
 | [08](08-fan-flux.md) | Heat flux of running the furnace fan | B | revised: the blower is never off long enough; no-fan nights running 2-16 Nov |
 | [09](09-door-state.md) | Door open/closed from inter-room gradients | B | two runs: too few clean door edges |

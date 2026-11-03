@@ -68,3 +68,44 @@ Flow into each room, in cfm, by the zone calling (rooms by the names used in thi
 - Air changes per hour on a room's own call: NE and SE basement 17 to 20, which is why they heat so fast. The master bedroom gets only 4.5, the fewest in the house, and is the coolest room.
 - Over a day the kitchen's air is replaced about as often as the Z4 rooms' air. On 2 November 2026 (Z4 calling 3.8 h, Z2 1.3 h) both came to about 36 room volumes. Z4's calls end when its thermostat reaches the setpoint, and the kitchen gets the same air with no thermostat of its own to stop it. The kitchen ends up about 3 C warmer than the Z4 thermostat and 1 C warmer than the other two sensors in the same office (lux and presence, air quality). The thermostat reads about 2 C below those two, so where it sits in the office matters, and which of the three is the room temperature is not known. The kitchen's last degree over the office is its own heat: the fridge, cooking and the sun on the patio door.
 - A small zone calling alone loses the most air to the bypass and leaks (64% for Z1, 33% for Z4).
+
+### 3 November 2026: a new schedule, and the kitchen too warm to keep shut (times in UTC-6)
+
+The owner changed the heating schedule the day before, so more zones now call: Z3 has a call at about 06:00, Z4 a noon boost to 22.5 C (12:30 to 13:30, against 21.3 the day before), and Z2 ramps from 16 to 21.5 C in half-degree steps every 30 minutes through the morning. Z1 was set to heat (17.2 C overnight, 20 to 21.1 C by day), but never called: the kitchen was above its setpoint all day. In the afternoon the owner opened the sink window and the patio door to cool the kitchen. The data is from Home Assistant's history. The windows have no contact sensors, and Home Performance's "kitchen window open" sensor did not fire.
+
+| Local time | Kitchen | What drove it |
+|---|---|---|
+| 05:45 to 07:00 | 20.8 to 23.8 C | Z4 and Z3 calls, about 1.25 h of furnace (+2.4 C/h). The kitchen gained more than either zone that called (office +1.7, master about +1). |
+| 07:00 to 11:45 | 23.8 to 22.3 | No calls; slow drift down. |
+| 11:45 to 12:45 | 22.8 to 25.4 | Z4 called for 60 min from 11:50 (the thermostat started early for the 22.5 at 12:32), short Z2 calls, and the sun on the patio door from about 12:15. |
+| 12:45 to 14:00 | 25.4 to 24.3 | No calls. Full sun on the patio door, but the windows were open (below). |
+| 13:30 to 15:15 | about 24.4 | Cooking (whole-house power 2 to 4.3 kW) and Z2 calls, against the open windows. |
+
+- The noon rise of 2.6 C splits, with the fitted bleed (Z4 +2.1, Z2 +1.9 C/h per call) and the sun gain measured on 2 November (11), into about 1.6 C from Z4's call, 0.5 C from Z2's, and 0.3 C of sun (it had only just reached the patio door). About 80% of the overheating was bleed. The cooking came after the peak.
+- The schedule did not add heating hours. The furnace ran 3.4 h (to 17:00), against 3.6 to 5.1 h a day from 26 October to 2 November. It moved them: Z4's noon boost put a full hour of furnace on the kitchen just as the patio door's sun began. The kitchen's peak was 25.6 C, in the range of the week before (23.7 to 25.7 C).
+- The morning calls start the kitchen's day near 24 C. Z1's own setpoint has no say in this, as the airflow measurements predict.
+
+#### When the windows were opened, and what they removed
+
+The owner did not note the time, so it was found by comparing the kitchen's rate in 15-minute bins with the same clock times on 2 November. That day was as clear (beam within about 5%), with the same sun path, and the windows were shut. The expected rate today is yesterday's, plus the difference in bleed (rates above, Z3 taken as 2.0 C/h like the others), plus 0.4 C/h per kW of whole-house power above 1.1 kW (cooking), minus the cooling law at 0.03/h on the difference in indoor-outdoor gap. The extra loss is the measured rate less the expected one.
+
+| 15 min to | Kitchen | Rate today | Rate on 2 Nov | Extra loss C/h | W/K |
+|---|---|---|---|---|---|
+| 12:30 | 24.83 | +3.3 | +0.9 | +1.9 | |
+| 12:45 | 25.39 | +2.2 | -0.2 | +0.6 | |
+| 13:00 | 25.33 | -0.2 | +2.2 | -2.2 | 305 |
+| 13:15 | 25.17 | -0.7 | +1.8 | -1.7 | 248 |
+| 13:30 | 24.78 | -1.6 | +0.2 | -2.4 | 363 |
+| 13:45 | 24.56 | -0.9 | +0.4 | -1.9 | 295 |
+| 14:00 | 24.33 | -0.9 | +1.1 | -2.2 | 348 |
+
+- The windows were opened at about 12:45 to 12:50, just after the 25.4 C peak and as Z4's call ended. They stayed open for the rest of the day.
+- In the cleanest stretches (13:00 to 14:00 and, in 30-minute bins, 15:00 to 16:00) they took about 2 C/h off the kitchen: roughly 300 W/K with the kitchen's effective 7.9 MJ/K (13), or about 4 kW with the kitchen 14 C above outdoors. That is about 900 m3/h of outdoor air, and about the size of the sun through the glass (about 2 kW) and the cooking (2 to 3 kW) together, so the kitchen held near 24.3 C through the cooking.
+- From 14:15 to 15:00 the comparison is unreliable: on 2 November the sun was behind the spruce then, and today's cooking overlaps it. The cooking factor (0.3 to 0.5 C/h per kW) moves the clean bins by less than 0.3 C/h.
+- With the windows still open after sunset (about 17:00), the kitchen at 24.1 C and outdoors 13.5 C, the expected loss is about 1.5 C/h, reaching Z1's 21.1 C setpoint at about 19:00.
+
+#### What would help
+
+- On sunny days, skip or shrink Z4's noon boost: the office faces east, gets no afternoon sun, and rose only 1.3 C for the hour. That would take about 1.5 to 2 C off the kitchen's peak.
+- Z2's half-degree steps make short calls around 11:00 to 12:15 and 14:00 to 15:15, each one also heating the kitchen.
+- While the kitchen gets 68 to 88% of its flow on every call, no schedule on the other zones avoids heating it. A balancing damper on the kitchen's supply runs is the physical fix.
