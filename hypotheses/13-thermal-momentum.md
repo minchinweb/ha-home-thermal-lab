@@ -77,3 +77,16 @@ Room sizes and supply airflow are now in `scripts/room_geometry.py`, from the ow
 - The master, N bedroom and upstairs bathroom get under 50 cfm from z2 and z4, and z3 never called, so they have no value yet.
 - The basement bedrooms warm 0.6 to 0.9 C/h during z4 calls with no z4 air reaching them (see 06 and 11).
 - With these capacities the window gains in 11 convert to apertures in m2.
+
+### The master's long supply run as a heat store (Z3 calls on 2 and 3 November 2026, times in UTC-6)
+
+The first two Z3 calls (see 05) show the master behaving unlike the other upstairs rooms at both ends of a call.
+
+- **A dip at the start.** In the first 15 to 20 minutes of each call the master fell: 20.2 to 19.6 C from 06:03 to 06:18, and 20.0 to 19.8 C after 22:10. The upstairs bathroom started rising within 10 minutes and the N bedroom by 06:20, with no dip. The cold air standing in the master's long supply run comes out first, and the duct metal takes up heat before warm air reaches the room. That is about 20 minutes of delay, against the furnace's usual 6 to 12.
+- **A rise after the end.** The morning call ended at 06:58 with the master at 20.89 C. It read 21.17 at 07:00 and 21.28 at 07:03, then stayed between 21.2 and 21.4 (the sensor jitters by about 0.2 C). The N bedroom (short, straight run, no register fan) stayed at 22.10 from 06:56 to after 07:30. After the 18-minute evening call the master rose more slowly, 20.0 to 20.3 C over about 20 minutes.
+- **The blower did not stop.** After both calls Z1 ran a 9-minute fan-only cycle starting as Z3's call ended (22:28 to 22:37 and 06:58 to 07:07), and Z2 was in fan-only mode nearly all the time (9 to 12 minutes on, 3 off). Z1 and Z3 both seem to start fan cycles at :28 and :58. So the blower kept moving air over the still-hot heat exchanger, mostly into the kitchen and basement, with Z3 idle.
+- **The likely cause is heat in the master's duct.** When the Z3 damper closes, the long run is full of hot air and its metal is hot. The register fan (`fan.master_bedroom_ad3958`, on at 38% from 21:00 to 07:08) keeps drawing air through it, along with whatever leaks past the damper while the blower runs for Z1 and Z2. About 10 m of sheet-metal duct holds roughly 10 kJ/K, so about 250 kJ at 25 C above the room, against roughly 50 to 100 kJ for 0.4 C of the master's air and nearby surfaces. These are rough estimates, not measured. The same duct mass explains both the dip at the start and the rise at the end.
+- **Not the evidence it first seemed.** Whole-house power fell to about 0.83 kW from 07:03 to 07:08, which looked like the blower stopping. It was a stove element cycling: eggs were cooked from 06:51, and the 2 to 3 kW load and its flicker run to 07:06. Power went back to about 1.1 kW at 07:09. The power data cannot show when the blower stopped.
+- The upstairs bathroom also rose 0.2 C by 07:05 after the call, which fits the duct story less well; it may be fan-only air leaking past the Z3 damper. It reports rarely, so the timing is loose.
+
+Test: switch the register fan off as each Z3 call ends for a few calls, and compare the rise after the call with fan-on calls. If the duct is the store, the rise should shrink. More Z3 calls with no Z4 call or cooking at the same time would also give the master a clean heating rate and an effective capacity.

@@ -64,3 +64,20 @@ Only z4 has enough high-stage calls (z2 has one). Warming rate of the z4 rooms a
 | z4 | 132 | 114 calls: 3 / 9 / 36 min | 18 calls: 27 / 66 / 90 min | +0.1 / +1.7 C |
 
 Lag, overshoot, dip and rebound are in 13. The `call_stats` sensor reports the same figures live (state: calls in the last `days`; attributes split by stage).
+
+### First Z3 calls (2 and 3 November 2026, times in UTC-6)
+
+After the owner changed the schedule, Z3 (master bedroom) called for the first time in the history: 22:10 to 22:28 on 2 November (18 min, setpoint 20.1) and 06:00 to 06:58 on 3 November (58 min; the thermostat started early for the 21.0 at 06:31). Both overlapped Z4 calls (to 22:13 and 06:46), so neither is a clean Z3-alone episode. Over the morning call:
+
+| Room | Change |
+|---|---|
+| Master (the Z3 thermostat) | +0.7 C during the call, +1.2 C including the rise after it |
+| N bedroom | +3.1 C, to 22.1 (1.1 C over the setpoint) |
+| Upstairs bathroom | +2.4 C |
+| Kitchen (with Z4 to 06:46) | +3.0 C |
+
+- The room with the thermostat is the slowest of its zone, so a Z3 call runs until the master is warm and the N bedroom and bathroom overshoot. This fits the airflow (06): the master gets 4.5 air changes per hour on its own call, the fewest in the house, and its supply run is much longer than the straight runs up to the N bedroom and bathroom (owner). Both bedrooms have return grilles.
+- Once warm air arrived the master rose at about 2 C/h (19.6 at 06:18 to 20.9 at 06:57). It lost about 0.3 C/h afterwards, against 0.9 for the N bedroom; the master's door is usually closed.
+- The 18-minute call gave the master only about 0.5 C: most of it went on pushing the cold air out of the long duct (13). For Z3, fewer and longer calls are better value.
+- The thermostat ended the call at 20.9 for a 21.0 setpoint, and the room rose to 21.4 after it.
+- The dip at the start and the rise after the end are in 13.

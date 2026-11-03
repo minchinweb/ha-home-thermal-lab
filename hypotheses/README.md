@@ -13,7 +13,7 @@ Home Assistant, so they can be re-run later or by others.
 | [02](02-solar-noon-peak.md) | Peak at solar noon, trough at solar midnight | A | in progress: the peak comes 1-3 h after solar noon |
 | [03](03-ground-temperature.md) | Ground temperature follows a damped, lagged wave of air temperature | B. Characterise house | first run: fits the 1.8 m soil roughly (RMSE 1.5 C with an offset) |
 | [04](04-envelope-flux.md) | Heat flux through the envelope from inside and outside (or ground) temperatures | B | untested on its own (envelope terms are in 13, 16 and 17) |
-| [05](05-furnace-power.md) | Furnace heating power from room gradient | B. Characterise house | in progress: stages, call lengths and rise measured; call statistics sensor |
+| [05](05-furnace-power.md) | Furnace heating power from room gradient | B. Characterise house | in progress: stages, call lengths and rise measured; call statistics sensor; first Z3 calls: the master is the slowest room of its zone |
 | [06](06-crossover-bleed.md) | Heat crosses over between zones during a call (strongest into the kitchen) | B | in progress: register airflow measured; the kitchen gets 68-88% of its own flow whichever zone calls, so it is in practice unzoned; on 3 Nov bleed was about 80% of the kitchen overheating, and opening its windows removed about 300 W/K |
 | [07](07-ac-power.md) | AC cooling power from room gradient | B | waiting for the cooling season |
 | [08](08-fan-flux.md) | Heat flux of running the furnace fan | B | revised: the blower is never off long enough; no-fan nights running 2-16 Nov |
@@ -21,7 +21,7 @@ Home Assistant, so they can be re-run later or by others.
 | [10](10-static-flux.md) | Static heat flux between rooms/floors | B | revised: no fan-off data; no-fan nights running 2-16 Nov |
 | [11](11-solar-gain.md) | Predict room solar gain | C. Disturbances | horizon fits checked against window photos and sizes; with the other zones' calls as terms the windows add little (3% in the kitchen); apertures a tenth to a half of the glass; the house shades the kitchen's east window from late September to mid-March, and the kitchen's sun gain cannot be measured from autumn data |
 | [12](12-wind-loss.md) | Predict heat loss from wind speed/direction | C | first run: no wind effect detectable |
-| [13](13-thermal-momentum.md) | Measure the house's thermal momentum (inertia, time constant) | B | in progress: tau about 54 h; furnace lag 6-12 min, overshoot 0.2 C; a delivery lag does not help the 15 min forecast; effective room capacity 80-230 times the air |
+| [13](13-thermal-momentum.md) | Measure the house's thermal momentum (inertia, time constant) | B | in progress: tau about 54 h; furnace lag 6-12 min, overshoot 0.2 C; a delivery lag does not help the 15 min forecast; effective room capacity 80-230 times the air; the master's long duct dips it at the start of a call and warms it after |
 | [14](14-electrical-heat.md) | Electrical use becomes indoor heat | B | in progress: blower +0.2 kW when heating; small plug loads not resolvable |
 | [15](15-occupancy.md) | Occupancy from room temperature changes | B | three runs: the office signal is the computer, not body heat |
 | [16](16-predict-day.md) | Predict next-day house/room temperature | D. Predict and control | hybrid (profile plus the coupled zone model's departures) beats profile plus offset: 0.44 against 0.46 C over the day, 0.19 against 0.27 C over hours 0-5; live forecast uses it |
