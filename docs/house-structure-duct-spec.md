@@ -94,3 +94,24 @@ connection. Include `duct` and `free_area_in2` on each register, and the
 - Round trip: YAML in, stored, published, read back unchanged.
 - A register with no duct; a register with a missing trunk (error); a rectangular
   segment with a missing height (error).
+
+## Also needed: envelope fields (for the R and U derivation)
+
+Already published per room (`hass.data["house_structure"]`): `volume_m3`,
+`floor_m2`, `height_m`, `below_ground`, walls and roofs (`area_m2`, `glass_m2`,
+azimuth, tilt), windows (`glass_m2`, `transmittance`, the wall or roof they are
+in), and `neighbours`. Nothing further is needed for those.
+
+Not yet recorded, and needed for measured R and U values:
+
+- **Wall and roof construction.** An optional `r_value_si` (m² K/W) on each
+  wall and roof, or `construction` text (for example "2x6 framed, batt,
+  stucco"). Until the element's value is set, the consumer uses the house
+  default.
+- **Window glazing and frame.** On each window: `glazing` (`double` or
+  `triple`) and `frame` (`vinyl`, `wood` or `aluminium`). The consumer maps
+  these to a nominal U-value.
+- **Below-grade depth** for walls of below-ground rooms, if known (metres).
+
+Compatibility: optional keys, so no version bump is needed. The consumer
+treats a missing value as "use the house default".
