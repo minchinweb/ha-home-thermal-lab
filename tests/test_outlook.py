@@ -112,3 +112,11 @@ def test_outlook_takes_a_setpoint_per_step():
     assert out.temps[-1] > 20.5
     assert out.bands[0].centre == 18.0
     assert out.bands[60].centre == 21.0
+
+
+def test_points_average_extra_shares_over_the_same_spans():
+    out = _outlook(ZoneModel(a=0.02, c=0.0), wave=TargetWave(20.0))
+    cool = [1.0, 0.0] * 48
+    points = outlook_points(out, every=2, extra={"cool": cool, "fan": None})
+    assert points[0]["cool"] == pytest.approx(0.5)
+    assert "fan" not in points[0]

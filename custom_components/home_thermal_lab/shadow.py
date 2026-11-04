@@ -17,7 +17,8 @@ import math
 class ZoneModel:
     """Zone model (per hour), ``dT/dt = a * (outdoor - room) + c + g * light``
     ``+ b * (ground - room) + w * wall_light + h * heat``
-    ``+ n * (neighbour - room) + x * other_heat``.
+    ``+ n * (neighbour - room) + x * other_heat + e * cool + y * other_cool``
+    ``+ f * fan``.
 
     Attributes:
         a: Cooling rate toward the outdoor temperature, per hour.
@@ -38,6 +39,14 @@ class ZoneModel:
             follows the call as a first-order lag, so it starts slowly and keeps
             arriving after the call stops (the start lag and overshoot of 13).
             0 means at once.
+        e: Warming while the zone's own cooling call runs, C per hour (negative:
+            the air conditioner cools the room).
+        y: Warming while other zones' cooling calls run, C per hour per call
+            (negative: their cool air comes through the open house).
+        f: Warming while the fan runs with no zone heating or cooling, C per
+            hour (negative: the fan pulls heat out of the room). The returns are
+            not zoned, so the fan acts on every room: the term is driven by the
+            house-wide fan, not by the zone's own call.
     """
 
     a: float
@@ -49,6 +58,9 @@ class ZoneModel:
     n: float = 0.0
     x: float = 0.0
     lag: float = 0.0
+    e: float = 0.0
+    y: float = 0.0
+    f: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -95,6 +107,9 @@ def _drive(
     ground: float,
     neighbour: float = 0.0,
     other: float = 0.0,
+    cool: float = 0.0,
+    other_cool: float = 0.0,
+    fan: float = 0.0,
 ) -> float:
     """Everything in the rate that does not depend on the room temperature."""
     return (
@@ -105,6 +120,9 @@ def _drive(
         + model.g * light
         + model.w * wall
         + model.x * other
+        + model.e * cool
+        + model.y * other_cool
+        + model.f * fan
     )
 
 
@@ -124,16 +142,24 @@ def step(
     heat: float = 0.0,
     neighbour: float = 0.0,
     other: float = 0.0,
+    cool: float = 0.0,
+    other_cool: float = 0.0,
+    fan: float = 0.0,
 ) -> float:
     """Room temperature after ``hours`` with the drivers held, solved exactly.
 
     The model is linear in the room temperature, ``dT/dt = q - k * T`` with
     ``k = a + b + n``, so over a step with fixed drivers the room moves along an
     exponential toward ``q / k``: no step-size error, and stable for any step
-    (ClimateAdvisor's ODE step does the same).
+    (ClimateAdvisor's ODE step does the same). ``cool``, ``other_cool`` and
+    ``fan`` are the shares of the step the zone's cooling call, the other zones'
+    cooling calls and the house-wide fan ran.
     """
     k = _k(model)
-    q = _drive(model, outdoor, light, wall, ground, neighbour, other) + model.h * heat
+    drive = _drive(
+        model, outdoor, light, wall, ground, neighbour, other, cool, other_cool, fan
+    )
+    q = drive + model.h * heat
     if abs(k) < 1e-12:
         return room + q * hours
     settle = q / k
@@ -267,12 +293,17 @@ def heated_step(
     neighbour: float = 0.0,
     other: float = 0.0,
     pipe: float = 0.0,
+    calls: tuple[float, float, float] = (0.0, 0.0, 0.0),
 ) -> tuple[float, float, bool, float]:
     """One step of the simulated thermostat.
 
     With a delivery lag (``model.lag``), the step is taken in sub-steps of
     about a minute, the thermostat checking the room at each, and ``pipe`` (the
     heat arriving, C per hour) carried from step to step.
+
+    ``calls`` holds the shares of the step the zone's cooling call ran, the
+    other zones' cooling calls ran, and the house-wide fan ran alone (for the
+    ``e``, ``y`` and ``f`` terms).
 
     Returns:
         The room temperature after the step, the share of the step the furnace
@@ -290,6 +321,7 @@ def heated_step(
             (outdoor, light, wall, ground),
             (neighbour, other),
             pipe,
+            calls,
         )
     if model.h <= 0 or (heating and room >= setpoint):
         heating = False
@@ -298,14 +330,16 @@ def heated_step(
     rest = (wall, ground)
     near = (neighbour, other)
     if not heating:
-        after = step(room, outdoor, light, model, hours, *rest, 0.0, *near)
+        after = step(room, outdoor, light, model, hours, *rest, 0.0, *near, *calls)
         return after, 0.0, False, 0.0
-    q = _drive(model, outdoor, light, wall, ground, neighbour, other) + model.h
+    q = _drive(model, outdoor, light, wall, ground, neighbour, other, *calls) + model.h
     reach = _hours_to_reach(room, setpoint, q, _k(model), hours)
     if reach is None:
-        after = step(room, outdoor, light, model, hours, *rest, 1.0, *near)
+        after = step(room, outdoor, light, model, hours, *rest, 1.0, *near, *calls)
         return after, 1.0, True, 0.0
-    after = step(setpoint, outdoor, light, model, hours - reach, *rest, 0.0, *near)
+    after = step(
+        setpoint, outdoor, light, model, hours - reach, *rest, 0.0, *near, *calls
+    )
     return after, reach / hours, False, 0.0
 
 
@@ -322,6 +356,7 @@ def _lagged_step(
     weather: tuple[float, float, float, float],
     near: tuple[float, float],
     pipe: float,
+    calls: tuple[float, float, float] = (0.0, 0.0, 0.0),
 ) -> tuple[float, float, bool, float]:
     """``heated_step`` with the furnace's delivery lag, in sub-steps."""
     outdoor, light, wall, ground = weather
@@ -339,7 +374,7 @@ def _lagged_step(
         mean = target + (pipe - target) * model.lag / dt * (1.0 - fade)
         pipe = target + (pipe - target) * fade
         room = step(
-            room, outdoor, light, model, dt, wall, ground, mean / model.h, *near
+            room, outdoor, light, model, dt, wall, ground, mean / model.h, *near, *calls
         )
         ran += dt if heating else 0.0
     return room, ran / hours, heating, pipe
@@ -358,7 +393,13 @@ class HouseZone:
         ground: Ground temperature.
         neighbours: Indices of the zones whose mean temperature is this zone's
             neighbour (the model's ``n`` term).
-        others: Indices of the zones whose calls warm this one (``x``).
+        others: Indices of the zones whose calls warm this one (``x``), and
+            whose cooling calls cool it (``y``).
+        cool: Share each step this zone's cooling call runs (``e``); None: never.
+        fan: Share each step the house-wide fan runs alone (``f``); None: never.
+        cool_setpoint: The room temperature the air conditioner stops at, when
+            its calls are simulated (``cool`` is then not used).
+        cool_band: How far above the setpoint the room must rise to start it.
     """
 
     model: ZoneModel
@@ -369,25 +410,114 @@ class HouseZone:
     ground: float = 0.0
     neighbours: tuple[int, ...] = ()
     others: tuple[int, ...] = ()
+    cool: list[float] | None = None
+    fan: list[float] | None = None
+    cool_setpoint: float | None = None
+    cool_band: float = 0.5
 
 
-def simulate_house(
-    zones: list[HouseZone], outdoor: list[float], step_hours: float
-) -> list[tuple[list[float], list[float]]]:
-    """Simulate the zones together, each with its thermostat in the loop.
+def _at(values: list[float] | None, i: int) -> float:
+    return values[i] if values is not None and i < len(values) else 0.0
 
-    Over each step a zone sees its neighbours' temperatures at the start of the
-    step and the share of the step before that their calls ran, so the zones can
-    be stepped one at a time (the leak lags by one step).
+
+def cooled_step(
+    room: float,
+    cooling: bool,
+    setpoint: float,
+    band: float,
+    model: ZoneModel,
+    hours: float,
+    outdoor: float,
+    light: float,
+    wall: float = 0.0,
+    ground: float = 0.0,
+    neighbour: float = 0.0,
+    other: float = 0.0,
+    other_cool: float = 0.0,
+    fan: float = 0.0,
+) -> tuple[float, float, bool]:
+    """One step of a simulated air conditioner, switching as a thermostat.
+
+    It starts when the room is above ``setpoint + band`` and stops when the
+    room reaches ``setpoint`` (part way through a step if need be), as
+    ``heated_step`` does for heat. ``other_cool`` (the other zones' cooling
+    calls) and ``fan`` (the house-wide fan) are the shares of the step they ran.
 
     Returns:
-        For each zone, its temperatures (one more than steps) and its duty.
+        The room temperature after the step, the share of the step the air
+        conditioner ran, and whether it is still running.
     """
+    if model.e >= 0 or (cooling and room <= setpoint):
+        cooling = False
+    elif not cooling and room > setpoint + band:
+        cooling = True
+    rest = (wall, ground)
+    near = (neighbour, other)
+    if not cooling:
+        after = step(
+            room, outdoor, light, model, hours, *rest, 0.0, *near, 0.0, other_cool, fan
+        )
+        return after, 0.0, False
+    q = _drive(
+        model, outdoor, light, wall, ground, neighbour, other, 1.0, other_cool, fan
+    )
+    k = _k(model)
+    if abs(k) < 1e-12:
+        reach = (setpoint - room) / q if q < 0 else None
+        if reach is not None and not 0.0 <= reach <= hours:
+            reach = None
+    else:
+        reach = _hours_to_reach(room, setpoint, q, k, hours)
+    if reach is None:
+        after = step(
+            room, outdoor, light, model, hours, *rest, 0.0, *near, 1.0, other_cool, fan
+        )
+        return after, 1.0, True
+    after = step(
+        setpoint,
+        outdoor,
+        light,
+        model,
+        hours - reach,
+        *rest,
+        0.0,
+        *near,
+        0.0,
+        other_cool,
+        fan,
+    )
+    return after, reach / hours, False
+
+
+def simulate_house_full(
+    zones: list[HouseZone], outdoor: list[float], step_hours: float
+) -> list[tuple[list[float], list[float], list[float]]]:
+    """Simulate the zones together, each with its thermostats in the loop.
+
+    Over each step a zone sees its neighbours' temperatures at the start of the
+    step and the share of the step before that their heating and cooling calls
+    ran, so the zones can be stepped one at a time (the leak lags by one step).
+    A zone with a learned cooling setpoint (and a cooling rate ``e`` below zero)
+    has its air conditioner simulated by ``cooled_step``, and otherwise runs its
+    cooling call as given (``HouseZone.cool``).
+
+    Returns:
+        For each zone, its temperatures (one more than steps), its heating duty
+        and its cooling duty.
+    """
+    n = len(zones)
     paths = [[z.start] for z in zones]
     duties: list[list[float]] = [[] for _ in zones]
+    cool_duties: list[list[float]] = [[] for _ in zones]
     heating = [z.thermostat.heating for z in zones]
     pipes = [z.model.h if on else 0.0 for z, on in zip(zones, heating, strict=True)]
+    cooling = [False] * n
     last = [1.0 if on else 0.0 for on in heating]
+    last_cool = [0.0] * n
+    simulated = [
+        z.cool_setpoint is not None and z.model is not None and z.model.e < 0
+        for z in zones
+    ]
     for i, t_out in enumerate(outdoor):
         now = [p[-1] for p in paths]
         for j, z in enumerate(zones):
@@ -397,25 +527,70 @@ def simulate_house(
                 else 0.0
             )
             sp = z.thermostat.setpoints[min(i, len(z.thermostat.setpoints) - 1)]
-            after, ran, heating[j], pipes[j] = heated_step(
-                now[j],
-                heating[j],
-                sp,
-                z.thermostat.deadband,
-                z.model,
-                step_hours,
-                t_out,
-                z.light[i],
-                0.0 if z.wall is None else z.wall[i],
-                z.ground,
-                near,
-                sum(last[m] for m in z.others),
-                pipes[j],
-            )
+            wall = 0.0 if z.wall is None else z.wall[i]
+            other_heat = sum(last[m] for m in z.others)
+            other_cool = sum(last_cool[m] for m in z.others)
+            fan = _at(z.fan, i)
+            if simulated[j] and not heating[j] and now[j] >= sp - z.thermostat.deadband:
+                after, ran, cooling[j] = cooled_step(
+                    now[j],
+                    cooling[j],
+                    z.cool_setpoint,
+                    z.cool_band,
+                    z.model,
+                    step_hours,
+                    t_out,
+                    z.light[i],
+                    wall,
+                    z.ground,
+                    near,
+                    other_heat,
+                    other_cool,
+                    fan,
+                )
+                heating_ran = 0.0
+                cool_ran = ran
+            else:
+                own_cool = 0.0 if simulated[j] else _at(z.cool, i)
+                after, heating_ran, heating[j], pipes[j] = heated_step(
+                    now[j],
+                    heating[j],
+                    sp,
+                    z.thermostat.deadband,
+                    z.model,
+                    step_hours,
+                    t_out,
+                    z.light[i],
+                    wall,
+                    z.ground,
+                    near,
+                    other_heat,
+                    pipes[j],
+                    (own_cool, other_cool, fan),
+                )
+                cooling[j] = False
+                cool_ran = own_cool
             paths[j].append(after)
-            duties[j].append(ran)
+            duties[j].append(heating_ran)
+            cool_duties[j].append(cool_ran)
         last = [d[-1] for d in duties]
-    return list(zip(paths, duties, strict=True))
+        last_cool = [c[-1] for c in cool_duties]
+    return list(zip(paths, duties, cool_duties, strict=True))
+
+
+def simulate_house(
+    zones: list[HouseZone], outdoor: list[float], step_hours: float
+) -> list[tuple[list[float], list[float]]]:
+    """Simulate the zones together (``simulate_house_full``), without the cooling
+    duty.
+
+    Returns:
+        For each zone, its temperatures (one more than steps) and its heating duty.
+    """
+    return [
+        (path, duty)
+        for path, duty, _ in simulate_house_full(zones, outdoor, step_hours)
+    ]
 
 
 def decide(

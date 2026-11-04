@@ -17,11 +17,11 @@ its neighbours still see it) and forecast by D alone.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from .routine import fill, forecast_d, hybrid, typical
-from .shadow import HouseZone, Thermostat, ZoneModel, simulate_house
+from .shadow import HouseZone, Thermostat, ZoneModel, simulate_house_full
 
 HELD = ZoneModel(0.0, 0.0)  # dT/dt = 0: a zone held where it is
 
@@ -38,6 +38,12 @@ class ZoneHistory:
         wall: Lagged light on sunlit solid walls per bin.
         setpoint: Heating setpoint per bin (None when off or unknown).
         tau: The fading time of D's gap, hours (``routine.fit_offset_tau``).
+        cool: Share of each bin the zone's cooling call ran.
+        fan: Share of each bin the fan ran for the zone alone (no other zone
+            calling for heat or cool).
+        cool_setpoint: The room temperature the zone's air conditioner stops at,
+            learned from its calls (None: too few, so the usual day is used).
+        cool_band: How far above that the room must rise to start it.
     """
 
     start: datetime
@@ -47,6 +53,10 @@ class ZoneHistory:
     wall: list[float]
     setpoint: list
     tau: float
+    cool: list[float] = field(default_factory=list)
+    fan: list[float] = field(default_factory=list)
+    cool_setpoint: float | None = None
+    cool_band: float = 0.5
 
 
 @dataclass(frozen=True)
@@ -87,11 +97,17 @@ class ZoneAhead:
         temps: Room temperature at each step boundary (now first).
         duty: Share of each step the zone's furnace runs (simulated).
         method: ``hybrid``, ``model`` or ``profile`` (D alone).
+        cool: Share of each step the zone's cooling call runs, the usual day's
+            (not simulated: the model has no cooling term). None without history.
+        fan: Share of each step the fan runs for the zone alone, the usual day's.
+            None without history.
     """
 
     temps: list[float]
     duty: list[float]
     method: str
+    cool: list[float] | None = None
+    fan: list[float] | None = None
 
 
 def _origin(history: ZoneHistory, now: datetime, step: timedelta) -> int:
@@ -116,6 +132,33 @@ def _usual(values: list, origin: int, steps: int, fallback: float) -> list[float
     return fill(typical(_padded(values, origin), origin, steps), fallback)
 
 
+def _house_fan(
+    calls: list[tuple[list[float] | None, list[float] | None]], steps: int
+) -> list[float] | None:
+    """The house-wide fan share per step: the largest zone share.
+
+    The returns are not zoned, so the fan runs for every room when any zone's
+    fan runs alone (each zone's share already leaves out the other zones' calls).
+    """
+    fans = [fan for _, fan in calls if fan is not None]
+    if not fans:
+        return None
+    return [max(fan[k] for fan in fans) for k in range(steps)]
+
+
+def _usual_calls(
+    history: ZoneHistory | None, now: datetime, step: timedelta, steps: int
+) -> tuple[list[float] | None, list[float] | None]:
+    """The usual day's cooling call and fan shares for each step ahead."""
+    if history is None:
+        return None, None
+    o = _origin(history, now, step)
+    return (
+        _usual(history.cool, o, steps, 0.0),
+        _usual(history.fan, o, steps, 0.0),
+    )
+
+
 def forecast_house(
     now: datetime, zones: list[ZoneNow], outdoor: list[float], step_hours: float
 ) -> list[ZoneAhead]:
@@ -132,6 +175,10 @@ def forecast_house(
     """
     steps = len(outdoor)
     step = timedelta(hours=step_hours)
+    # The usual day's cooling call and fan per zone; the fan is house-wide. A
+    # zone with a learned cooling thermostat has its cooling simulated instead.
+    calls = [_usual_calls(z.history, now, step, steps) for z in zones]
+    house_fan = _house_fan(calls, steps)
 
     def run(plans, outdoors, lights, walls):
         house = [
@@ -144,10 +191,14 @@ def forecast_house(
                 z.ground,
                 neighbours=z.neighbours,
                 others=z.neighbours,
+                cool=calls[i][0],
+                fan=house_fan,
+                cool_setpoint=None if z.history is None else z.history.cool_setpoint,
+                cool_band=0.5 if z.history is None else z.history.cool_band,
             )
             for i, z in enumerate(zones)
         ]
-        return simulate_house(house, outdoors, step_hours)
+        return simulate_house_full(house, outdoors, step_hours)
 
     today = run(
         [z.plan for z in zones],
@@ -177,20 +228,24 @@ def forecast_house(
 
     out = []
     for i, z in enumerate(zones):
-        path, duty = today[i]
+        path, duty, cool_duty = today[i]
+        _, fan = calls[i]
+        cool = None if z.history is None else cool_duty
         if z.history is None or usual is None:
-            out.append(ZoneAhead(path, duty, "model" if z.model else "held"))
+            out.append(ZoneAhead(path, duty, "model" if z.model else "held", cool, fan))
             continue
         o = _origin(z.history, now, step)
         d = _profile_d(z.history, z.room, o, steps, step_hours)
         if all(v is None for v in d):
-            out.append(ZoneAhead(path, duty, "model" if z.model else "held"))
+            out.append(ZoneAhead(path, duty, "model" if z.model else "held", cool, fan))
             continue
         mixed = hybrid(d, path, usual[i][0])
         temps = [z.room] + [
             p if v is None else v for v, p in zip(mixed, path[1:], strict=False)
         ]
-        out.append(ZoneAhead(temps, duty, "hybrid" if z.model else "profile"))
+        out.append(
+            ZoneAhead(temps, duty, "hybrid" if z.model else "profile", cool, fan)
+        )
     return out
 
 

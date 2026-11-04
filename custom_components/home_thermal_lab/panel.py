@@ -39,15 +39,17 @@ from .loads import HUMIDITY_NOTE, assemble, design_from_record, equipment_from
 from .manual import HOURS_PER_YEAR, Design
 from .options import STRUCTURE_DOMAIN, has_walls, structure_ducts, structure_rooms
 from .panel_data import (
+    action_spans,
     archive,
     future,
-    heating_spans,
+    merge_spans,
     ms,
     same_thermostat,
     series,
     setpoints,
     span,
     statistic_values,
+    subtract_spans,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -204,6 +206,14 @@ async def _scales(hass) -> dict:
         return cached[1]
 
 
+def _house_calls(rows: dict, climates: set[str], end: datetime) -> dict:
+    """Each thermostat's heating, cooling and fan runs, by thermostat."""
+    return {
+        kind: {c: action_spans(rows.get(c, []), end, action) for c in climates}
+        for kind, action in (("heat", "heating"), ("cool", "cooling"), ("fan", "fan"))
+    }
+
+
 def _others(hass, zone: dict) -> list[tuple[str, str]]:
     """``(name, temperature sensor)`` of the other rooms on the zone's thermostat."""
     rooms = structure_rooms(hass.data.get(STRUCTURE_DOMAIN))
@@ -242,7 +252,13 @@ async def ws_zone(hass, connection, msg) -> None:
     ids += [e for e in (room_id, ent.get("forecast"), ent.get("target")) if e]
     others = _others(hass, zone)
     ids += [sensor for _, sensor in others if sensor not in ids]
+    # Every thermostat in the house, for the calls that bleed in and the fan.
+    climates = {b.zone["climate_entity"] for b in _zones(hass).values()}
+    climates.add(climate_id)
+    ids += sorted(c for c in climates if c not in ids)
     rows = await recorded(hass, ids, start, end)
+    calls = _house_calls(rows, climates, end)
+    neighbours = [c for c in brain.neighbours if c != climate_id and c in climates]
     scales = await _scales(hass)
     room_rows = rows[room_id] if room_id else []
     room = (
@@ -274,7 +290,26 @@ async def ws_zone(hass, connection, msg) -> None:
                 "lower": series(target_rows, "lower"),
                 "upper": series(target_rows, "upper"),
                 "issued": archive(forecast_rows),
-                "heating": heating_spans(rows[climate_id], end),
+                "heating": calls["heat"][climate_id],
+                "heating_others": merge_spans(
+                    [s for c in neighbours for s in calls["heat"][c]]
+                ),
+                "cooling": calls["cool"][climate_id],
+                "cooling_others": merge_spans(
+                    [s for c in neighbours for s in calls["cool"][c]]
+                ),
+                "fan": subtract_spans(
+                    calls["fan"][climate_id],
+                    merge_spans(
+                        [
+                            run
+                            for c in climates
+                            if c != climate_id
+                            for kind in ("heat", "cool")
+                            for run in calls[kind][c]
+                        ]
+                    ),
+                ),
             },
             "future": future(forecast_attrs.get("points") or []),
             "status": {

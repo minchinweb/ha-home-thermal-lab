@@ -138,6 +138,9 @@ class NoHeatFit:
             blocks of bins) or ``multi-step`` (refined on simulated paths).
         n: Coupling to the neighbouring zones' mean temperature, per hour.
         x: Warming per hour of other zones' furnace calls, C per hour.
+        y: Warming per hour of other zones' cooling calls, C per hour (negative).
+        f: Warming per hour while the house-wide fan runs alone, C per hour
+            (negative: the fan pulls heat out of every room).
     """
 
     a: float
@@ -150,6 +153,13 @@ class NoHeatFit:
     method: str = "one-step"
     n: float = 0.0
     x: float = 0.0
+    y: float = 0.0
+    f: float = 0.0
+
+
+# The sign each learned term must have (1: not negative, -1: not positive). The
+# cooling bleed and the fan pull heat out, so they are kept only when negative.
+SIGN = {"y": -1.0, "f": -1.0}
 
 
 # A plausible cooling rate: at 0 or below heat flows the wrong way; above 0.5
@@ -168,9 +178,16 @@ def _block_rows(
     block: int,
     neighbour: list | None = None,
     other: list[float] | None = None,
+    cooling: list[float] | None = None,
+    other_cool: list[float] | None = None,
+    fan: list[float] | None = None,
 ) -> list[tuple[float, ...]]:
     """Per idle block: (outdoor - room, rate, light, wall light, ground - room,
-    neighbour - room, other zones' calls)."""
+    neighbour - room, other zones' heat calls, other zones' cooling calls, fan).
+
+    A block where the zone's own cooling call ran is not idle, as one where its
+    furnace ran is not.
+    """
     rows = []
     i = 0
     n = len(room)
@@ -181,6 +198,7 @@ def _block_rows(
             or room[i + block] is None
             or any(heating[j] > 0 for j in span)
             or (i > 0 and heating[i - 1] > 0)
+            or (cooling is not None and any(cooling[j] > 0 for j in span))
             or (ground is not None and any(ground[j] is None for j in span))
             or (neighbour is not None and any(neighbour[j] is None for j in span))
         ):
@@ -200,6 +218,8 @@ def _block_rows(
                 if neighbour is None
                 else sum(neighbour[j] for j in span) / block - mean_room,
                 0.0 if other is None else sum(other[j] for j in span) / block,
+                0.0 if other_cool is None else sum(other_cool[j] for j in span) / block,
+                0.0 if fan is None else sum(fan[j] for j in span) / block,
             )
         )
         i += block
@@ -218,6 +238,9 @@ def fit_no_heat(
     block: int = 1,
     neighbour: list | None = None,
     other: list[float] | None = None,
+    cooling: list[float] | None = None,
+    other_cool: list[float] | None = None,
+    fan: list[float] | None = None,
 ) -> NoHeatFit | None:
     """Fit the no-heat model on idle bins.
 
@@ -252,7 +275,19 @@ def fit_no_heat(
         The fit, or None if there is too little idle data.
     """
     rows = _block_rows(
-        room, outdoor, light, heating, hours, wall, ground, block, neighbour, other
+        room,
+        outdoor,
+        light,
+        heating,
+        hours,
+        wall,
+        ground,
+        block,
+        neighbour,
+        other,
+        cooling,
+        other_cool,
+        fan,
     )
     if len(rows) * block < min_bins:
         return None
@@ -263,8 +298,10 @@ def fit_no_heat(
         "b": ground is not None,
         "n": neighbour is not None,
         "x": any(r[6] > 0 for r in rows),
+        "y": any(r[7] > 0 for r in rows),
+        "f": any(r[8] > 0 for r in rows),
     }
-    index = {"a": 0, "g": 2, "w": 3, "b": 4, "n": 5, "x": 6}
+    index = {"a": 0, "g": 2, "w": 3, "b": 4, "n": 5, "x": 6, "y": 7, "f": 8}
     with_a = True
     while True:
         names = [k for k, on in wanted.items() if on]
@@ -277,7 +314,7 @@ def fit_no_heat(
         if not with_a:
             beta = [0.0, *beta]
         got = dict(zip(names, beta[2:], strict=True))
-        negative = [k for k, v in got.items() if v < 0]
+        negative = [k for k, v in got.items() if v * SIGN.get(k, 1.0) < 0]
         if negative:
             wanted[negative[0]] = False
         elif beta[0] < 0 and with_a and got.get("n", 0.0) > 0:
@@ -306,6 +343,8 @@ def fit_no_heat(
         method="one-step" if block == 1 else "block",
         n=got.get("n", 0.0),
         x=got.get("x", 0.0),
+        y=got.get("y", 0.0),
+        f=got.get("f", 0.0),
     )
 
 
@@ -376,6 +415,9 @@ class ZoneData:
         other: Share of each bin other zones' furnace calls ran.
         setpoint: The heating setpoint per bin (None when the thermostat is off
             or unknown), for the checks that simulate the thermostat.
+        cooling: Fraction of each bin the zone's cooling call ran.
+        other_cool: Share of each bin other zones' cooling calls ran (summed).
+        fan: Share of each bin the house-wide fan ran alone.
     """
 
     room: list
@@ -388,6 +430,9 @@ class ZoneData:
     neighbour: list | None = None
     other: list[float] | None = None
     setpoint: list | None = None
+    cooling: list[float] | None = None
+    other_cool: list[float] | None = None
+    fan: list[float] | None = None
 
     def drivers(self, j: int) -> dict:
         """The keyword drivers of ``shadow.step`` over bin ``j``."""
@@ -396,6 +441,9 @@ class ZoneData:
             "ground": 0.0 if self.ground is None else self.ground[j],
             "neighbour": 0.0 if self.neighbour is None else self.neighbour[j],
             "other": 0.0 if self.other is None else self.other[j],
+            "cool": 0.0 if self.cooling is None else self.cooling[j],
+            "other_cool": 0.0 if self.other_cool is None else self.other_cool[j],
+            "fan": 0.0 if self.fan is None else self.fan[j],
         }
 
 
@@ -415,6 +463,10 @@ def idle_starts(data: ZoneData, steps: int, every: int = 1) -> list[int]:
         if data.room[i] is None:
             continue
         if any(data.heating[j] > 0 for j in range(i - 1, i + steps)):
+            continue
+        if data.cooling is not None and any(
+            data.cooling[j] > 0 for j in range(i - 1, i + steps)
+        ):
             continue
         if all(_usable(data, j) for j in range(i, i + steps)):
             out.append(i)
@@ -479,9 +531,12 @@ def skill(
     return out
 
 
-def model_of(fit: NoHeatFit, h: float = 0.0) -> ZoneModel:
-    """The simulation model for a fit (with a heating rate, if known)."""
-    return ZoneModel(fit.a, fit.c, fit.g, fit.b, fit.w, h, fit.n, fit.x)
+def model_of(fit: NoHeatFit, h: float = 0.0, e: float = 0.0) -> ZoneModel:
+    """The simulation model for a fit (with a heating and a cooling rate, if
+    known)."""
+    return ZoneModel(
+        fit.a, fit.c, fit.g, fit.b, fit.w, h, fit.n, fit.x, e=e, y=fit.y, f=fit.f
+    )
 
 
 def refine_multistep(
@@ -520,6 +575,10 @@ def refine_multistep(
         names.append("n")
     if data.other is not None and any(v > 0 for v in data.other):
         names.append("x")
+    if data.other_cool is not None and any(v > 0 for v in data.other_cool):
+        names.append("y")
+    if data.fan is not None and any(v > 0 for v in data.fan):
+        names.append("f")
     theta = [getattr(fit, k) for k in names]
 
     def residuals(values: list[float]) -> list[float]:
@@ -540,6 +599,7 @@ def refine_multistep(
             and got["a"] + got.get("b", 0.0) + got.get("n", 0.0) > 0
             and got.get("n", 0.0) <= A_MAX
             and all(got.get(k, 0.0) >= 0 for k in ("g", "w", "b", "n", "x"))
+            and all(got.get(k, 0.0) <= 0 for k in ("y", "f"))
         )
 
     if not physical(theta):
@@ -596,6 +656,8 @@ def refine_multistep(
         method="multi-step",
         n=got.get("n", 0.0),
         x=got.get("x", 0.0),
+        y=got.get("y", 0.0),
+        f=got.get("f", 0.0),
     )
 
 
@@ -657,6 +719,100 @@ def fit_heat_rate(model: ZoneModel, data: ZoneData, min_calls: int = 5) -> float
     return max(gained / on_hours, 0.0)
 
 
+def fit_cool_rate(model: ZoneModel, data: ZoneData, min_calls: int = 5) -> float:
+    """The zone's cooling rate e (C per hour of cooling call, negative), or 0.
+
+    As ``fit_heat_rate``, for the zone's own cooling calls: what the room lost
+    beyond the model without cooling over each call and the bin after it, divided
+    by how far a unit rate over the call moves the room (``_cool_sensitivity``).
+    That division allows for the room exchanging heat with the outdoors while
+    the call runs. Calls during which the furnace ran are skipped.
+    """
+    if data.cooling is None:
+        return 0.0
+    bare = ZoneModel(**{**model.__dict__, "e": 0.0})
+    lost = 0.0
+    sensitivity = 0.0
+    calls = 0
+    n = len(data.room)
+    i = 1
+    while i < n - 1:
+        if data.cooling[i] <= 0 or data.cooling[i - 1] > 0:
+            i += 1
+            continue
+        end = i
+        while end < n - 1 and data.cooling[end] > 0:
+            end += 1
+        end = min(end + 1, n - 1)  # include the bin after the call
+        span = range(i, end)
+        if (
+            data.room[i] is None
+            or data.room[end] is None
+            or any(data.heating[j] > 0 for j in range(i, end + 1))
+            or not all(_usable(data, j) for j in span)
+        ):
+            i = end
+            continue
+        t = data.room[i]
+        for j in span:
+            t = step(
+                t, data.outdoor[j], data.light[j], bare, data.hours, **data.drivers(j)
+            )
+        lost += data.room[end] - t
+        sensitivity += _cool_sensitivity(bare, data.hours, data.cooling, span, end)
+        calls += 1
+        i = end
+    if calls < min_calls or sensitivity <= 0:
+        return 0.0
+    return min(lost / sensitivity, 0.0)
+
+
+def _cool_sensitivity(
+    model: ZoneModel, hours: float, cooling: list[float], span: range, end: int
+) -> float:
+    """How far one unit of cooling rate over ``span`` moves the room at ``end``.
+
+    Each bin's cooling is a unit rate for its ``hours``, which the room then
+    relaxes from (the exact step), so a bin's effect decays over the bins after
+    it: the sum of the bins' shares that reach ``end``.
+    """
+    k = model.a + model.b + model.n
+    decay = math.exp(-k * hours)
+    gain = (1.0 - decay) / k if abs(k) > 1e-12 else hours
+    return sum(cooling[j] * gain * decay ** (end - 1 - j) for j in span)
+
+
+def cool_thermostat(
+    room: list, cooling: list[float], min_calls: int = 5
+) -> tuple[float, float] | None:
+    """The room temperature the zone's air conditioner stops at, and the rise
+    above it at which it starts: ``(setpoint, band)``, or None if too few calls.
+
+    The stop is the median room temperature at the end of its calls, the start
+    the median at their beginning; the band is the gap between them (at least
+    0.2 C, so the simulated air conditioner does not chatter).
+    """
+    starts: list[float] = []
+    ends: list[float] = []
+    n = len(room)
+    i = 1
+    while i < n:
+        if cooling[i] <= 0 or cooling[i - 1] > 0:
+            i += 1
+            continue
+        end = i
+        while end < n and cooling[end] > 0:
+            end += 1
+        if end < n and room[i] is not None and room[end] is not None:
+            starts.append(room[i])
+            ends.append(room[end])
+        i = end
+    if len(starts) < min_calls:
+        return None
+    stop = statistics.median(ends)
+    return stop, max(statistics.median(starts) - stop, 0.2)
+
+
 FURNACE_LAGS = (0.0, 0.1, 0.2, 0.35, 0.5)  # hours
 
 
@@ -708,6 +864,7 @@ def heated_error(
                 d["neighbour"],
                 d["other"],
                 pipe,
+                (d["cool"], d["other_cool"], d["fan"]),
             )
             actual = data.room[j + 1]
             if actual is not None:

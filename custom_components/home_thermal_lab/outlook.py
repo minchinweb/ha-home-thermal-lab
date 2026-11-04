@@ -208,20 +208,34 @@ def outlook_from_path(
     )
 
 
-def outlook_points(outlook: Outlook, every: int = 2, digits: int = 2) -> list[dict]:
-    """Chart points: every ``every``-th step, with the duty averaged over them."""
+def outlook_points(
+    outlook: Outlook,
+    every: int = 2,
+    digits: int = 2,
+    extra: dict[str, list[float] | None] | None = None,
+) -> list[dict]:
+    """Chart points: every ``every``-th step, with the duty averaged over them.
+
+    ``extra`` gives further per-step shares (such as the cooling call or the
+    fan), averaged over the same spans and keyed as they should appear.
+    """
+    extra = extra or {}
     out = []
     for k in range(0, len(outlook.times), every):
         span = outlook.duty[k : k + every]
         band = outlook.bands[k]
-        out.append(
-            {
-                "t": outlook.times[k].isoformat(),
-                "temp": round(outlook.temps[k], digits),
-                "outdoor": round(outlook.outdoor[k], digits),
-                "heat": round(sum(span) / len(span), digits) if span else 0.0,
-                "lower": round(band.lower, digits),
-                "upper": round(band.upper, digits),
-            }
-        )
+        point = {
+            "t": outlook.times[k].isoformat(),
+            "temp": round(outlook.temps[k], digits),
+            "outdoor": round(outlook.outdoor[k], digits),
+            "heat": round(sum(span) / len(span), digits) if span else 0.0,
+            "lower": round(band.lower, digits),
+            "upper": round(band.upper, digits),
+        }
+        for key, series in extra.items():
+            if series is None:
+                continue
+            part = series[k : k + every]
+            point[key] = round(sum(part) / len(part), digits) if part else 0.0
+        out.append(point)
     return out

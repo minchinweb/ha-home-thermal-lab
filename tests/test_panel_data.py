@@ -6,12 +6,14 @@ from custom_components.home_thermal_lab.panel_data import (
     archive,
     future,
     heating_spans,
+    merge_spans,
     ms,
     same_thermostat,
     series,
     setpoints,
     span,
     statistic_values,
+    subtract_spans,
 )
 
 T0 = datetime(2026, 11, 2, tzinfo=UTC)
@@ -111,3 +113,25 @@ def test_same_thermostat_finds_the_other_rooms_on_a_climate():
     assert same_thermostat(rooms, "climate.up", {"sensor.office"}) == [
         ("bedroom", "sensor.bedroom")
     ]
+
+
+def test_merge_spans_joins_overlaps_and_touches():
+    assert merge_spans([[5, 9], [0, 3], [3, 4], [8, 12]]) == [[0, 4], [5, 12]]
+    assert merge_spans([]) == []
+
+
+def test_subtract_spans_keeps_only_what_the_cover_does_not_reach():
+    spans = [[0, 10], [20, 30]]
+    cover = [[2, 4], [6, 7], [9, 25]]
+    assert subtract_spans(spans, cover) == [[0, 2], [4, 6], [7, 9], [25, 30]]
+    assert subtract_spans(spans, []) == [[0, 10], [20, 30]]
+    assert subtract_spans(spans, [[-5, 50]]) == []
+
+
+def test_future_carries_cooling_and_fan():
+    points = [
+        {"t": "2026-11-02T12:00:00+00:00", "temp": 20.0, "cool": 0.5, "fan": 0.25}
+    ]
+    got = future(points)
+    assert got["cool"][0][1] == 0.5
+    assert got["fan"][0][1] == 0.25

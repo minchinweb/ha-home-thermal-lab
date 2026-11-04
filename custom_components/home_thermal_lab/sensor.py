@@ -34,7 +34,7 @@ logic it calls is.
 from __future__ import annotations
 
 import contextlib
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, field, replace
 from datetime import UTC, datetime, timedelta
 from functools import partial
 import logging
@@ -103,7 +103,9 @@ from .learn import (
     bin_fraction,
     bin_held,
     blower_kw,
+    cool_thermostat,
     edge_steps,
+    fit_cool_rate,
     fit_furnace_lag,
     fit_heat_rate,
     fit_no_heat,
@@ -392,6 +394,8 @@ class _Series:
     heating: list[float]
     ground: list | None
     setpoint: list
+    cooling: list[float] = field(default_factory=list)
+    fan: list[float] = field(default_factory=list)
 
 
 @dataclass
@@ -420,6 +424,12 @@ def _zone_series(zone, rows, irradiance, lat, lon, start, end) -> _Series:
     heating = bin_fraction(
         runs_from_states(climate, end, {"heating"}, "hvac_action"), start, bins, width
     )
+    cooling = bin_fraction(
+        runs_from_states(climate, end, {"cooling"}, "hvac_action"), start, bins, width
+    )
+    fan = bin_fraction(
+        runs_from_states(climate, end, {"fan"}, "hvac_action"), start, bins, width
+    )
     by_end = {r.time: r for r in irradiance}
     light, raw_wall = [], []
     for i in range(bins):
@@ -447,6 +457,8 @@ def _zone_series(zone, rows, irradiance, lat, lon, start, end) -> _Series:
         heating,
         ground,
         bin_held(heat_setpoints(climate), start, bins, width),
+        cooling,
+        fan,
     )
 
 
@@ -456,6 +468,8 @@ def _fit_one(
     hours: float,
     neighbour: list | None = None,
     other: list[float] | None = None,
+    other_cool: list[float] | None = None,
+    fan: list[float] | None = None,
 ) -> _Learned:
     """Hour-long block rates, then the multi-step refinement if physical; with
     sunlit walls the wall lag is chosen from ``WALL_TAUS`` by the fit."""
@@ -465,6 +479,9 @@ def _fit_one(
         "block": LEARN_BLOCK,
         "neighbour": neighbour,
         "other": other,
+        "cooling": s.cooling,
+        "other_cool": other_cool,
+        "fan": fan,
     }
     if has_walls(zone):
         fit, tau = fit_with_wall_lag(*args, s.raw_wall, WALL_TAUS, **extra)
@@ -472,7 +489,17 @@ def _fit_one(
     else:
         fit = fit_no_heat(*args, **extra)
         tau, wall = WALL_TAU_HOURS, None
-    data = ZoneData(*args, wall, s.ground, neighbour, other, s.setpoint)
+    data = ZoneData(
+        *args,
+        wall,
+        s.ground,
+        neighbour,
+        other,
+        s.setpoint,
+        cooling=s.cooling,
+        other_cool=other_cool,
+        fan=fan,
+    )
     reason = problem(fit)
     if reason is None:
         fit = refine_multistep(fit, data)
@@ -489,6 +516,19 @@ def _error_3h(found: _Learned) -> float | None:
 def _mean_of(values: list) -> float | None:
     known = [v for v in values if v is not None]
     return sum(known) / len(known) if known else None
+
+
+def _effective_fan(key: str, series: dict[str, _Series]) -> list[float]:
+    """The fan share per bin for one zone, as the panel counts it: the fan runs
+    for the zone alone, so it is cut where any other zone is calling for heat or
+    cool (the zone's own calls do not cut it)."""
+    own = series[key].fan
+    others = [s for k, s in series.items() if k != key]
+    out = []
+    for i, fan in enumerate(own):
+        busy = max((min(1.0, o.heating[i] + o.cooling[i]) for o in others), default=0.0)
+        out.append(fan * (1.0 - busy))
+    return out
 
 
 def _fit_house(zones, rows, irradiance, lat, lon, start, end) -> dict[str, _Learned]:
@@ -509,19 +549,25 @@ def _fit_house(zones, rows, irradiance, lat, lon, start, end) -> dict[str, _Lear
         {z["climate_entity"]: z.get("neighbours", []) for z in zones},
     )
     origins_every = 48  # D's fading time is fitted from a forecast every 12 hours
+    # The returns are not zoned: the fan runs for the whole house when any zone
+    # runs it alone, so the house fan is the largest zone fan share per bin.
+    fans = {k: _effective_fan(k, series) for k in series}
+    count = len(next(iter(series.values())).room)
+    house_fan = [max(f[i] for f in fans.values()) for i in range(count)]
     out = {}
     for zone in zones:
         key = zone["climate_entity"]
         s = series[key]
-        found = _fit_one(zone, s, hours)
+        alone_fan = fans[key]
+        found = _fit_one(zone, s, hours, fan=house_fan)
         near = near_of.get(key, ())
         if near and zone["model"].get("a") is None:
-            count = len(s.room)
             neighbour = [
                 _mean_of([series[k].room[i] for k in near]) for i in range(count)
             ]
             other = [sum(series[k].heating[i] for k in near) for i in range(count)]
-            coupled = _fit_one(zone, s, hours, neighbour, other)
+            other_cool = [sum(series[k].cooling[i] for k in near) for i in range(count)]
+            coupled = _fit_one(zone, s, hours, neighbour, other, other_cool, house_fan)
             alone_err, coupled_err = _error_3h(found), _error_3h(coupled)
             if coupled_err is not None and (
                 alone_err is None or coupled_err < alone_err
@@ -529,20 +575,34 @@ def _fit_house(zones, rows, irradiance, lat, lon, start, end) -> dict[str, _Lear
                 found = replace(coupled, neighbours=near)
         origins = list(range(FORECAST_STEPS, len(s.room), origins_every))
         tau = fit_offset_tau(s.room, origins, FORECAST_STEPS, hours)
+        thermostat = cool_thermostat(s.room, s.cooling)
         wall = found.data.wall or [0.0] * len(s.room)
         found.history = ZoneHistory(
-            start, s.room, s.outdoor, s.light, wall, s.setpoint, tau
+            start,
+            s.room,
+            s.outdoor,
+            s.light,
+            wall,
+            s.setpoint,
+            tau,
+            cool=s.cooling,
+            fan=alone_fan,
+            cool_setpoint=None if thermostat is None else thermostat[0],
+            cool_band=0.5 if thermostat is None else thermostat[1],
         )
         out[key] = found
     return out
 
 
 def _measure(model: ZoneModel, data: ZoneData, learn_h: bool, deadband: float):
-    """Heating rate (if wanted), furnace lag and skill of a model (blocking)."""
+    """Heating and cooling rates (heating if wanted), furnace lag and skill of a
+    model (blocking)."""
     h = fit_heat_rate(model, data) if learn_h else model.h
     model = replace(model, h=h)
+    cool = fit_cool_rate(model, data)
+    model = replace(model, e=cool)
     furnace_lag, _ = fit_furnace_lag(model, data, deadband)
-    return h, furnace_lag, skill(model, data, (4, 12))
+    return h, cool, furnace_lag, skill(model, data, (4, 12))
 
 
 def _target_wave(zone: dict) -> TargetWave | None:
@@ -817,14 +877,14 @@ class ZoneBrain:
         if self.model is not None:
             if self.given_h is not None:
                 self.model = replace(self.model, h=self.given_h)
-            h, furnace_lag, skills = await self.hass.async_add_executor_job(
+            h, cool, furnace_lag, skills = await self.hass.async_add_executor_job(
                 _measure,
                 self.model,
                 found.data,
                 self.given_h is None,
                 self.zone["deadband"],
             )
-            self.model = replace(self.model, h=h, lag=furnace_lag)
+            self.model = replace(self.model, h=h, e=cool, lag=furnace_lag)
         else:
             skills = {}
         await self._update_bias(rows[self.outdoor_entity], end)
@@ -1268,9 +1328,16 @@ class ZoneForecastSensor(SensorEntity):
             "method": ahead.method,
             "neighbours": brain.names(brain.neighbours),
             "heating_rate": None if brain.model is None else round(brain.model.h, 3),
+            "cooling_rate": None if brain.model is None else round(brain.model.e, 3),
+            "cooling_bleed": None if brain.model is None else round(brain.model.y, 3),
+            "fan_pull": None if brain.model is None else round(brain.model.f, 3),
             "outdoor_correction": round(got.shift, 2),
             **self._scores,
-            "points": outlook_points(outlook, every=2),
+            "points": outlook_points(
+                outlook,
+                every=2,
+                extra={"cool": ahead.cool, "fan": ahead.fan},
+            ),
         }
         self.async_write_ha_state()
 

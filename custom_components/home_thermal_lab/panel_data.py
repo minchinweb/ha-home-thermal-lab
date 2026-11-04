@@ -69,12 +69,47 @@ def archive(rows: list[dict]) -> list[Point]:
     return sorted(out)
 
 
-def heating_spans(rows: list[dict], end: datetime) -> list[list[int]]:
-    """``[start ms, end ms]`` of each heating call in a thermostat's history."""
+def action_spans(rows: list[dict], end: datetime, action: str) -> list[list[int]]:
+    """``[start ms, end ms]`` of each run of a thermostat's ``hvac_action``."""
     return [
         [ms(r.start), ms(r.end)]
-        for r in runs_from_states(rows, end, {"heating"}, "hvac_action")
+        for r in runs_from_states(rows, end, {action}, "hvac_action")
     ]
+
+
+def heating_spans(rows: list[dict], end: datetime) -> list[list[int]]:
+    """``[start ms, end ms]`` of each heating call in a thermostat's history."""
+    return action_spans(rows, end, "heating")
+
+
+def merge_spans(spans: list[list[int]]) -> list[list[int]]:
+    """The spans as one sorted list, with overlapping and touching ones joined."""
+    out: list[list[int]] = []
+    for start, stop in sorted(spans):
+        if out and start <= out[-1][1]:
+            out[-1][1] = max(out[-1][1], stop)
+        else:
+            out.append([start, stop])
+    return out
+
+
+def subtract_spans(spans: list[list[int]], cover: list[list[int]]) -> list[list[int]]:
+    """The parts of ``spans`` that ``cover`` does not reach."""
+    holes = merge_spans(cover)
+    out: list[list[int]] = []
+    for start, stop in merge_spans(spans):
+        at = start
+        for hole_start, hole_stop in holes:
+            if hole_stop <= at or hole_start >= stop:
+                continue
+            if hole_start > at:
+                out.append([at, hole_start])
+            at = max(at, hole_stop)
+            if at >= stop:
+                break
+        if at < stop:
+            out.append([at, stop])
+    return out
 
 
 def span(values, step: float = 1.0) -> list[float] | None:
@@ -140,7 +175,7 @@ def same_thermostat(
 def future(points: list[dict]) -> dict[str, list[Point]]:
     """Split a forecast sensor's ``points`` into the panel's future series."""
     out: dict[str, list[Point]] = {
-        k: [] for k in ("temp", "outdoor", "heat", "lower", "upper")
+        k: [] for k in ("temp", "outdoor", "heat", "cool", "fan", "lower", "upper")
     }
     for p in points:
         when = ms(datetime.fromisoformat(p["t"]))

@@ -1,5 +1,6 @@
 """Tests for forecasting a house's zones together."""
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 import math
 
@@ -105,3 +106,42 @@ def test_neighbour_inputs():
     assert temps == pytest.approx([19.0, 20.0])
     assert duty == pytest.approx([1.5, 0.5])
     assert neighbour_inputs([a], ()) is None
+
+
+def test_cooling_and_fan_follow_the_usual_day():
+    history = _history()
+    bins = len(history.room)
+    # the AC runs in the first hour of each day, the fan alone in the second
+    cool = [1.0 if i % PER_DAY < 4 else 0.0 for i in range(bins)]
+    fan = [1.0 if 4 <= i % PER_DAY < 8 else 0.0 for i in range(bins)]
+    history = replace(history, cool=cool, fan=fan)
+    out = forecast_house(
+        NOW, [_zone(None, room=20.0, history=history)], [-5.0] * STEPS, 0.25
+    )[0]
+    assert out.cool[:4] == pytest.approx([1.0] * 4)
+    assert out.cool[4:] == pytest.approx([0.0] * (STEPS - 4))
+    assert out.fan[:4] == pytest.approx([0.0] * 4)
+    assert out.fan[4:8] == pytest.approx([1.0] * 4)
+
+
+def test_a_simulated_air_conditioner_follows_the_forecast_weather():
+    history = replace(_history(outdoor=24.0), cool_setpoint=21.0, cool_band=0.5)
+    model = ZoneModel(a=0.02, c=0.0, e=-2.0)
+    hot = forecast_house(
+        NOW,
+        [_zone(model, room=24.0, plan=-50.0, history=history)],
+        [30.0] * STEPS,
+        0.25,
+    )[0]
+    mild = forecast_house(
+        NOW,
+        [_zone(model, room=21.0, plan=-50.0, history=history)],
+        [18.0] * STEPS,
+        0.25,
+    )[0]
+    assert sum(hot.cool) > sum(mild.cool)
+
+
+def test_calls_are_none_without_history():
+    out = forecast_house(NOW, [_zone(None, room=18.0)], [-10.0] * STEPS, 0.25)[0]
+    assert out.cool is None and out.fan is None
