@@ -121,6 +121,73 @@ def equipment_from(
     return furnace, ac, warnings
 
 
+def assemble_all(
+    rooms: dict[str, dict],
+    names: dict[str, str],
+    rates: dict[str, float],
+    nominal: Nominal,
+    design: Design,
+    buildings: list[dict] | tuple = (),
+    **house: object,
+) -> dict:
+    """The house's numbers, with each detached building calculated on its own.
+
+    A detached building (a garage, say) has no duct or heating connection to the
+    house, so its rooms leave the house's calculation and get their own Manual J
+    and S, at its own indoor setpoints if it has them. ``house`` is passed to
+    ``assemble`` for the house itself.
+
+    Args:
+        rooms, names, rates, nominal, design: As for ``assemble``.
+        buildings: Each ``{"name", "areas", "indoor_heat_c"?, "indoor_cool_c"?}``.
+        house: Keyword arguments for ``assemble`` (the furnace, AC and so on).
+
+    Returns:
+        ``assemble``'s result for the house, with ``buildings``: a list of
+        ``{"name", "areas", "missing", "result"}``. ``missing`` names areas that
+        have no room yet; ``result`` is None when none of them does.
+    """
+    detached = {area for b in buildings for area in b["areas"]}
+    full_names = {a: names.get(a) or rooms[a].get("title") or a for a in rooms}
+    result = assemble(
+        {a: r for a, r in rooms.items() if a not in detached},
+        names,
+        rates,
+        nominal,
+        design,
+        **house,
+    )
+    out = []
+    for b in buildings:
+        present = {a: rooms[a] for a in b["areas"] if a in rooms}
+        missing = [full_names.get(a, a) for a in b["areas"] if a not in rooms]
+        built = None
+        if present:
+            own = replace(
+                design,
+                heat_indoor_c=b.get("indoor_heat_c") or design.heat_indoor_c,
+                cool_indoor_c=b.get("indoor_cool_c") or design.cool_indoor_c,
+            )
+            built = assemble(
+                present,
+                names,
+                rates,
+                nominal,
+                own,
+                design_info=house.get("design_info"),
+            )
+        out.append(
+            {
+                "name": b["name"],
+                "areas": list(b["areas"]),
+                "missing": missing,
+                "result": built,
+            }
+        )
+    result["buildings"] = out
+    return result
+
+
 def assemble(
     rooms: dict[str, dict],
     names: dict[str, str],

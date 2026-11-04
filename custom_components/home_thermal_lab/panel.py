@@ -31,11 +31,11 @@ from homeassistant.core import callback
 from homeassistant.helpers import area_registry as ar
 import voluptuous as vol
 
-from . import DOMAIN, ENERGY
+from . import BUILDING, DOMAIN, ENERGY
 from .calls import temperature_series
 from .ha_rows import numbers, recorded
 from .house_model import Nominal
-from .loads import HUMIDITY_NOTE, assemble, design_from_record, equipment_from
+from .loads import HUMIDITY_NOTE, assemble_all, design_from_record, equipment_from
 from .manual import HOURS_PER_YEAR, Design
 from .options import STRUCTURE_DOMAIN, has_walls, structure_ducts, structure_rooms
 from .panel_data import (
@@ -381,6 +381,16 @@ def _energy_settings(hass) -> dict | None:
     return None
 
 
+def _buildings(hass) -> list[dict]:
+    """The detached buildings: each sub-entry's name, areas and indoor setpoints."""
+    out = []
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        for sub in entry.subentries.values():
+            if sub.subentry_type == BUILDING:
+                out.append({"name": sub.title, **dict(sub.data)})
+    return out
+
+
 def _stamp(value) -> datetime:
     """A statistics row's start, as an aware time (epoch seconds or a datetime)."""
     if isinstance(value, datetime):
@@ -441,12 +451,13 @@ async def ws_loads(hass, connection, msg) -> None:
         areas.async_get_area(energy["area_id"]) if energy.get("area_id") else None
     )
     try:
-        result = assemble(
+        result = assemble_all(
             rooms,
             names,
             _rates(hass),
             Nominal(),
             design,
+            buildings=_buildings(hass),
             furnace=furnace,
             ac=ac,
             design_info=info,

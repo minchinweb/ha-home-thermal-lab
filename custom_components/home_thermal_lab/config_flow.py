@@ -26,7 +26,7 @@ from homeassistant.config_entries import (
 from homeassistant.helpers import selector
 import voluptuous as vol
 
-from . import CALL_STATS, CONTRIBUTION, DOMAIN, ENERGY, ZONE
+from . import BUILDING, CALL_STATS, CONTRIBUTION, DOMAIN, ENERGY, ZONE
 from .map_view import OutlineMapView
 from .options import (
     BTU_H_TO_KW,
@@ -59,6 +59,7 @@ _NUMBER = selector.NumberSelector(
 )
 _CLIMATE = selector.EntitySelector(selector.EntitySelectorConfig(domain="climate"))
 _AREA = selector.AreaSelector()
+_AREAS = selector.AreaSelector(selector.AreaSelectorConfig(multiple=True))
 _CLIMATES = selector.EntitySelector(
     selector.EntitySelectorConfig(domain="climate", multiple=True)
 )
@@ -190,6 +191,27 @@ def _energy_schema(_roof_labels: list[dict]) -> vol.Schema:
             vol.Optional("area_id"): _AREA,
         }
     )
+
+
+def _building_schema(_roof_labels: list[dict]) -> vol.Schema:
+    return vol.Schema(
+        {
+            vol.Required("name"): _TEXT,
+            vol.Required("areas"): _AREAS,
+            vol.Optional("indoor_heat_c"): _NUMBER,
+            vol.Optional("indoor_cool_c"): _NUMBER,
+        }
+    )
+
+
+def _building_from_form(form: dict) -> dict:
+    if not form.get("areas"):
+        raise FieldError("areas", "choose the areas the building covers")
+    return {
+        "name": form["name"],
+        "areas": list(form["areas"]),
+        **_clean(form, ("indoor_heat_c", "indoor_cool_c")),
+    }
 
 
 def _contribution_schema(roof_labels: list[dict]) -> vol.Schema:
@@ -378,6 +400,7 @@ _KINDS = {
     ZONE: (_zone_schema, _zone_from_form, _zone_to_form),
     CALL_STATS: (_call_stats_schema, _call_stats_from_form, _plain),
     ENERGY: (_energy_schema, _energy_from_form, _energy_to_form),
+    BUILDING: (_building_schema, _building_from_form, _plain),
     CONTRIBUTION: (
         _contribution_schema,
         _contribution_from_form,
@@ -391,6 +414,7 @@ _NAMES = {
     ZONE: "Zone with sun",
     CALL_STATS: "Heating calls",
     ENERGY: "Furnace blower energy",
+    BUILDING: "Garage",
     CONTRIBUTION: "Contributions",
 }
 
@@ -411,6 +435,7 @@ class HomeThermalLabConfigFlow(ConfigFlow, domain=DOMAIN):
             ENERGY: EnergySubentryFlow,
             ZONE: ZoneSubentryFlow,
             CONTRIBUTION: ContributionSubentryFlow,
+            BUILDING: BuildingSubentryFlow,
         }
 
     async def async_step_user(
@@ -598,3 +623,9 @@ class ContributionSubentryFlow(_SensorSubentryFlow):
     """What moved one zone's temperature (the contribution chart)."""
 
     kind = CONTRIBUTION
+
+
+class BuildingSubentryFlow(_SensorSubentryFlow):
+    """A detached building (such as a garage), sized on its own in the Loads tab."""
+
+    kind = BUILDING

@@ -21,6 +21,9 @@ ZONE = "zone"
 CALL_STATS = "call_stats"
 ENERGY = "energy"
 CONTRIBUTION = "contribution"
+# A detached building (such as a garage): its own Manual J, S and D, apart from
+# the house.
+BUILDING = "building"
 
 
 async def async_setup_entry(hass, entry) -> bool:

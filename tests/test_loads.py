@@ -11,6 +11,7 @@ from custom_components.home_thermal_lab.house_model import (
 from custom_components.home_thermal_lab.loads import (
     HUMIDITY_NOTE,
     assemble,
+    assemble_all,
     design_from_record,
     equipment_from,
 )
@@ -191,3 +192,70 @@ def test_the_furnace_room_is_passed_through():
     result = assemble(rooms, {}, {}, Nominal(), Design(), furnace_room="Basement")
     assert result["furnace_room"] == "Basement"
     assert assemble(rooms, {}, {}, Nominal(), Design())["furnace_room"] is None
+
+
+def _room(title, area_m2=30.0):
+    return {
+        "title": title,
+        "floor_m2": area_m2,
+        "height_m": 2.4,
+        "walls": [{"azimuth": 0.0, "tilt": 90.0, "area_m2": 12.0, "glass_m2": 0.0}],
+        "roofs": [],
+        "windows": [],
+    }
+
+
+def test_a_detached_building_leaves_the_house_and_is_sized_on_its_own():
+    rooms = {"office": _room("Office"), "garage": _room("Garage", 40.0)}
+    names = {"office": "Office", "garage": "Garage"}
+    result = assemble_all(
+        rooms,
+        names,
+        {},
+        Nominal(),
+        Design(),
+        buildings=[{"name": "Garage", "areas": ["garage"]}],
+    )
+    assert [r["name"] for r in result["rooms"]] == ["Office"]
+    (garage,) = result["buildings"]
+    assert garage["missing"] == []
+    assert [r["name"] for r in garage["result"]["rooms"]] == ["Garage"]
+    assert garage["result"]["equipment"]["heating_design"]["load_w"] > 0
+    assert garage["result"]["equipment"]["heating"] is None
+
+
+def test_a_building_setpoint_changes_its_heat_loss():
+    rooms = {"office": _room("Office"), "garage": _room("Garage", 40.0)}
+    names = {"office": "Office", "garage": "Garage"}
+    warm = assemble_all(
+        rooms,
+        names,
+        {},
+        Nominal(),
+        Design(),
+        buildings=[{"name": "Garage", "areas": ["garage"]}],
+    )["buildings"][0]["result"]["equipment"]["heating_design"]["load_w"]
+    cold = assemble_all(
+        rooms,
+        names,
+        {},
+        Nominal(),
+        Design(),
+        buildings=[{"name": "Garage", "areas": ["garage"], "indoor_heat_c": 10.0}],
+    )["buildings"][0]["result"]["equipment"]["heating_design"]["load_w"]
+    assert cold < warm  # a colder setpoint is a smaller temperature difference
+
+
+def test_a_building_with_no_rooms_yet_is_reported_as_missing():
+    rooms = {"office": _room("Office")}
+    result = assemble_all(
+        rooms,
+        {"office": "Office"},
+        {},
+        Nominal(),
+        Design(),
+        buildings=[{"name": "Garage", "areas": ["garage"]}],
+    )
+    (garage,) = result["buildings"]
+    assert garage["result"] is None
+    assert garage["missing"] == ["garage"]

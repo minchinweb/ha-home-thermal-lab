@@ -399,6 +399,51 @@
       "abort": {
         "reconfigure_successful": "Saved."
       }
+    },
+    "building": {
+      "entry_type": "Detached building",
+      "initiate_flow": {
+        "user": "Add a detached building (garage)",
+        "reconfigure": "Reconfigure"
+      },
+      "step": {
+        "user": {
+          "title": "Detached building",
+          "description": "A building with no duct or heating connection to the house, such as a garage. Its rooms are taken out of the house's Manual J and sized on their own in the Loads tab. Give it the House Structure parts of its rooms (walls, roof, windows) and pick its Home Assistant areas here.",
+          "data": {
+            "name": "Name",
+            "areas": "Areas the building covers",
+            "indoor_heat_c": "Indoor temperature for heating (°C, optional)",
+            "indoor_cool_c": "Indoor temperature for cooling (°C, optional)"
+          },
+          "data_description": {
+            "areas": "The Home Assistant areas that make up the building. A room is only sized if House Structure has parts in its area.",
+            "indoor_heat_c": "Leave empty to use the house's design indoor temperature.",
+            "indoor_cool_c": "Leave empty to use the house's design indoor temperature."
+          }
+        },
+        "reconfigure": {
+          "title": "Detached building",
+          "description": "A building with no duct or heating connection to the house, such as a garage. Its rooms are taken out of the house's Manual J and sized on their own in the Loads tab. Give it the House Structure parts of its rooms (walls, roof, windows) and pick its Home Assistant areas here.",
+          "data": {
+            "name": "Name",
+            "areas": "Areas the building covers",
+            "indoor_heat_c": "Indoor temperature for heating (°C, optional)",
+            "indoor_cool_c": "Indoor temperature for cooling (°C, optional)"
+          },
+          "data_description": {
+            "areas": "The Home Assistant areas that make up the building. A room is only sized if House Structure has parts in its area.",
+            "indoor_heat_c": "Leave empty to use the house's design indoor temperature.",
+            "indoor_cool_c": "Leave empty to use the house's design indoor temperature."
+          }
+        }
+      },
+      "error": {
+        "invalid_areas": "Choose the areas the building covers."
+      },
+      "abort": {
+        "reconfigure_successful": "Saved."
+      }
     }
   }
 }

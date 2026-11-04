@@ -150,6 +150,10 @@
     <div class="grid2" id="equipment"></div>
   </section>
   <section class="card">
+    <h2>Detached buildings (Manual J and S)</h2>
+    <div id="buildings"></div>
+  </section>
+  <section class="card">
     <h2>Ducts (Manual D)</h2>
     <div id="ducts"></div>
   </section>
@@ -768,6 +772,35 @@ function drawEquipment(d) {
   document.getElementById("equipment").replaceChildren(...panels);
 }
 
+function drawBuildings(d) {
+  const TON = 3516.85;
+  const blocks = (d.buildings || []).map((b) => {
+    const parts = [el("h3", {}, b.name)];
+    if (b.missing && b.missing.length) {
+      parts.push(el("p", { class: "hint" }, "No House Structure parts yet in: " + b.missing.join(", ") + "."));
+    }
+    if (!b.result) {
+      parts.push(el("p", { class: "hint" }, "Nothing to size yet: give the building's areas walls, a roof or windows in House Structure."));
+      return el("div", { class: "panel" }, ...parts);
+    }
+    const r = b.result;
+    const hd = r.equipment.heating_design;
+    const cd = r.equipment.cooling_design;
+    parts.push(
+      row("Design size (heat loss at design)", fmt(hd.load_w, 0, " W")),
+      row("Allowed up to", fmt(hd.max_w, 0, " W")),
+      row("Design size, total cooling", fmt(cd.load_total_w, 0, " W") + " · " + fmt(cd.load_total_w / TON, 2, " tons")),
+      row("Equipment", "none yet"),
+      el("p", { class: "hint" }, "No heater nameplate yet: the design size is what it must supply."));
+    parts.push(tableOf(["Room", "Heat loss (W)", "Cooling (W)", "UA calc (W/K)"],
+      r.rooms.map((x) => [x.name, fmt(x.heating_w, 0), fmt(x.cooling_total_w, 0), fmt(x.ua_calc_w_k, 1)])));
+    if (r.warnings && r.warnings.length) parts.push(el("p", { class: "hint" }, r.warnings.join(" ")));
+    return el("div", { class: "panel" }, ...parts);
+  });
+  document.getElementById("buildings").replaceChildren(
+    ...(blocks.length ? blocks : [el("p", { class: "hint" }, "No detached buildings. Add one from the integration's page (Detached building) to size a garage or similar.")]));
+}
+
 function drawDucts(d) {
   const du = d.ducts;
   const box = document.getElementById("ducts");
@@ -811,6 +844,7 @@ async function loadLoads() {
     drawDesign(d);
     drawRooms(d);
     drawEquipment(d);
+    drawBuildings(d);
     drawDucts(d);
     drawLoadsNotes(d);
   } catch (err) {
