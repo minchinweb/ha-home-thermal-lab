@@ -199,6 +199,51 @@ def list_temperature_sensors(
     return sorted(found)
 
 
+def list_doors(
+    base_url: str, token: str, fetch: AuthFetcher = urllib_fetch_auth
+) -> list[dict]:
+    """The doors House Structure knows, from its door sensors' attributes.
+
+    House Structure gives each door with a contact sensor an "open" binary
+    sensor whose attributes name the contact, the wall it is in, the rooms on
+    each side and each room's temperature sensor. A door with no contact has
+    no sensor, so it is not listed.
+
+    Args:
+        base_url: Home Assistant URL.
+        token: Long-lived access token.
+        fetch: Function that fetches a URL as JSON (replaceable in tests).
+
+    Returns:
+        One dict per door, sorted by entity id: ``entity_id``, ``name``,
+        ``sensor`` (the contact), ``wall``, ``area_id``, ``other_area_id``
+        (``None`` for a door to outside), ``temperature`` and
+        ``other_temperature`` (the rooms' temperature sensors, where known).
+    """
+    states = fetch(f"{base_url.rstrip('/')}/api/states", token)
+    doors = []
+    for s in states:
+        attrs = s.get("attributes", {})
+        if (
+            not s["entity_id"].startswith("binary_sensor.")
+            or attrs.get("kind") != "door"
+        ):
+            continue
+        doors.append(
+            {
+                "entity_id": s["entity_id"],
+                "name": attrs.get("friendly_name", ""),
+                "sensor": attrs.get("sensor"),
+                "wall": attrs.get("wall"),
+                "area_id": attrs.get("area_id"),
+                "other_area_id": attrs.get("other_area_id"),
+                "temperature": attrs.get("temperature_entity"),
+                "other_temperature": attrs.get("other_temperature_entity"),
+            }
+        )
+    return sorted(doors, key=lambda d: d["entity_id"])
+
+
 def fetch_states(
     base_url: str,
     token: str,

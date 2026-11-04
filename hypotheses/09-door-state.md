@@ -4,7 +4,7 @@
 
 **Claim:** The temperature difference between two connected rooms, and how fast it decays, indicates whether the door between them is open or closed.
 
-**Data:** Paired room temperatures; ground truth from door contact sensors if any, otherwise manual logging for a labelled set.
+**Data:** Paired room temperatures; ground truth from door contact sensors if any, otherwise manual logging for a labelled set. Doors can be entered in House Structure (a Door part in an internal wall, with its contact sensor); `scripts/door_state.py` then reads the two rooms from there (`--list-doors`).
 
 **Method:**
 - Classification problem. Features: gradient, decay rate of the gradient, rate-of-change correlation.

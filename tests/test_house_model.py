@@ -488,6 +488,47 @@ def test_settings_override_the_envelope_defaults():
     assert "roofs R-35" in note.split("Built-in defaults")[1]
 
 
+def test_an_outside_door_is_its_own_surface():
+    wall = {
+        "face": "S",
+        "azimuth": 180.0,
+        "area_m2": 10.0,
+        "glass_m2": 2.0,
+        "door_m2": 1.8,
+    }
+    doors = [
+        {"title": "Front door", "in": "wall", "azimuth": 180.0, "area_m2": 1.8},
+        {"title": "Back door", "in": "wall", "azimuth": 0.0, "area_m2": None},
+        {"title": "Door to hall", "in": "internal_wall", "area_m2": 1.6},
+    ]
+    rooms = {
+        "a": {
+            "title": "A",
+            "floor_m2": 10.0,
+            "height_m": 2.4,
+            "walls": [wall],
+            "doors": doors,
+        }
+    }
+    project, _ = build_project(rooms, Nominal(), Design())
+    (room,) = project.rooms
+    by_kind = {}
+    for s in room.surfaces:
+        by_kind.setdefault(s.kind, []).append(s)
+    # the wall loses its window and its door; the sized outside door is its own
+    assert sum(s.area for s in by_kind["wall"]) == pytest.approx(10.0 - 2.0 - 1.8)
+    (door,) = by_kind["door"]
+    assert (door.area, door.r, door.face) == (pytest.approx(1.8), Nominal().door_r, "S")
+    # the unsized outside door stays in the wall, and the room says so
+    assert any("Back door" in note for note in room.notes)
+
+
+def test_doors_r_value_is_a_setting():
+    nominal, note = nominal_from_settings({"door_r": 5})
+    assert nominal.door_r == pytest.approx(5 * R_IP_TO_SI)
+    assert "outside doors R-5" in note
+
+
 def test_no_settings_say_everything_is_a_default():
     nominal, note = nominal_from_settings({})
     assert nominal == Nominal()

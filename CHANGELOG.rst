@@ -3,6 +3,8 @@ Changelog
 
 .. release:: unreleased
 
+  - :feature:`-` Loads tab: **doors** to outside from House Structure are their own surfaces in the Manual J, at a new **outside door R-value** setting (R-3 by default), and are taken out of their wall's area. A door with no size stays in the wall, and the room says so. Doors in internal walls are not losses, as internal walls are not.
+  - :feature:`-` ``scripts/door_state.py`` (hypothesis 09) reads the door and the rooms on each side from House Structure's door sensors; ``--door`` picks another contact and ``--list-doors`` lists them.
   - :bug:`-` Only one zone had a forecast: zones are added one by one at startup, and a zone added while the house forecast was being worked out made it fail (``dictionary changed size during iteration``), leaving the other zones' forecast sensors unavailable. The forecast and the learning pass now work from a snapshot of the zones.
   - :bug:`-` Zone tab: the heating (and cooling) band showed no calls from other zones unless the model had fitted them as neighbours; it now shows every other thermostat's calls.
   - :bug:`-` Loads tab: the "Calculating" spinner stayed after the data loaded (its display rule beat ``hidden``).

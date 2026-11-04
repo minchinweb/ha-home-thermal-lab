@@ -2,9 +2,10 @@
 
 Standard library only. House Structure (``hass.data["house_structure"]``)
 gives each room's size, below-ground flag, walls and roofs (area, glass,
-azimuth and tilt) and windows (glass, transmittance and the wall or roof they
-are in). Wall and roof R-values, and a window's glazing and frame, are used
-when given; otherwise they come from ``Nominal``: house-level defaults.
+azimuth and tilt), windows (glass, transmittance and the wall or roof they
+are in) and doors (size and the wall they are in). Wall and roof R-values,
+and a window's glazing and frame, are used when given; otherwise they come
+from ``Nominal``: house-level defaults.
 
 Sizes that are missing are filled in where the room allows it, and each one is
 noted on the room (``Geometry.notes``) so the Loads tab can show it:
@@ -15,6 +16,10 @@ noted on the room (``Geometry.notes``) so the Loads tab can show it:
   axis, or the side of a square room of the floor area) times its height (or
   the room's).
 - A room without a height takes its walls' height, or ``Nominal.room_height_m``.
+
+A door in an outside wall is its own surface, at ``Nominal.door_r``, and is
+taken out of its wall's area, as a window is. A door with no size is left in
+the wall (and noted). Doors in internal walls are not losses either.
 
 Internal walls are not counted as losses. A neighbouring room is taken to be
 at the same temperature, as Manual J does for a heated neighbour. A basement's
@@ -51,6 +56,9 @@ FT_TO_M = 0.3048
 R_IP_TO_SI = 0.17611
 R_20_SI = 3.5
 R_35_SI = 6.2
+# An exterior door: about R-3 for an insulated steel or solid wood door with
+# its frame (U about 1.9 W/m² K). A rough built-in value; set it on the form.
+R_3_SI = 3 * R_IP_TO_SI
 # An uninsulated basement slab with the soil under it, as an effective
 # R-value against the design ground temperature (about R-11). A rough value:
 # the slab's loss depends on its width, the depth and the soil.
@@ -66,6 +74,7 @@ class Nominal:
     Attributes:
         wall_r: Nominal R-value of outside walls, m² K/W.
         roof_r: Nominal R-value of roofs, m² K/W.
+        door_r: Nominal R-value of outside doors, m² K/W.
         basement_floor_r: Effective R-value of a below-ground room's floor,
             slab and soil together, m² K/W.
         glazing: ``double`` or ``triple``, for every window.
@@ -77,6 +86,7 @@ class Nominal:
 
     wall_r: float = R_20_SI
     roof_r: float = R_35_SI
+    door_r: float = R_3_SI
     basement_floor_r: float = BASEMENT_FLOOR_R_SI
     glazing: str = "double"
     frame: str = "vinyl"
@@ -91,6 +101,7 @@ ENVELOPE_SETTINGS = (
     ("infiltration_ach", "ach", False),
     ("wall_r", "wall_r", True),
     ("roof_r", "roof_r", True),
+    ("door_r", "door_r", True),
     ("basement_floor_r", "basement_floor_r", True),
 )
 
@@ -115,6 +126,7 @@ def nominal_from_settings(settings: Mapping) -> tuple[Nominal, str]:
     parts = {
         "wall_r": f"walls R-{nominal.wall_r / R_IP_TO_SI:.0f}",
         "roof_r": f"roofs R-{nominal.roof_r / R_IP_TO_SI:.0f}",
+        "door_r": f"outside doors R-{nominal.door_r / R_IP_TO_SI:.0f}",
         "basement_floor_r": (
             f"basement floors R-{nominal.basement_floor_r / R_IP_TO_SI:.0f}"
         ),
@@ -246,10 +258,12 @@ def room_geometry(summary: dict, nominal: Nominal, name: str = "") -> Geometry:
                 continue
             assumed.append(f"wall {i} ({face}) {gross:.1f} m² from {how}")
         glass = wall.get("glass_m2") or 0.0
-        if glass > gross + 1e-6:
+        doors = wall.get("door_m2") or 0.0
+        if glass + doors > gross + 1e-6:
             problems.append(
-                f"{name}: wall {i} ({face}) has {glass:.2f} m² of windows but is "
-                f"only {gross:.2f} m²; check the wall's and windows' sizes."
+                f"{name}: wall {i} ({face}) has {glass + doors:.2f} m² of windows "
+                f"and doors but is only {gross:.2f} m²; check the wall's, windows' "
+                "and doors' sizes."
             )
         sized.append(gross)
     if assumed:
@@ -257,6 +271,17 @@ def room_geometry(summary: dict, nominal: Nominal, name: str = "") -> Geometry:
             "Wall areas assumed: "
             + "; ".join(assumed)
             + f", {height:.2f} m high unless the wall gives its own height."
+        )
+    unsized_doors = [
+        d["title"]
+        for d in summary.get("doors") or []
+        if d.get("in") == "wall" and not d.get("area_m2")
+    ]
+    if unsized_doors:
+        notes.append(
+            "Outside doors with no size, counted as wall: "
+            + ", ".join(unsized_doors)
+            + "."
         )
     if summary.get("below_ground") and summary.get("below_grade_default"):
         notes.append(
@@ -271,6 +296,15 @@ def room_geometry(summary: dict, nominal: Nominal, name: str = "") -> Geometry:
         notes=tuple(notes),
         problems=tuple(problems),
     )
+
+
+def outside_doors(summary: dict) -> list[dict]:
+    """A room's doors to outside that have a size (the ones that lose heat)."""
+    return [
+        d
+        for d in summary.get("doors") or []
+        if d.get("in") == "wall" and (d.get("area_m2") or 0.0) > 0
+    ]
 
 
 def ground_fraction(summary: dict, height: float | None = None) -> float:
@@ -367,7 +401,11 @@ def build_project(
         for i, (wall, gross) in enumerate(
             zip(summary.get("walls", []), geometry.walls, strict=True), start=1
         ):
-            net = (gross or 0.0) - (wall.get("glass_m2") or 0.0)
+            net = (
+                (gross or 0.0)
+                - (wall.get("glass_m2") or 0.0)
+                - (wall.get("door_m2") or 0.0)
+            )
             if net > 0:
                 r = wall.get("r_value_si") or nominal.wall_r
                 if below > 0:
@@ -405,6 +443,16 @@ def build_project(
                     u=window_u(glazing, frame),
                     shgc=win.get("transmittance") or 0.0,
                     face=face,
+                )
+            )
+        for i, door in enumerate(outside_doors(summary), start=1):
+            surfaces.append(
+                Surface(
+                    f"door {i}",
+                    "door",
+                    door["area_m2"],
+                    r=nominal.door_r,
+                    face=_face(door.get("azimuth") or 0.0),
                 )
             )
         if summary.get("below_ground") and geometry.floor_m2:

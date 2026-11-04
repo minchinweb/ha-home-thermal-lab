@@ -1,10 +1,15 @@
 """Can a door's state be read from the temperatures either side? (hypothesis 09)
 
-Ground truth is the contact sensor on the S basement bedroom door
-(``binary_sensor.s_basement_bedroom_door``). The S basement bedroom is compared with
-three nearby basement rooms (the zone 2 thermostat and the NE and SE basement
-bedrooms). In 15 minute bins, labelled open (door open for more than half the
-bin) or closed (shut the whole bin), it measures two features per partner:
+Ground truth is a door's contact sensor, by default the S basement bedroom door
+(``binary_sensor.s_basement_bedroom_door``). If the door is a part in House
+Structure, the rooms on its two sides are read from there (its "open" sensor's
+attributes), and the room on the other side is the first partner. Otherwise,
+and as extra partners, the S basement bedroom is compared with three nearby
+basement rooms (the zone 2 thermostat and the NE and SE basement bedrooms).
+``--list-doors`` prints the doors House Structure knows.
+
+In 15 minute bins, labelled open (door open for more than half the bin) or
+closed (shut the whole bin), it measures two features per partner:
 
 * the temperature gradient ``|room - partner|`` (an open door should shrink it);
 * the rate mismatch ``|dRoom/dt - dPartner/dt|`` (an open door should make the
@@ -20,6 +25,8 @@ closed stretches.
 Usage::
 
     uv run python scripts/door_state.py --days 14
+    uv run python scripts/door_state.py --list-doors
+    uv run python scripts/door_state.py --door binary_sensor.some_door_contact
 """
 
 from __future__ import annotations
@@ -43,6 +50,7 @@ from regress_rooms import ROOMS, ZONES, _bin_means, _overlap_fraction
 from custom_components.home_thermal_lab.ha_history import (
     fetch_home_position,
     fetch_states,
+    list_doors,
 )
 from custom_components.home_thermal_lab.ha_statistics import (
     fetch_statistics_from_url,
@@ -135,6 +143,39 @@ def _edges(gap, is_open, is_closed, edge_minutes: int, bin_minutes: int) -> None
         )
 
 
+def _rooms_for(door: str, doors: list[dict]) -> tuple[str, str, dict[str, str]]:
+    """The room to test, its temperature sensor, and its partners by name.
+
+    A House Structure door with this contact gives the two rooms: the side
+    that is the default target room (if either is) is tested against the
+    other, which comes first among the partners. The default partners follow
+    when the target is the default room. Without a House Structure door, the
+    default target and partners are used.
+    """
+    names = {entity: name for name, entity in ROOMS.items()}
+    found = next((d for d in doors if d["sensor"] == door), None)
+    if found and found["temperature"] and found["other_temperature"]:
+        sides = [
+            (found["area_id"], found["temperature"]),
+            (found["other_area_id"], found["other_temperature"]),
+        ]
+        if sides[1][1] == ROOMS[TARGET]:
+            sides.reverse()
+        (area, target_id), (other_area, other_id) = sides
+        target_name = names.get(target_id, area)
+        partners = {names.get(other_id, other_area): other_id}
+        if target_id == ROOMS[TARGET]:
+            for name in PARTNERS:
+                partners.setdefault(name, ROOMS[name])
+        print(f"Door from House Structure: {found['name']} ({found['wall']})")
+        return target_name, target_id, partners
+    if found:
+        print(f"{found['name']}: House Structure has no temperature for a side.")
+    elif door != DOOR:
+        raise SystemExit(f"{door} is not a door's contact in House Structure.")
+    return TARGET, ROOMS[TARGET], {name: ROOMS[name] for name in PARTNERS}
+
+
 def main() -> None:
     """Print the door classification summary."""
     load_env()
@@ -145,9 +186,25 @@ def main() -> None:
         "--edge", type=int, default=30, help="minutes before and after a door edge"
     )
     p.add_argument("--ha-url", default=os.environ.get("HA_URL"))
+    p.add_argument("--door", default=DOOR, help="the door's contact sensor")
+    p.add_argument(
+        "--list-doors", action="store_true", help="list House Structure's doors"
+    )
     args = p.parse_args()
 
     token = os.environ["HA_TOKEN"]
+    doors = list_doors(args.ha_url, token)
+    if args.list_doors:
+        for d in doors:
+            other = d["other_area_id"] or "outside"
+            print(
+                f"{d['sensor']}: {d['area_id']} to {other} ({d['wall']}); "
+                f"temperatures {d['temperature']} and {d['other_temperature']}"
+            )
+        if not doors:
+            print("House Structure has no doors with a contact sensor.")
+        return
+    target_name, target_id, partners = _rooms_for(args.door, doors)
     lat, lon = fetch_home_position(args.ha_url, token)
     width = timedelta(minutes=args.bin)
     end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
@@ -155,7 +212,7 @@ def main() -> None:
     bins = int((end - start) / width)
     hours = width.total_seconds() / 3600.0
 
-    door_states = fetch_states(args.ha_url, token, DOOR, start, end)
+    door_states = fetch_states(args.ha_url, token, args.door, start, end)
     open_fraction = _overlap_fraction(
         runs_from_states(door_states, end, {"on"}), start, bins, width
     )
@@ -197,23 +254,23 @@ def main() -> None:
         fetch_statistics_from_url(
             args.ha_url,
             token,
-            [ROOMS[TARGET], *(ROOMS[n] for n in PARTNERS)],
+            [target_id, *partners.values()],
             start,
             end,
             period="5minute",
         )
     )
-    target = _bin_means(stats.get(ROOMS[TARGET], []), start, bins, width)
+    target = _bin_means(stats.get(target_id, []), start, bins, width)
     d_target = np.full(bins, np.nan)
     d_target[:-1] = (target[1:] - target[:-1]) / hours
 
-    for name in PARTNERS:
-        partner = _bin_means(stats.get(ROOMS[name], []), start, bins, width)
+    for name, partner_id in partners.items():
+        partner = _bin_means(stats.get(partner_id, []), start, bins, width)
         d_partner = np.full(bins, np.nan)
         d_partner[:-1] = (partner[1:] - partner[:-1]) / hours
         gradient = np.abs(target - partner)
         mismatch = np.abs(d_target - d_partner)
-        print(f"{TARGET} vs {name}")
+        print(f"{target_name} vs {name}")
         print("  all bins")
         _report("gradient", gradient, is_open, is_closed, "C")
         _report("rate mismatch", mismatch, is_open, is_closed, "C/h")

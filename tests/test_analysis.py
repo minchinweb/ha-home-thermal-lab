@@ -285,3 +285,35 @@ def test_runs_from_climate_attribute():
     fan = hvac.runs_from_states(states, until, {"fan"}, "hvac_action")
     assert [r.minutes for r in heating] == [40.0]
     assert [r.minutes for r in fan] == [20.0]
+
+
+def test_list_doors_reads_house_structures_door_sensors():
+    states = [
+        {
+            "entity_id": "binary_sensor.s_basement_door_to_basement_open",
+            "state": "on",
+            "attributes": {
+                "kind": "door",
+                "friendly_name": "Door to Basement Open",
+                "sensor": "binary_sensor.s_basement_bedroom_door",
+                "wall": "Wall to Basement",
+                "area_id": "s_basement",
+                "other_area_id": "basement",
+                "temperature_entity": "sensor.s_basement_t",
+                "other_temperature_entity": "sensor.z2_temperature",
+            },
+        },
+        # a register's sensor, and a contact that is not a House Structure door
+        {
+            "entity_id": "binary_sensor.reg",
+            "state": "on",
+            "attributes": {"kind": "register"},
+        },
+        {"entity_id": "binary_sensor.front", "state": "off", "attributes": {}},
+    ]
+    (door,) = ha_history.list_doors("http://ha", "t", lambda _u, _t: states)
+    assert door["sensor"] == "binary_sensor.s_basement_bedroom_door"
+    assert (door["temperature"], door["other_temperature"]) == (
+        "sensor.s_basement_t",
+        "sensor.z2_temperature",
+    )

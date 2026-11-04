@@ -16,6 +16,7 @@
           "infiltration_ach": "Loads: air leakage (air changes per hour)",
           "wall_r": "Loads: outside wall R-value (imperial)",
           "roof_r": "Loads: roof R-value (imperial)",
+          "door_r": "Loads: outside door R-value (imperial)",
           "basement_floor_r": "Loads: basement floor R-value (imperial)"
         },
         "data_description": {
@@ -30,6 +31,7 @@
           "infiltration_ach": "Natural air changes per hour for the Manual J. Leave empty for 0.35, a fairly tight house; an older house is often 0.5 to 0.7. From a blower-door test, roughly ACH50 divided by 20.",
           "wall_r": "The effective R-value of the outside walls, studs included (R-20 batts in 2x6 framing are about R-15 overall). Leave empty for R-20. A wall part in House Structure with its own R-value keeps it.",
           "roof_r": "The effective R-value of the ceilings under the roof. Leave empty for R-35. A roof part with its own R-value keeps it.",
+          "door_r": "The R-value of the doors to outside, with their frames. Leave empty for R-3, an insulated steel or solid wood door. A glass patio door is better entered as a window in House Structure.",
           "basement_floor_r": "The basement slab and the soil under it, as one effective R-value against the design ground temperature. Leave empty for R-11, an uninsulated slab."
         }
       },
@@ -47,6 +49,7 @@
           "infiltration_ach": "Loads: air leakage (air changes per hour)",
           "wall_r": "Loads: outside wall R-value (imperial)",
           "roof_r": "Loads: roof R-value (imperial)",
+          "door_r": "Loads: outside door R-value (imperial)",
           "basement_floor_r": "Loads: basement floor R-value (imperial)"
         },
         "description": "Change the outdoor sensor, the house rotation or the roofs. Rooms pick up the change.\n\n{map}",
@@ -62,6 +65,7 @@
           "infiltration_ach": "Natural air changes per hour for the Manual J. Leave empty for 0.35, a fairly tight house; an older house is often 0.5 to 0.7. From a blower-door test, roughly ACH50 divided by 20.",
           "wall_r": "The effective R-value of the outside walls, studs included (R-20 batts in 2x6 framing are about R-15 overall). Leave empty for R-20. A wall part in House Structure with its own R-value keeps it.",
           "roof_r": "The effective R-value of the ceilings under the roof. Leave empty for R-35. A roof part with its own R-value keeps it.",
+          "door_r": "The R-value of the doors to outside, with their frames. Leave empty for R-3, an insulated steel or solid wood door. A glass patio door is better entered as a window in House Structure.",
           "basement_floor_r": "The basement slab and the soil under it, as one effective R-value against the design ground temperature. Leave empty for R-11, an uninsulated slab."
         }
       }
@@ -75,6 +79,7 @@
       "invalid_infiltration_ach": "Must be more than 0.",
       "invalid_wall_r": "Must be more than 0.",
       "invalid_roof_r": "Must be more than 0.",
+      "invalid_door_r": "Must be more than 0.",
       "invalid_basement_floor_r": "Must be more than 0."
     }
   },
