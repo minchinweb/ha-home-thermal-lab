@@ -213,11 +213,14 @@ def outlook_points(
     every: int = 2,
     digits: int = 2,
     extra: dict[str, list[float] | None] | None = None,
+    setpoints: list[float] | None = None,
 ) -> list[dict]:
     """Chart points: every ``every``-th step, with the duty averaged over them.
 
     ``extra`` gives further per-step shares (such as the cooling call or the
     fan), averaged over the same spans and keyed as they should appear.
+    ``setpoints`` is the heating setpoint per step (the planned program); each
+    point takes the one in force at its time.
     """
     extra = extra or {}
     out = []
@@ -232,6 +235,8 @@ def outlook_points(
             "lower": round(band.lower, digits),
             "upper": round(band.upper, digits),
         }
+        if setpoints:
+            point["setpoint"] = round(setpoints[min(k, len(setpoints) - 1)], digits)
         for key, series in extra.items():
             if series is None:
                 continue

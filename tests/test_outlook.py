@@ -120,3 +120,16 @@ def test_points_average_extra_shares_over_the_same_spans():
     points = outlook_points(out, every=2, extra={"cool": cool, "fan": None})
     assert points[0]["cool"] == pytest.approx(0.5)
     assert "fan" not in points[0]
+
+
+def test_outlook_points_carry_the_planned_setpoint():
+    out = _outlook(ZoneModel(a=0.02, c=0.0), wave=TargetWave(20.0))
+    plan = [19.0] * 48 + [21.0] * 48
+    points = outlook_points(out, every=2, setpoints=plan)
+    assert points[0]["setpoint"] == pytest.approx(19.0)
+    assert points[-1]["setpoint"] == pytest.approx(21.0)
+
+
+def test_outlook_points_without_a_plan_have_no_setpoint():
+    out = _outlook(ZoneModel(a=0.02, c=0.0), wave=TargetWave(20.0))
+    assert "setpoint" not in outlook_points(out, every=2)[0]

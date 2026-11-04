@@ -408,7 +408,7 @@ function datasets(d) {
     ...others,
     { key: "band", label: "Target band", data: bandPoints(d, "lower"), borderWidth: 0, pointRadius: 0, fill: false, stepped: "after", borderColor: "transparent" },
     { key: "band", label: "Target band (upper)", data: bandPoints(d, "upper"), borderWidth: 1, pointRadius: 0, fill: "-1", stepped: "after", borderColor: css("--band-edge"), backgroundColor: css("--band") },
-    { key: "setpoint", label: "Thermostat setpoint", data: xy(d.history.setpoint), borderWidth: 1.5, pointRadius: 0, stepped: "after", borderColor: css("--setpoint"), borderDash: [2, 3], spanGaps: false },
+    { key: "setpoint", label: "Thermostat setpoint", data: xy(d.history.setpoint).concat(xy(d.future.setpoint)), borderWidth: 1.5, pointRadius: 0, stepped: "after", borderColor: css("--setpoint"), borderDash: [2, 3], spanGaps: false },
     { key: "room", label: "Room", data: xy(d.history.room), borderWidth: 2, pointRadius: 0, borderColor: room, spanGaps: 30 * 60e3, stepped: "after" },
     { key: "issued", label: "Forecast made 3 h before", data: xy(d.history.issued), borderWidth: 1.5, pointRadius: 0, borderColor: room, borderDash: [1, 3], spanGaps: 60 * 60e3 },
     { key: "ahead", label: "Room forecast", data: xy(d.future.temp), borderWidth: 2, pointRadius: 0, borderColor: room, borderDash: [6, 4] },

@@ -1296,11 +1296,14 @@ class ZoneForecastSensor(SensorEntity):
         got = None
         if attrs is not None and room is not None:
             got = await brain.house.ahead(brain.key, now)
-        if got is None or (brain.model is None and got.ahead.method == "held"):
+        if got is None:
             self._attr_native_value = None
             self._attr_extra_state_attributes = {"model": brain.note, **self._scores}
             self.async_write_ha_state()
             return
+        # A zone without a learned model is "held": its headline value stays
+        # hidden, but its outdoor and setpoint forecast still goes to the chart.
+        held = brain.model is None and got.ahead.method == "held"
         ahead: ZoneAhead = got.ahead
         # the house forecast may be a few minutes old: start it from the room now
         temps = [room, *ahead.temps[1:]]
@@ -1318,7 +1321,9 @@ class ZoneForecastSensor(SensorEntity):
             zone["tolerance"],
         )
         leads = {lead: outlook.at(lead) for lead in LEADS}
-        self._attr_native_value = None if leads[3] is None else round(leads[3], 2)
+        self._attr_native_value = (
+            None if held or leads[3] is None else round(leads[3], 2)
+        )
         self._attr_extra_state_attributes = {
             "issued": now.isoformat(),
             "start": round(room, 2),
@@ -1337,6 +1342,9 @@ class ZoneForecastSensor(SensorEntity):
                 outlook,
                 every=2,
                 extra={"cool": ahead.cool, "fan": ahead.fan},
+                # the planned setpoint (the program, when one is recorded); a
+                # thermostat that is off has none to plot
+                setpoints=None if setpoint is None else got.plan,
             ),
         }
         self.async_write_ha_state()

@@ -175,7 +175,17 @@ def same_thermostat(
 def future(points: list[dict]) -> dict[str, list[Point]]:
     """Split a forecast sensor's ``points`` into the panel's future series."""
     out: dict[str, list[Point]] = {
-        k: [] for k in ("temp", "outdoor", "heat", "cool", "fan", "lower", "upper")
+        k: []
+        for k in (
+            "temp",
+            "outdoor",
+            "setpoint",
+            "heat",
+            "cool",
+            "fan",
+            "lower",
+            "upper",
+        )
     }
     for p in points:
         when = ms(datetime.fromisoformat(p["t"]))
