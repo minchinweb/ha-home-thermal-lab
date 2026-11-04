@@ -370,6 +370,20 @@ Each step leaves all three working.
 2. **Manual J**: the new repo with the moved code and tests, its
    settings, and the HVAC design tab. Its fitted columns stay empty until step
    3 publishes the rates. The lab's own Loads view keeps working alongside it.
+   **Done** (`5735ae6` in `ha-manual-j`), with these differences from the plan
+   above:
+   - The air, building and design-temperature tests are in their own
+     `test_building.py`, beside the four test files named above.
+   - A building's setpoints are set on Reconfigure: a menu offers the settings
+     or a building, chosen from House Structure's buildings. Clearing both
+     setpoints puts the building back on the house's.
+   - With more than one furnace or air conditioner, the first is checked and
+     the rest are noted.
+   - The numbers are worked out on each request, so they follow House
+     Structure without listening for `house_structure_updated`; only the
+     outdoor record is kept, until the hour changes.
+   - Checked with a local preview of the tab using sample results, not yet in
+     a real Home Assistant.
 3. **Home Thermal Lab**: register the Zones tab and drop the old panel and its
    Chart.js, publish the fitted rates, add the Heat flow overlay, remove the moved code, settings and tests, and update the
    README, CHANGELOG and hypotheses that point at the Loads tab.
