@@ -23,6 +23,10 @@ where `T_mean` is the mean annual air (surface) temperature, `A` is the annual a
 
 **Feeds:** 04, and the basement parts of 05-08, 10 and 13.
 
+**From the prior-art review (4 November 2026; see `docs/prior-art-review.md`):**
+- Manual J codes use one of two conventions for below-grade surfaces. Eldr uses an *effective* U, with the soil path included, at the full outdoor ΔT, and ignores the ground temperature in heating. `manual.py` uses a ground sink instead (`ground_c`, 5.6 °C, about the soil mean found below). A U-value only makes sense with its own convention, so record which one each surface uses.
+- The design-day sink should come from this hypothesis, not the annual mean. With the fitted wave at 1.78 m (mean about 6 C, amplitude 0.37 × 15.2 ≈ 5.6 C, lag 74 days), the soil is coldest, about 0.4 C, in early April. Shallower wall is colder and earlier. So 5.6 °C understates late-winter loss through the basement walls. Test this when the basement fit in 04 is run.
+
 ## Results
 
 First run (`scripts/ground_temperature.py --years 3`, ERA5-Land soil via Open-Meteo, 2023-10-27 to 2026-10-26, daily means):

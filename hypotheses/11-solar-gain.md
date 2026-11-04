@@ -17,6 +17,11 @@
 - Fit a sun term only after enough sunlit hours (excitation gating, as RoomMind and hypothesis 16 do).
 - ISO 52016-1 also puts transmitted sun straight into the zone air (a `g` value corrected for incidence), as our window model does. RC_BuildingSimulator's solar formulas are a checked reference for the incidence correction.
 
+**From the prior-art review (4 November 2026; see `docs/prior-art-review.md`):**
+- The Manual J codes reviewed use design-day solar tables: Eldr interpolates between four cardinal values with no shading or time of day, and projects.manual-j's ACCA-style table merges NE/NW, E/W and SE/SW. Neither is good enough for a forecast. Keep the fitted per-window apertures and horizons; use tables only as a sanity check on the design load.
+- If we ever transcribe a solar table, check that each row rises with ΔT and that no rows repeat, and record the source edition. projects.manual-j's has nine rows that fall somewhere and four identical rows across different shade coefficients.
+- Sun on the roof, not only the windows, warms the upstairs rooms in summer (Eldr's sol-air attic). The horizon fits already include the roof faces; keep a roof term for the cooling season (07).
+
 ## Results
 
 Regression view (10 days from 23 October 2026): a sun term (sine of sun height, daytime only) was significant only for the master bedroom (+0.62 C/h per unit) and the N bedroom (+0.41), both upstairs bedrooms. It was not significant for the kitchen (+0.25) despite its large south and west windows, perhaps because the kitchen is dominated by furnace bleed (06) and late-October sun is low. A longer, sunnier dataset is needed.

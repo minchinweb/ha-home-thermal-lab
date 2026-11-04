@@ -51,7 +51,9 @@ forecast, and only makes sense once B and C hold up.
 - The "Home Performance" integration publishes its own per-room heating-active flags, window-open sensors and daily estimated energy. Use it as a cross-check on our results for 05, 10 and 13; it is not an input.
 - What other projects and standards suggest for each hypothesis is in the
   Summary of `docs/literature-review.md`. Hypotheses 04, 05, 09, 11, 12, 13,
-  16 and 17 have a note on it. Report temperature errors as RMSE and mean
+  16 and 17 have a note on it. The Manual J prior art (Eldr and
+  projects.manual-j, `docs/prior-art-review.md`) adds notes to 03, 04, 07,
+  11 and 16. Report temperature errors as RMSE and mean
   bias in °C, not as CV(RMSE) or NMBE.
 - AC and oven are not individually metered, so they are unexplained terms
   in the electrical-to-heat balance (#14).

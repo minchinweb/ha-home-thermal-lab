@@ -11,6 +11,11 @@
 - Compare per-room and per-level `UA`, and see whether `UA` for upper rooms shifts with wind while the basement's does not.
 - Split the fitted envelope coefficient into fabric and ventilation, as ISO 13789 does with `H_tr` and `H_ve` (formulas not checked against the standard). The temperatures give only the total. Ventilation should rise with wind (12) and with open windows or doors (09), so those terms separate the two. Without heat flux sensors the split is a model assumption, not a measurement.
 
+**From the prior-art review (4 November 2026; see `docs/prior-art-review.md`):**
+- Compare each fitted `UA` with the House Structure sum, `Σ A/R` over the outside surfaces plus infiltration (projects.manual-j's one-line check). A large gap points at infiltration (`ach`) or ΔT first, then at the nominal R-values.
+- When the House Structure side uses a default (nominal R-20 walls, R-35 roofs, R-3 doors, the default `ach`), say so beside the comparison, as Eldr does for borrowed U-values. Otherwise a mismatch looks like a measurement when it is a guess.
+- Below-grade walls currently use the bare wall's R against the soil temperature. That leaves out the soil's own resistance and uses the annual soil mean as the sink (see 03). Use the basement fit to decide between that and Eldr's effective-U convention.
+
 **Caveats:** Neighbouring rooms exchange heat too (10), and zoning leakage keeps "off" zones from being isolated.
 
 **Data:** Room and outdoor temperatures, ground model from 03, furnace/AC call states, electrical use.
