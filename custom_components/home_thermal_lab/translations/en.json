@@ -132,7 +132,8 @@
             "cool_tons": "Cooling capacity (tons)",
             "afue": "Furnace efficiency, AFUE (%)",
             "blower_curve": "Blower curve (flow = static, from the data sheet)",
-            "ac_sensible_btuh": "Air conditioner sensible capacity (BTU/h)"
+            "ac_sensible_btuh": "Air conditioner sensible capacity (BTU/h)",
+            "area_id": "Room the furnace is in (optional)"
           },
           "data_description": {
             "climate_entities": "Every zone's thermostat; the furnace state is read from all of them.",
@@ -142,7 +143,8 @@
             "cool_tons": "Air conditioner size in tons (12,000 BTU/h each), as 'tonnes' are used in Canada. It sets the cooling power and overrides the box above. A ton is heat moved, not electricity; for the electric meter type the kW drawn instead.",
             "afue": "Gas furnaces: the AFUE from the nameplate, such as 95. Leave empty for electric.",
             "blower_curve": "Airflow = external static, from the blower's data sheet, such as '400 cfm = 0.30 inWC, 800 = 0.20, 1200 = 0.05'. Units go on the first point and carry to the rest (CFM and inches of water column unless you say otherwise: l/s, m3/s, Pa).",
-            "ac_sensible_btuh": "The sensible (not total) cooling capacity at the rating point, from the data sheet, in BTU/h. Leave empty if unknown."
+            "ac_sensible_btuh": "The sensible (not total) cooling capacity at the rating point, from the data sheet, in BTU/h. Leave empty if unknown.",
+            "area_id": "Which room the furnace (its air handler) sits in. The Loads tab shows it beside the equipment."
           }
         },
         "reconfigure": {
@@ -162,7 +164,8 @@
             "cool_tons": "Cooling capacity (tons)",
             "afue": "Furnace efficiency, AFUE (%)",
             "blower_curve": "Blower curve (flow = static, from the data sheet)",
-            "ac_sensible_btuh": "Air conditioner sensible capacity (BTU/h)"
+            "ac_sensible_btuh": "Air conditioner sensible capacity (BTU/h)",
+            "area_id": "Room the furnace is in (optional)"
           },
           "data_description": {
             "climate_entities": "Every zone's thermostat; the furnace state is read from all of them.",
@@ -172,7 +175,8 @@
             "cool_tons": "Air conditioner size in tons (12,000 BTU/h each), as 'tonnes' are used in Canada. It sets the cooling power and overrides the box above. A ton is heat moved, not electricity; for the electric meter type the kW drawn instead.",
             "afue": "Gas furnaces: the AFUE from the nameplate, such as 95. Leave empty for electric.",
             "blower_curve": "Airflow = external static, from the blower's data sheet, such as '400 cfm = 0.30 inWC, 800 = 0.20, 1200 = 0.05'. Units go on the first point and carry to the rest (CFM and inches of water column unless you say otherwise: l/s, m3/s, Pa).",
-            "ac_sensible_btuh": "The sensible (not total) cooling capacity at the rating point, from the data sheet, in BTU/h. Leave empty if unknown."
+            "ac_sensible_btuh": "The sensible (not total) cooling capacity at the rating point, from the data sheet, in BTU/h. Leave empty if unknown.",
+            "area_id": "Which room the furnace (its air handler) sits in. The Loads tab shows it beside the equipment."
           }
         }
       },

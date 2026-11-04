@@ -31,10 +31,13 @@ from homeassistant.core import callback
 from homeassistant.helpers import area_registry as ar
 import voluptuous as vol
 
-from . import DOMAIN
+from . import DOMAIN, ENERGY
 from .calls import temperature_series
 from .ha_rows import numbers, recorded
-from .options import STRUCTURE_DOMAIN, has_walls, structure_rooms
+from .house_model import Nominal
+from .loads import HUMIDITY_NOTE, assemble, design_from_record, equipment_from
+from .manual import HOURS_PER_YEAR, Design
+from .options import STRUCTURE_DOMAIN, has_walls, structure_ducts, structure_rooms
 from .panel_data import (
     archive,
     future,
@@ -55,6 +58,7 @@ FRONTEND = Path(__file__).parent / "frontend"
 MAX_HOURS = 24 * 60  # the recorder keeps 60 days here
 SCALES_EVERY = timedelta(hours=6)  # how often the fixed chart scales are redone
 STATISTICS_SINCE = datetime(2000, 1, 1, tzinfo=UTC)  # long-term statistics: all
+LOADS_HOURS = 2 * HOURS_PER_YEAR  # the record the design temperatures come from
 
 
 def _version() -> str:
@@ -75,6 +79,7 @@ async def async_register_panel(hass) -> None:
         )
         websocket_api.async_register_command(hass, ws_zones)
         websocket_api.async_register_command(hass, ws_zone)
+        websocket_api.async_register_command(hass, ws_loads)
     if data.get("panel"):
         return
     version = await hass.async_add_executor_job(_version)
@@ -320,3 +325,102 @@ async def ws_zone(hass, connection, msg) -> None:
             },
         },
     )
+
+
+def _rates(hass) -> dict[str, float]:
+    """Each zone's fitted cooling rate ``a`` (per hour), by its House Structure area."""
+    out: dict[str, float] = {}
+    for brain in _zones(hass).values():
+        area = brain.zone.get("area_id")
+        if area and brain.model is not None and area not in out:
+            out[area] = brain.model.a
+    return out
+
+
+def _energy_settings(hass) -> dict | None:
+    """The first energy sub-entry's settings (the furnace and AC nameplates)."""
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        for sub in entry.subentries.values():
+            if sub.subentry_type == ENERGY:
+                return dict(sub.data)
+    return None
+
+
+def _stamp(value) -> datetime:
+    """A statistics row's start, as an aware time (epoch seconds or a datetime)."""
+    if isinstance(value, datetime):
+        return value if value.tzinfo else value.replace(tzinfo=UTC)
+    return datetime.fromtimestamp(float(value), UTC)
+
+
+async def _hourly_outdoor(hass, entity_id: str, end: datetime) -> list[float | None]:
+    """The outdoor temperature's hourly means over ``LOADS_HOURS`` (None if missing)."""
+    start = end - timedelta(hours=LOADS_HOURS)
+    found = await get_instance(hass).async_add_executor_job(
+        statistics_during_period,
+        hass,
+        start,
+        end,
+        {entity_id},
+        "hour",
+        None,
+        {"mean"},
+    )
+    values: list[float | None] = [None] * LOADS_HOURS
+    for row in found.get(entity_id, []):
+        index = int((_stamp(row["start"]) - start).total_seconds() // 3600)
+        if 0 <= index < LOADS_HOURS and row.get("mean") is not None:
+            values[index] = float(row["mean"])
+    return values
+
+
+@websocket_api.websocket_command({vol.Required("type"): "home_thermal_lab/loads"})
+@websocket_api.async_response
+async def ws_loads(hass, connection, msg) -> None:
+    """The Manual J, S and D results, set against the recorded and fitted values."""
+    rooms = structure_rooms(hass.data.get(STRUCTURE_DOMAIN))
+    if not rooms:
+        connection.send_result(
+            msg["id"],
+            {"available": False, "reason": "House Structure has no rooms yet."},
+        )
+        return
+    end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
+    brains = list(_zones(hass).values())
+    hourly: list[float | None] = [None] * LOADS_HOURS
+    if brains:
+        try:
+            hourly = await _hourly_outdoor(hass, brains[0].outdoor_entity, end)
+        except Exception:  # the design then stays the assumed one
+            _LOGGER.debug("No hourly outdoor record", exc_info=True)
+    design, info = design_from_record(hourly, Design())
+    areas = ar.async_get(hass)
+    names = {}
+    for area_id in rooms:
+        area = areas.async_get_area(area_id)
+        if area is not None:
+            names[area_id] = area.name
+    energy = _energy_settings(hass) or {}
+    furnace, ac, equipment_warnings = equipment_from(energy)
+    furnace_area = (
+        areas.async_get_area(energy["area_id"]) if energy.get("area_id") else None
+    )
+    try:
+        result = assemble(
+            rooms,
+            names,
+            _rates(hass),
+            Nominal(),
+            design,
+            furnace=furnace,
+            ac=ac,
+            design_info=info,
+            extra_warnings=[HUMIDITY_NOTE, *equipment_warnings],
+            ducts=structure_ducts(hass.data.get(STRUCTURE_DOMAIN)),
+            furnace_room=furnace_area.name if furnace_area else None,
+        )
+    except ValueError as err:
+        connection.send_error(msg["id"], "no_rooms", str(err))
+        return
+    result["available"] = True
+    connection.send_result(msg["id"], result)

@@ -23,6 +23,7 @@ from .manual import (
     Segment,
     Surface,
     envelope_scale,
+    rho_cp,
     room_capacity,
     ua_from_rate,
     window_u,
@@ -72,11 +73,38 @@ def _volume(summary: dict) -> float | None:
     return None
 
 
+def _height(summary: dict) -> float | None:
+    """The room's height: given, or volume over floor area."""
+    if summary.get("height_m"):
+        return summary["height_m"]
+    volume = _volume(summary)
+    if volume and summary.get("floor_m2"):
+        return volume / summary["floor_m2"]
+    return None
+
+
+def ground_fraction(summary: dict) -> float:
+    """The share (0 to 1) of a room's walls that are below grade.
+
+    A basement with a below-grade depth has its walls below the grade line for
+    that depth, so the share is the depth over the room's height. Without a
+    depth, a below-ground room's walls are all taken as below grade.
+    """
+    if not summary.get("below_ground"):
+        return 0.0
+    depth = summary.get("below_grade_m")
+    height = _height(summary)
+    if depth is None or not height:
+        return 1.0
+    return min(max(depth / height, 0.0), 1.0)
+
+
 def build_project(
     rooms: dict[str, dict],
     nominal: Nominal,
     design: Design,
     names: dict[str, str] | None = None,
+    ducts: dict[str, dict] | None = None,
 ) -> tuple[Project, list[str]]:
     """A Manual J project from the rooms House Structure publishes.
 
@@ -85,6 +113,8 @@ def build_project(
         nominal: House-level defaults for R-values, glazing and infiltration.
         design: Design conditions.
         names: Optional display names by area id (defaults to the room title).
+        ducts: House Structure's shared duct sections by name (``ducts`` in its
+            summary); registers name the section they hang off.
 
     Returns:
         The project and a list of warnings (rooms skipped, and what was assumed).
@@ -92,7 +122,7 @@ def build_project(
     names = names or {}
     warnings: list[str] = []
     built: list[Room] = []
-    runs: list[Run] = []
+    pending: list[tuple[dict, str, int]] = []
     for area_id, summary in rooms.items():
         name = names.get(area_id) or summary.get("title") or area_id
         volume = _volume(summary)
@@ -101,13 +131,31 @@ def build_project(
                 f"{name}: no volume, so the room is not in the calculation."
             )
             continue
-        below = bool(summary.get("below_ground"))
+        below = ground_fraction(summary)
+        if summary.get("below_ground") and summary.get("below_grade_m") is None:
+            warnings.append(
+                f"{name}: no below-grade depth, so all its walls are taken as below "
+                "grade."
+            )
         surfaces: list[Surface] = []
         for i, wall in enumerate(summary.get("walls", []), start=1):
             net = (wall.get("area_m2") or 0.0) - (wall.get("glass_m2") or 0.0)
             if net > 0:
                 r = wall.get("r_value_si") or nominal.wall_r
-                surfaces.append(Surface(f"wall {i}", "wall", net, r=r, ground=below))
+                if below > 0:
+                    surfaces.append(
+                        Surface(
+                            f"wall {i} below grade",
+                            "wall",
+                            net * below,
+                            r=r,
+                            ground=True,
+                        )
+                    )
+                if below < 1:
+                    surfaces.append(
+                        Surface(f"wall {i}", "wall", net * (1 - below), r=r)
+                    )
         for i, roof in enumerate(summary.get("roofs", []), start=1):
             net = (roof.get("area_m2") or 0.0) - (roof.get("glass_m2") or 0.0)
             if net > 0:
@@ -141,49 +189,94 @@ def build_project(
         )
         built.append(room)
         for j, reg in enumerate(summary.get("registers", []), start=1):
-            if reg.get("duct") and reg.get("free_area_in2"):
-                runs.append(_run(reg, name, j))
+            if (reg.get("duct") or reg.get("upstream")) and reg.get("free_area_in2"):
+                pending.append((reg, name, j))
     if not built:
         raise ValueError("no room has enough data for a Manual J")
     warnings.append(
         "Wall and roof R-values and window glazing and frame are the house defaults, "
         "not measured."
     )
+    runs = _runs(pending, ducts or {}, warnings)
     return Project(rooms=tuple(built), design=design, runs=tuple(runs)), warnings
 
 
-def _run(reg: dict, room: str, index: int) -> Run:
-    """A register's duct as a Manual D run (its segments from the plenum)."""
-    segments = []
-    for seg in reg["duct"]:
-        length = seg["length_ft"] * FT_TO_M
-        flow = seg["flow_cfm"] * CFM_TO_M3S if seg.get("flow_cfm") else None
-        k = seg.get("fittings_k") or 0.0
-        if seg["shape"] == "round":
-            segments.append(
-                Segment.round_in(
-                    seg["diameter_in"], length, k, flow, bool(seg.get("trunk"))
-                )
-            )
-        else:
-            segments.append(
-                Segment.rect_in(
-                    seg["width_in"],
-                    seg["height_in"],
-                    length,
-                    k,
-                    flow,
-                    bool(seg.get("trunk")),
-                )
-            )
-    flow = reg["flow_cfm"] * CFM_TO_M3S if reg.get("flow_cfm") else None
-    return Run(
-        name=reg.get("title") or f"{room} register {index}",
-        room=room,
-        register_area_m2=reg["free_area_in2"] * IN2_TO_M2,
-        segments=tuple(segments),
-        flow_m3s=flow,
+def _segment(seg: dict, flow_m3s: float | None, trunk: bool) -> Segment:
+    """A duct segment as House Structure stores it (feet and inches)."""
+    length = seg["length_ft"] * FT_TO_M
+    k = seg.get("fittings_k") or 0.0
+    if seg["shape"] == "round":
+        return Segment.round_in(seg["diameter_in"], length, k, flow_m3s, trunk)
+    return Segment.rect_in(
+        seg["width_in"], seg["height_in"], length, k, flow_m3s, trunk
     )
+
+
+def _chain(upstream: str | None, sections: dict[str, dict]) -> list[str]:
+    """The shared sections from the plenum down to ``upstream`` (none if None)."""
+    chain: list[str] = []
+    name = upstream
+    while name is not None:
+        if name not in sections:
+            raise ValueError(f"no duct section called {name!r}")
+        if name in chain:
+            raise ValueError("the duct sections loop back on themselves")
+        chain.append(name)
+        name = sections[name].get("upstream")
+    return list(reversed(chain))
+
+
+def _runs(
+    pending: list[tuple[dict, str, int]],
+    sections: dict[str, dict],
+    warnings: list[str],
+) -> list[Run]:
+    """Each register's run: its shared sections from the plenum, then its branch.
+
+    A shared section carries the airflow of every register behind it, so its
+    loss and velocity are checked at that total. A register with no airflow
+    adds nothing to its sections, which is said in the warnings.
+    """
+    paths = []
+    for reg, room, index in pending:
+        label = reg.get("title") or f"{room} register {index}"
+        try:
+            chain = _chain(reg.get("upstream"), sections)
+        except ValueError as err:
+            warnings.append(f"{label}: {err}. The register is not in the calculation.")
+            continue
+        if chain and not reg.get("flow_cfm"):
+            warnings.append(
+                f"{label}: no design airflow, so the shared ducts it runs through "
+                "carry less than they will."
+            )
+        paths.append((reg, room, index, label, chain))
+    carried: dict[str, float] = {}
+    for reg, _, _, _, chain in paths:
+        flow = reg["flow_cfm"] * CFM_TO_M3S if reg.get("flow_cfm") else 0.0
+        for name in chain:
+            carried[name] = carried.get(name, 0.0) + flow
+    runs = []
+    for reg, room, _, label, chain in paths:
+        segments = [
+            _segment(seg, carried[name] or None, trunk=True)
+            for name in chain
+            for seg in sections[name]["segments"]
+        ]
+        for seg in reg.get("duct") or ():
+            flow = seg["flow_cfm"] * CFM_TO_M3S if seg.get("flow_cfm") else None
+            segments.append(_segment(seg, flow, bool(seg.get("trunk"))))
+        flow = reg["flow_cfm"] * CFM_TO_M3S if reg.get("flow_cfm") else None
+        runs.append(
+            Run(
+                name=label,
+                room=room,
+                register_area_m2=reg["free_area_in2"] * IN2_TO_M2,
+                segments=tuple(segments),
+                flow_m3s=flow,
+            )
+        )
+    return runs
 
 
 def envelope_from_fit(
@@ -217,6 +310,9 @@ def envelope_from_fit(
     for area_id, summary in rooms.items():
         if area_id not in rates or area_id not in capacities:
             continue
+        # The fit's rate covers the above-grade envelope (the ground has its own
+        # term), so a basement's walls count only above the grade line.
+        above = 1.0 - ground_fraction(summary)
         elements = []
         for kind, items in (
             ("wall", summary.get("walls", [])),
@@ -224,6 +320,8 @@ def envelope_from_fit(
         ):
             for i, item in enumerate(items, start=1):
                 net = (item.get("area_m2") or 0.0) - (item.get("glass_m2") or 0.0)
+                if kind == "wall":
+                    net *= above
                 if net <= 0:
                     continue
                 r = item.get("r_value_si") or (
@@ -236,6 +334,18 @@ def envelope_from_fit(
         target_fixed = fixed_ua.get(area_id, 0.0) + infiltration.get(area_id, 0.0)
         out[area_id] = envelope_scale(elements, target_fixed, measured)
     return out
+
+
+def fixed_conductances(room: Room, design: Design) -> tuple[float, float]:
+    """A room's window conductance and its infiltration conductance, W/K."""
+    windows = sum(s.conductance for s in room.surfaces if s.kind == "window")
+    infiltration = (
+        room.ach
+        * room.volume
+        / 3600.0
+        * rho_cp(design.heat_indoor_c, design.altitude_m)
+    )
+    return windows, infiltration
 
 
 def room_capacities(rooms: dict[str, dict]) -> dict[str, float]:

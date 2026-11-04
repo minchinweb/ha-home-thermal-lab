@@ -1,117 +1,100 @@
-# Spec: register and duct geometry for House Structure
+# Duct and envelope data in House Structure
 
-For an agent working in `minchinweb/ha-house-structure`. The consumer is
-`ha-home-thermal-lab`, whose `custom_components/home_thermal_lab/manual.py`
-runs the Manual J/S/D calculations.
+House Structure (`ha-house-structure`, a local checkout at
+`D:\Code\ha-house-structure`) publishes the house to `ha-home-thermal-lab`
+through `hass.data["house_structure"]`. The consumer is
+`custom_components/home_thermal_lab/house_model.py`, which builds the Manual
+J/S/D project from it. This document is what is implemented, in both repos.
 
 ## Why
 
-Manual D needs, for each supply register, the duct from the plenum to it: its
-shape, size and length, and the fittings on it. The register itself needs its
-free area and, optionally, its design airflow. Today House Structure records
-rooms, windows, roofs, walls and heating registers, but not the duct behind
-each register.
+Manual D needs, for each supply register, the duct from the plenum to it, and
+the duct it shares with other registers. Manual J needs wall and roof R-values,
+window glazing and frame, and the depth of a basement's walls below grade.
 
 ## Units
 
-Store and display what the installer measures, with the unit in the field name:
+Enter what the installer measures, with the unit in the field name. The
+consumer converts to SI; nothing is stored converted except the R-values, which
+are stored in SI as the form converts them.
 
-- Duct sizes in inches (`diameter_in`, `width_in`, `height_in`).
-- Lengths in feet (`length_ft`).
-- Airflow in CFM (`flow_cfm`).
-- Static pressure in inches of water column (`inwc`).
-- Register free area in square inches (`free_area_in2`).
+- Duct sizes in inches: round is the diameter, rectangular is `WxH`.
+- Lengths in feet (or metres with `m`).
+- Airflow in CFM. Free area in square inches.
+- R-values in ft²·°F·h/BTU in the form; stored as m²·K/W.
 
-The consumer converts to SI. Do not store converted values.
+## Duct sections (the plenum and trunks)
 
-## Data
+A house-level text field, `duct_sections`, one shared section per line:
 
-Add to each register in a room (the `registers` list):
-
-```yaml
-registers:
-  - climate: climate.z4
-    name: Office supply            # optional, defaults to the entity
-    free_area_in2: 60              # register free area
-    flow_cfm: 90                   # optional: design airflow to this register
-    duct:
-      trunk: Main                  # name of a trunk in the plenum list
-      segments:                    # from the plenum to the register, in order
-        - shape: round             # round | rect
-          diameter_in: 4           # round only
-          # width_in: 10           # rect only
-          # height_in: 6           # rect only
-          length_ft: 14
-          fittings_k: 0.9          # optional: sum of loss coefficients on this piece
-          trunk: false             # true for trunk pieces
-          flow_cfm: null           # optional: airflow carried, null = the register's own
+```
+Plenum: 10 round 6 ft k=0.5
+Trunk B from Plenum: 8 round 12 ft
 ```
 
-Add a house-level list of plenum trunks, so that trunk segments are entered
-once and shared by the runs that use them:
+- `Name: segments` hangs the section off the plenum.
+- `Name from Upstream: segments` hangs it off another section.
+- Segments use the register duct grammar (see below). A section's airflow is
+  not typed: it is the sum of the registers behind it.
 
-```yaml
-plenum:
-  - name: Main
-    segments:
-      - shape: round
-        diameter_in: 8
-        length_ft: 12
-        fittings_k: 0.5
-        trunk: true
-        flow_cfm: 400
+## Registers
+
+Each register (a subentry of its room) has:
+
+- `free_area_in2`, `flow_cfm`, the thermostat and fan, as before.
+- `upstream`, optional: the name of the duct section its branch hangs off.
+- `duct`, the duct text. With an `upstream`, this is only the branch from that
+  section to the register. Without one, it is the whole duct from the plenum
+  (the form before sections existed, still accepted).
+
+Duct text is segments separated by `;` (or new lines):
+
+```
+4 round 14 ft k=0.9
+10x6 rect 3 ft trunk
 ```
 
-A run's `segments` list is the trunk's segments followed by its own branch
-segments. If `duct.trunk` names a trunk, the consumer prepends that trunk's
-segments; the branch pieces stay on the register.
+A round size is one number (the diameter in inches); a rectangle is `WxH`.
+`k=` is the sum of the fitting loss coefficients on the piece. `trunk` marks a
+trunk piece (a higher velocity limit). `cfm=` sets the airflow a piece carries,
+when it is not the register's own.
 
-The blower curve is not part of this spec: it belongs to the furnace entity in
-`ha-home-thermal-lab`.
+## What the consumer computes
 
-## Validation
+For each register with a duct (or an upstream) and a free area, the run is:
 
-- Round pieces need `diameter_in`; rectangular ones need both `width_in` and `height_in`.
-- Lengths and sizes must be positive. `free_area_in2` must be positive.
-- A register with no `duct` is allowed (the consumer skips its duct check and says so).
-- A `duct.trunk` must name a trunk that exists in `plenum`.
+1. Each shared section from the plenum down to the register's section. Each
+   carries the summed design airflow of the registers behind it, and counts as
+   trunk.
+2. The register's own branch segments, at the register's airflow.
 
-## Compatibility
+A register whose section does not exist, or whose sections loop, is left out
+with a warning. A register with a shared section and no airflow is noted, since
+its share of the trunk airflow is missing.
 
-- Bump the structure data version only if the existing version-1 readers
-  would break. New optional keys do not need a bump.
-- Existing registers without `duct` or `free_area_in2` must keep working.
+## Envelope fields
 
-## Exposed data
+- Walls and roofs: `r_value_si` (optional; the house's nominal R is used if
+  blank).
+- Windows: `glazing` (`double` or `triple`) and `frame` (`vinyl`, `wood` or
+  `aluminium`), chosen from lists. Their U-values come from the consumer's table
+  (`manual.window_u`).
+- Rooms: `below_grade_m`, the depth of the walls below grade. The share of each
+  wall below grade is that depth over the room's height; the rest of the wall is
+  outdoors. Without a depth, a below-ground room's walls are all taken as below
+  grade (and the consumer says so).
 
-Publish the same data through `hass.data[house_structure]` (the existing
-mechanism that `ha-home-thermal-lab` reads), so the consumer needs no new
-connection. Include `duct` and `free_area_in2` on each register, and the
-`plenum` list at the top level.
+## Published data
+
+`hass.data["house_structure"]` is `{"version": 1, "rooms": {...}, "ducts":
+{name: {"upstream": name or None, "segments": [...]}}}`. Each register carries
+`upstream`, `duct` (its branch) and `free_area_in2`, `flow_cfm`. The version is
+unchanged: the new keys are optional for readers.
 
 ## Tests
 
-- Round trip: YAML in, stored, published, read back unchanged.
-- A register with no duct; a register with a missing trunk (error); a rectangular
-  segment with a missing height (error).
-
-## Also needed: envelope fields (for the R and U derivation)
-
-Already published per room (`hass.data["house_structure"]`): `volume_m3`,
-`floor_m2`, `height_m`, `below_ground`, walls and roofs (`area_m2`, `glass_m2`,
-azimuth, tilt), windows (`glass_m2`, `transmittance`, the wall or roof they are
-in), and `neighbours`. Nothing further is needed for those.
-
-Not yet recorded, and needed for measured R and U values:
-
-- **Wall and roof construction.** An optional `r_value_si` (m² K/W) on each
-  wall and roof, or `construction` text (for example "2x6 framed, batt,
-  stucco"). Until the element's value is set, the consumer uses the house
-  default.
-- **Window glazing and frame.** On each window: `glazing` (`double` or
-  `triple`) and `frame` (`vinyl`, `wood` or `aluminium`). The consumer maps
-  these to a nominal U-value.
-- **Below-grade depth** for walls of below-ground rooms, if known (metres).
-
-Compatibility: optional keys, so no version bump is needed. The consumer
-treats a missing value as "use the house default".
+- House Structure: `tests/test_ducts.py` (duct text, sections, loops, missing
+  names, round trip); `tests/test_parts.py` (the summary carries the new fields).
+- Thermal lab: `tests/test_house_model.py` (sections are shared by their
+  registers, the shared sections carry the summed airflow, unknown and looping
+  sections leave the register out, a register with no airflow is noted).

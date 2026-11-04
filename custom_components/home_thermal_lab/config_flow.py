@@ -34,6 +34,7 @@ from .options import (
     GROUND_KEYS,
     KW_MODES,
     POWER_UNITS,
+    TON_TO_KW,
     FieldError,
     format_lights,
     format_roofs,
@@ -186,6 +187,7 @@ def _energy_schema(_roof_labels: list[dict]) -> vol.Schema:
             vol.Optional("afue"): _NUMBER,
             vol.Optional("blower_curve"): _TEXT,
             vol.Optional("ac_sensible_btuh"): _NUMBER,
+            vol.Optional("area_id"): _AREA,
         }
     )
 
@@ -299,6 +301,8 @@ def _energy_from_form(form: dict) -> dict:
         data["power_entity"] = form["power_entity"]
     if form.get("learn_days") is not None:
         data["learn_days"] = int(form["learn_days"])
+    if form.get("area_id"):
+        data["area_id"] = form["area_id"]  # the room the furnace sits in
     # Furnace and air conditioner nameplate data (optional).
     if form.get("afue") not in (None, ""):
         afue = float(form["afue"]) / 100.0
@@ -310,6 +314,10 @@ def _energy_from_form(form: dict) -> dict:
         data["blower"] = [list(point) for point in parse_blower(form["blower_curve"])]
     if form.get("ac_sensible_btuh") not in (None, ""):
         data["ac_sensible_w"] = float(form["ac_sensible_btuh"]) * BTU_H_TO_KW * 1000.0
+    # The cooling capacity in tons, kept apart from kw["cool"], which is the
+    # compressor's power draw when that is what was typed in.
+    if form.get("cool_tons") not in (None, ""):
+        data["ac_total_w"] = float(form["cool_tons"]) * TON_TO_KW * 1000.0
     return data
 
 
@@ -317,7 +325,7 @@ def _energy_to_form(data: dict) -> dict:
     flat = {
         k: v
         for k, v in data.items()
-        if k not in ("kw", "afue", "blower", "ac_sensible_w")
+        if k not in ("kw", "afue", "blower", "ac_sensible_w", "ac_total_w")
     }
     extra = {}
     if "afue" in data:

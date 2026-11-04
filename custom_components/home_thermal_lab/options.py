@@ -304,6 +304,13 @@ STRUCTURE_EVENT = "house_structure_updated"
 STRUCTURE_VERSION = 1
 
 
+def structure_ducts(data: dict | None) -> dict[str, dict]:
+    """House Structure's shared duct sections by name (none if it has none)."""
+    if not data or data.get("version") != STRUCTURE_VERSION:
+        return {}
+    return data.get("ducts") or {}
+
+
 def structure_rooms(data: dict | None) -> dict[str, dict]:
     """House Structure's rooms by area id, or nothing if it is not set up."""
     if not data or data.get("version") != STRUCTURE_VERSION:

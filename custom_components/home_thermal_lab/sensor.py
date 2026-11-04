@@ -242,6 +242,8 @@ ENERGY_SCHEMA = vol.Schema(
         vol.Optional("learn_days", default=14): vol.All(
             vol.Coerce(int), vol.Range(2, 60)
         ),
+        # the room the furnace sits in (shown on the Loads tab)
+        vol.Optional("area_id"): cv.string,
     }
 )
 

@@ -1,5 +1,7 @@
 """Tests for building the Manual J project from House Structure's rooms."""
 
+from dataclasses import replace
+
 import pytest
 
 from custom_components.home_thermal_lab.house_model import (
@@ -8,7 +10,7 @@ from custom_components.home_thermal_lab.house_model import (
     envelope_from_fit,
     room_capacities,
 )
-from custom_components.home_thermal_lab.manual import Design, calculate
+from custom_components.home_thermal_lab.manual import Design, Furnace, calculate
 
 ROOMS = {
     "office": {
@@ -193,3 +195,112 @@ def test_envelope_from_fit_recovers_the_scale():
 def test_rooms_without_a_fit_are_left_out():
     rooms = {"office": {"volume_m3": 50.0, "walls": [{"area_m2": 9.0}]}}
     assert envelope_from_fit(rooms, {}, {}, {}, {}, Nominal()) == {}
+
+
+CFM = 0.000471947
+
+
+def _tree_rooms(**overrides):
+    """Two rooms whose registers hang off one shared trunk."""
+
+    def room(title, reg_title, flow, duct):
+        return {
+            "title": title,
+            "volume_m3": 50.0,
+            "walls": [{"area_m2": 10.0, "glass_m2": 0.0}],
+            "roofs": [],
+            "windows": [],
+            "registers": [
+                {
+                    "title": reg_title,
+                    "free_area_in2": 60.0,
+                    "flow_cfm": flow,
+                    "upstream": overrides.get("upstream", "Trunk"),
+                    "duct": duct,
+                }
+            ],
+        }
+
+    branch_a = [{"shape": "round", "diameter_in": 4.0, "length_ft": 10.0}]
+    branch_b = [{"shape": "rect", "width_in": 10.0, "height_in": 6.0, "length_ft": 4.0}]
+    return {
+        "a": room("A", "A reg", 300.0, branch_a),
+        "b": room("B", "B reg", 200.0, branch_b),
+    }
+
+
+TREE = {
+    "Plenum": {
+        "upstream": None,
+        "segments": [
+            {"shape": "round", "diameter_in": 10.0, "length_ft": 6.0, "fittings_k": 0.5}
+        ],
+    },
+    "Trunk": {
+        "upstream": "Plenum",
+        "segments": [{"shape": "round", "diameter_in": 8.0, "length_ft": 12.0}],
+    },
+}
+
+
+def test_registers_share_their_upstream_sections():
+    project, warnings = build_project(_tree_rooms(), Nominal(), Design(), ducts=TREE)
+    runs = {r.name: r for r in project.runs}
+    a = runs["A reg"]
+    # the plenum, the trunk, then the register's own branch
+    assert [s.trunk for s in a.segments] == [True, True, False]
+    assert a.segments[0].length_m == pytest.approx(6 * 0.3048)
+    assert a.segments[1].length_m == pytest.approx(12 * 0.3048)
+    assert a.segments[2].length_m == pytest.approx(10 * 0.3048)
+    # the shared sections carry both registers' airflow
+    assert a.segments[0].flow_m3s == pytest.approx(500 * CFM)
+    assert a.segments[1].flow_m3s == pytest.approx(500 * CFM)
+    assert a.segments[2].flow_m3s is None
+    assert runs["B reg"].segments[0].flow_m3s == pytest.approx(500 * CFM)
+    assert not any("airflow" in w for w in warnings)
+
+
+def test_shared_sections_are_checked_at_their_total_airflow():
+    project, _ = build_project(_tree_rooms(), Nominal(), Design(), ducts=TREE)
+    project = replace(
+        project,
+        furnace=Furnace({"high": 30000.0}, blower=((0.1, 50.0), (0.8, 400.0))),
+    )
+    result = calculate(project)
+    runs = {r["name"]: r for r in result["ducts"]["runs"]}
+    flows = [s["flow_m3s"] for s in runs["A reg"]["segments"]]
+    assert flows[0] == pytest.approx(500 * CFM)
+    assert flows[2] == pytest.approx(300 * CFM)
+
+
+def test_an_unknown_upstream_section_leaves_the_register_out():
+    project, warnings = build_project(
+        _tree_rooms(upstream="Nowhere"), Nominal(), Design(), ducts=TREE
+    )
+    assert project.runs == ()
+    assert any("no duct section called 'Nowhere'" in w for w in warnings)
+
+
+def test_looping_sections_are_reported():
+    loop = {
+        "X": {"upstream": "Y", "segments": TREE["Trunk"]["segments"]},
+        "Y": {"upstream": "X", "segments": TREE["Trunk"]["segments"]},
+    }
+    project, warnings = build_project(
+        _tree_rooms(upstream="X"), Nominal(), Design(), ducts=loop
+    )
+    assert project.runs == ()
+    assert any("loop" in w for w in warnings)
+
+
+def test_a_register_without_airflow_is_said_to_understate_its_trunk():
+    rooms = _tree_rooms()
+    del rooms["a"]["registers"][0]["flow_cfm"]
+    _, warnings = build_project(rooms, Nominal(), Design(), ducts=TREE)
+    assert any("no design airflow" in w for w in warnings)
+
+
+def test_registers_with_no_sections_keep_their_full_duct():
+    project, _ = build_project(_tree_rooms(upstream=None), Nominal(), Design())
+    (run,) = project.runs[:1]
+    assert len(run.segments) == 1  # only its own branch, as before
