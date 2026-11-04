@@ -18,6 +18,7 @@ Sources were read in a short session; figures and equations quoted from fetch-to
 | **EMHASS** | [davidusb-geek/emhass](https://github.com/davidusb-geek/emhass) | Energy management optimisation, MILP via CVXPY/HiGHS; includes a thermal battery model | Linear discrete recursion T[k+1] = T[k] + heating − γ_c·dt·(T − T_out); physics utilities for transmission, ventilation, solar, internal gains; degree-day demand; Carnot COP | **Partly**: docs plus about 3/5 of `optimization.py` and first 100 kB of `utils.py` (fetch summaries). |
 | **Home Performance** | [Hugofromfrance/home_performance](https://github.com/Hugofromfrance/home_performance) (HACS, MIT, v1.4.2) | Estimates whole-house heat-loss coefficient K (W/°C) and rates insulation A+ to D | Steady-state K = E_thermal / (ΔT × duration), 7-day rolling window, fixed thresholds, no calibration | **Partly**: `models.py` and `const.py` read. **Confirmed as the installed version** (v1.4.2): Home Assistant entity names ("Home Performance - <room> Avg delta T 24h", "Window open") match this repo's source. |
 | **Versatile Thermostat** | [jmcollin78/versatile_thermostat](https://github.com/jmcollin78/versatile_thermostat) (HACS, v10.6.3) | Feedback thermostat for switch, valve or climate heaters: presets, window, presence, power management, Auto-TPI learning | None for temperature. TPI law Kint·(T_set−T_in)+Kext·(T_set−T_out); EMA and one-step slope; no forecast | **Yes**: `prop_algo_tpi.py`, `ema.py`, `open_window_algorithm.py`, `auto_start_stop_algorithm.py`, and parts of `auto_tpi_manager.py` at commit `0860f19`. See the Versatile Thermostat code review. |
+| **Climate Advisor** | [gunkl/ClimateAdvisor](https://github.com/gunkl/ClimateAdvisor) (HACS default store, MIT, v0.8.60). Searched as [gunkl/SmartHVAC](https://github.com/gunkl/SmartHVAC); the clone was the same integration. | Runs a thermostat from the weather forecast: classifies each day, holds one comfort-edge setpoint, pauses HVAC on open doors and windows, runs natural ventilation, and learns a one-node thermal model | One-node ODE: dT/dt = k_passive·(T − T_out) + Q + k_solar·solar_factor, with Q = ±k_active while the HVAC is driving. Coefficients from OLS and EWMA by confidence grade. | **Partly**: `learning.py` (the k estimators and EWMA cache), the physics simulators in `coordinator.py`, and `docs/08`, `thermal-model-v3-spec.md`. The 16k-line coordinator and 20k-line automation were not read in full. See the Climate Advisor code review. |
 | **GivTCP** | [britkat1980/giv_tcp](https://github.com/britkat1980/giv_tcp) | GivEnergy inverter/battery bridge (Modbus to MQTT/HA) | None for buildings. PALM sets overnight SoC target from load history and Solcast P10/P50/P90 PV forecast | **Partly**: README, CHANGELOG, `palm_*.py`, `outliers.py` (head). |
 | **Open-Meteo custom component (fork)** | [thuemah/open_meteo](https://github.com/thuemah/open_meteo) | Drop-in replacement for the HA Open-Meteo integration, adding gusts, cloud cover, humidity, pressure, GHI/DNI/DHI | None (data source) | **Yes**, README. |
 | **Plotly Graph Card** | [dbuezas/lovelace-plotly-graph-card](https://github.com/dbuezas/lovelace-plotly-graph-card) | Interactive Plotly charts on HA dashboards | None (display) | README. |
@@ -37,7 +38,6 @@ Sources were read in a short session; figures and equations quoted from fetch-to
 | Project | Where referenced | Link | Relevance |
 |---|---|---|---|
 | **PowerCalc** | Home Performance README | [bramstroker/homeassistant-powercalc](https://github.com/bramstroker/homeassistant-powercalc) | Power estimation for entities without power sensors |
-| **Climate Advisor** | search result | [gunkl/SmartHVAC](https://github.com/gunkl/SmartHVAC) | Reportedly a two-parameter first-order model (unverified) |
 | **Hitachi Yutaki, ThermIQ, XCC** | Home Performance context | not linked | Heat-pump integrations |
 | **givenergy-modbus** | GivTCP | [dewet22/givenergy-modbus](https://github.com/dewet22/givenergy-modbus) | Modbus protocol library |
 | **Solcast** | GivTCP PALM | [solcast.com.au](https://solcast.com.au), API at [api.solcast.com.au](https://api.solcast.com.au/rooftop_sites/) | PV forecast source |
@@ -59,7 +59,6 @@ Sources were read in a short session; figures and equations quoted from fetch-to
 | **Node-RED, EMHASS (in Heating Analytics)** | Heating Analytics | not linked | Consumers of forecasts |
 | **Mushroom Cards, Plotly Graph Card** | Heating Analytics | [piitaya/lovelace-mushroom](https://github.com/piitaya/lovelace-mushroom) | Dashboard cards |
 | **Heating Analytics dependency: HACS** | all | [custom-components/hacs](https://github.com/custom-components/hacs) | Install framework |
-| **Versatile Thermostat** | user request | not linked | Home Assistant thermostat integration; to review later |
 | **Google Drive backup add-on, auto-entities, collapsible cards** | Predbat | various | Peripheral |
 
 ---
@@ -2617,6 +2616,39 @@ Read from a shallow clone of `jmcollin78/versatile_thermostat` at commit `0860f1
 **Relevance to our forecasting.** Versatile Thermostat solves a different problem (feedback control of one room) and does not forecast. Its reusable value for us is the estimation plumbing: the time-aware EMA, slope guards, learning gates, and capacity correction. Its failure modes (lagged slopes, saturation blindness, sensor contamination) are the ones our hypotheses already flag.
 
 *Verification status: code claims come from the files listed above at commit `0860f19`, and formulas are quoted from code. The heat-balance form is inferred from the learning equations, not stated in the docs. The docs were read through fetch summaries.*
+
+### Climate Advisor code review
+
+Read from a shallow clone of `gunkl/ClimateAdvisor` (v0.8.60, 2026-11-04). Read in full: `docs/forecast-pipeline-spec.md` (headings only), `docs/08-COMPUTATION-REFERENCE.md` §5c, `docs/thermal-model-v3-spec.md` (anchors and headings), and in part `learning.py` (`compute_k_passive`, `compute_k_env_solar`, `compute_k_solar`, the EWMA cache) and `coordinator.py` (`_simulate_indoor_physics`, `_simulate_indoor_physics_v3`). Not read: the 16k-line `coordinator.py` and 20k-line `automation.py` beyond these functions, `briefing.py`, `classifier.py`, the fan, economiser and natural-ventilation state machines, the Claude-based AI investigator, and the 400-odd test files.
+
+**What it does.** A HACS integration that drives a Home Assistant climate entity from the weather forecast. Each morning it classifies the day (hot to cold) and the trend into tomorrow, then sets one heat or cool setpoint at the edge of the comfort band and lets the thermostat hold it. It pauses heating and cooling when a door or window stays open past its delay, runs natural ventilation through a whole-house fan or the blower, and sends a briefing. Its thermal model learns the house's response so the predicted indoor curve can be shown and the day plan adjusted. It is a planner with a learned one-room model, not a feedback controller and not a full building model.
+
+**The thermal model.** The model is one node: indoor air, driven by outdoor air, a solar term and HVAC power.
+
+1. **Equation** (`_simulate_indoor_physics`, `coordinator.py:14152`): `dT/dt = k_passive·(T − T_out) + Q`, with `Q = |k_active|` while heat is driving below the setpoint, `−|k_active|` while cool is driving above it, and 0 otherwise. `k_passive` is negative (decay toward outdoor). The v3 simulator adds `k_solar·solar_factor` (`_simulate_indoor_physics_v3`, line 14401). The docs in `08-COMPUTATION-REFERENCE.md` give the analytic step `T(t+dt) = T_out + (T − T_out)e^{k dt} + (Q/k)(e^{k dt} − 1)`, which is the exact solution of the same equation. The v3 spec (line 363) writes the ODE as `(k_passive + k_vent)(T_out − T_in)`, which has the opposite sign. The code is consistent; the spec is not.
+2. **Solar factor**: a sinusoid from 0 to 1 to 0 over the day (`08`, line 364). It is a shape, not a measured irradiance.
+3. **Learning, passive decay** (`compute_k_passive`): OLS through the origin, `rate_i = k_passive · δ_i`, where `δ` is the midpoint of indoor minus outdoor. Pre- and post-heat windows are fitted separately, so the heating ramp does not create a spurious rate. Samples are smoothed with a 3-point moving average first. Validation rejects wrong sign, too few points, and low R².
+4. **Learning, solar** (`compute_k_env_solar`): two-parameter OLS, `rate = k_env·δ + k_solar·sf`, solved as a 2×2 normal equation. It is rejected when the solar factor range is below 0.30 (`THERMAL_SOLAR_FACTOR_MIN_RANGE`), because the two terms are then collinear. A one-parameter fallback, `compute_k_solar`, subtracts the passive term and clamps the result to [0, max].
+5. **Averaging**: each accepted observation is blended into the cache by EWMA, with α set by its confidence grade: 0.30 (high), 0.15 (medium), 0.05 (low) (`learning.py:1167`). Confidence gates which values the predictor may use (`_physics_eligible`).
+6. **Fallback**: with no usable model, the predictor uses a ramp over a fixed or rate-based duration. A "gate bridge" promotes `k_vent_window` to stand in for a missing `k_passive`, so a home with only ventilation observations still gets physics.
+
+**Pitfalls to avoid.**
+- **The model clamps at the setpoint.** The simulator stops heating when the indoor reaches the setpoint (the overshoot clamp, `clamp_bound`). It cannot predict overshoot or a thermostat's deadband unless the caller passes a bound. Our heater model needs the same explicit choice.
+- **Q is bang-bang.** `Q` is either the full `k_active` or zero, so a duty-cycled or modulating system is modelled as on or off. Heat-pump or TRV behaviour will be misfit.
+- **Sign conventions differ across the docs.** The v3 spec's ODE has the opposite sign from the code, and `k_passive` is "always negative" in one place and given as a positive decay rate in another. We already flag this kind of naming trap (Predheat). Name our coefficients with explicit signs and units (`UA_W_per_K`, `k_decay_per_h`).
+- **Solar is collinear without variation.** Two-parameter solar estimation has no information when the sun sits on a flat curve (spring or cloudy periods). The code guards this with a range check; we need the same guard, plus a measure of the range on our data.
+- **Churn and size.** Version 0.8.60 was released on 4 November alone, four versions that day, and the codebase is about 71k lines. A lot of the complexity is for fans, nat-vent and door/window state machines that do not bear on the thermal model. Do not copy the surrounding machinery.
+
+**Useful pieces to copy or reimplement.**
+- **Separate passive and HVAC windows before fitting.** Fitting across the boundary between pre-heat and post-heat rates is the bug the `compute_k_passive` comment describes. Our estimator should split windows the same way.
+- **Two-parameter solar fit with a range guard.** `k_env` and `k_solar` solved jointly with an explicit collinearity check. This is a concrete version of our solar hypothesis (11), and the guard is the part we need.
+- **Confidence-graded EWMA.** The α depends on the quality grade of each observation, so noisy windows move the estimate less. Cheap to implement and easy to test against our batch fit.
+- **Explicit ODE step with the analytic form.** The closed-form step is exact for constant inputs and cheap enough for a week-ahead curve. The code also has an RK4 integrator in `learning.py` (about line 610), which I did not trace to its caller.
+- **Validation as reason codes.** `compute_k_passive` returns a reason code with every rejection. Our estimators should do the same, so the report says why a window was dropped.
+
+**Relevance to our forecasting.** This is the closest reviewed project to our one-node hypotheses. It fits a one-node ODE with a solar term from the same sensor types we have, and it runs a week-ahead predicted curve on top. Its weaknesses are the ones our hypotheses already test: no spatial model, bang-bang HVAC, and solar confounded with heating. Its reusable parts are the window split, the solar range guard and the confidence-graded update. The rest (classification, briefing, state machines) is outside what we are building.
+
+*Verification status: equations and constants come from `learning.py`, `coordinator.py` and the docs at the commit cloned on 4 November 2026. The docs were read by heading and in targeted sections, not in full. The `08` analytic form was checked against the code's equation by hand, not by running it.*
 
 ### Warnings from the reviews
 - Self-reported savings or accuracy claims without figures (EcoEdge) should be disregarded.
