@@ -256,10 +256,12 @@ def cooling_humidity(
 CFM_TO_M3S = 0.000471947
 M3H_PER_CFM = 1.69901
 AIR_HEAT_CAPACITY_J_M3K = 1200.0 * 1005.0  # air at about 20 C
-# Nominal whole-window U-values, W/(m² K), by glazing and frame. Typical
-# catalogue values from memory: verify against the product before use.
+# Nominal whole-window U-values, W/(m² K), by glazing and frame. Only the
+# double vinyl value is confirmed: 1.22 is the Canadian ENERGY STAR threshold
+# for dual-glazed vinyl (JELD-WEN data sheet). The others are unverified
+# estimates; check the product's NFRC label before relying on them.
 NOMINAL_WINDOW_U = {
-    ("double", "vinyl"): 1.4,
+    ("double", "vinyl"): 1.22,
     ("double", "wood"): 1.6,
     ("double", "aluminium"): 2.8,
     ("triple", "vinyl"): 0.9,

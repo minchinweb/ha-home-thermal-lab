@@ -337,7 +337,7 @@ def test_blower_door_to_natural_ach():
 
 
 def test_window_u_lookup_is_case_insensitive():
-    assert window_u("Double", "Vinyl") == 1.4
+    assert window_u("Double", "Vinyl") == 1.22
     with pytest.raises(ValueError):
         window_u("single", "vinyl")
 
