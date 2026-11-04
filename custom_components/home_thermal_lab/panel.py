@@ -419,6 +419,26 @@ async def _hourly_outdoor(hass, entity_id: str, end: datetime) -> list[float | N
     return values
 
 
+_OUTDOOR_CACHE: tuple[tuple[str, datetime], list[float | None]] | None = None
+
+
+async def _cached_hourly_outdoor(
+    hass, entity_id: str, end: datetime
+) -> list[float | None]:
+    """``_hourly_outdoor``, reused until the hour changes.
+
+    The window ends on the hour, so the record only changes hourly; the recorder
+    query is the slow part of the Loads tab, and this skips it on refreshes.
+    """
+    global _OUTDOOR_CACHE
+    key = (entity_id, end)
+    if _OUTDOOR_CACHE is not None and _OUTDOOR_CACHE[0] == key:
+        return list(_OUTDOOR_CACHE[1])
+    values = await _hourly_outdoor(hass, entity_id, end)
+    _OUTDOOR_CACHE = (key, values)
+    return list(values)
+
+
 @websocket_api.websocket_command({vol.Required("type"): "home_thermal_lab/loads"})
 @websocket_api.async_response
 async def ws_loads(hass, connection, msg) -> None:
@@ -435,7 +455,7 @@ async def ws_loads(hass, connection, msg) -> None:
     hourly: list[float | None] = [None] * LOADS_HOURS
     if brains:
         try:
-            hourly = await _hourly_outdoor(hass, brains[0].outdoor_entity, end)
+            hourly = await _cached_hourly_outdoor(hass, brains[0].outdoor_entity, end)
         except Exception:  # the design then stays the assumed one
             _LOGGER.debug("No hourly outdoor record", exc_info=True)
     design, info = design_from_record(hourly, Design())

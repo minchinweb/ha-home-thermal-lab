@@ -88,6 +88,12 @@
   th { color: var(--muted); font-weight: 500; font-size: 12px; }
   .banner { background: #fff3e0; color: #6d4c00; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
   .hidden { display: none; }
+  .status { color: var(--muted); font-size: 13px; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
+  .spinner { width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; display: inline-block; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #loads-body { transition: opacity 0.2s; }
+  #loads-body.busy { opacity: 0.5; }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
 </style>
 </head>
 <body>
@@ -133,6 +139,8 @@
 
 <div id="view-loads" class="hidden">
   <div id="loads-error" class="banner hidden"></div>
+  <p id="loads-status" class="status hidden"><span class="spinner" aria-hidden="true"></span>Calculating from the recorded history…</p>
+  <div id="loads-body">
   <section class="card">
     <h2>Design conditions</h2>
     <div id="design"></div>
@@ -161,6 +169,7 @@
     <h2>Notes</h2>
     <ul id="loads-notes" class="hint"></ul>
   </section>
+  </div>
 </div>
 </main>
 
@@ -831,8 +840,14 @@ function showLoadsError(text) {
 }
 
 let loadsLoading = 0;
+function setLoadsBusy(busy) {
+  document.getElementById("loads-status").classList.toggle("hidden", !busy);
+  document.getElementById("loads-body").classList.toggle("busy", busy);
+}
+
 async function loadLoads() {
   const ticket = ++loadsLoading;
+  setLoadsBusy(true);
   try {
     const d = await ask({ type: "home_thermal_lab/loads" });
     if (ticket !== loadsLoading) return;
@@ -848,7 +863,10 @@ async function loadLoads() {
     drawDucts(d);
     drawLoadsNotes(d);
   } catch (err) {
+    if (ticket !== loadsLoading) return;
     showLoadsError("Could not load the calculations: " + (err && (err.message || err.code) || err));
+  } finally {
+    if (ticket === loadsLoading) setLoadsBusy(false);
   }
 }
 
