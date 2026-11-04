@@ -27,6 +27,7 @@ from homeassistant.helpers import selector
 import voluptuous as vol
 
 from . import BUILDING, CALL_STATS, CONTRIBUTION, DOMAIN, ENERGY, ZONE
+from .house_model import ENVELOPE_SETTINGS
 from .map_view import OutlineMapView
 from .options import (
     BTU_H_TO_KW,
@@ -52,6 +53,8 @@ _LOGGER = logging.getLogger(__name__)
 
 # the target wave (target.py); a zone without a mean targets its setpoint
 TARGET_KEYS = ("target_mean", "target_swing", "target_peak_hour", "target_band")
+# the envelope defaults for the Loads tab (house_model.nominal_from_settings)
+ENVELOPE_KEYS = tuple(key for key, _, _ in ENVELOPE_SETTINGS)
 
 _TEXT = selector.TextSelector()
 _NUMBER = selector.NumberSelector(
@@ -115,6 +118,7 @@ def _house_schema() -> vol.Schema:
             vol.Optional("ground_mean"): _NUMBER,
             vol.Optional("ground_swing"): _NUMBER,
             vol.Optional("ground_coldest_day"): _NUMBER,
+            **{vol.Optional(key): _NUMBER for key in ENVELOPE_KEYS},
             # a form has no extra buttons: ticking this and submitting redraws
             vol.Optional("preview", default=False): selector.BooleanSelector(),
         }
@@ -126,13 +130,18 @@ def _house_from_form(form: dict) -> dict:
     if form.get("outdoor_entity"):
         data["outdoor_entity"] = form["outdoor_entity"]
     data.update(_clean(form, ("rotation", "shade_below", *GROUND_KEYS)))
+    envelope = _clean(form, ENVELOPE_KEYS)
+    for key, value in envelope.items():
+        if float(value) <= 0:
+            raise FieldError(key, "must be more than 0")
+    data.update(envelope)
     if form.get("roofs"):
         data["roofs"] = parse_roofs(form["roofs"])
     return data
 
 
 def _house_to_form(data: dict) -> dict:
-    keys = ("outdoor_entity", "rotation", "shade_below", *GROUND_KEYS)
+    keys = ("outdoor_entity", "rotation", "shade_below", *GROUND_KEYS, *ENVELOPE_KEYS)
     out = {k: data[k] for k in keys if k in data}
     if data.get("roofs"):
         out["roofs"] = format_roofs(data["roofs"])

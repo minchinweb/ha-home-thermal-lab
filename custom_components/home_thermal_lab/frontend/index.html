@@ -727,9 +727,25 @@ function drawDesign(d) {
     el("p", { class: "hint" }, `Indoors ${fmt(dz.heat_indoor_c, 0, " °C")} for heating and ${fmt(dz.cool_indoor_c, 0, " °C")} for cooling, at ${fmt(dz.altitude_m, 0, " m")} altitude.`));
 }
 
+// A room's name, with an "assumed sizes" pill when some of its sizes were filled in.
+function roomName(r) {
+  if (!r.assumed || !r.assumed.length) return r.name;
+  return el("span", {}, r.name + " ", el("span", { class: "pill medium", title: r.assumed.join(" ") }, "assumed sizes"));
+}
+
+// The list of each room's assumed sizes, or nothing when none were assumed.
+function assumedList(rooms) {
+  const flagged = rooms.filter((r) => r.assumed && r.assumed.length);
+  if (!flagged.length) return [];
+  return [
+    el("p", { class: "hint" }, "Sizes assumed, not given in House Structure. Give the room's width and depth (or floor area), its height, and each wall's length and height to replace them:"),
+    el("ul", { class: "hint" }, ...flagged.map((r) => el("li", {}, el("strong", {}, r.name + ": "), r.assumed.join(" ")))),
+  ];
+}
+
 function drawRooms(d) {
   const rows = d.rooms.map((r) => [
-    r.name, fmt(r.heating_w, 0), fmt(r.cooling_total_w, 0), fmt(r.ua_calc_w_k, 1), fmt(r.ua_fit_w_k, 1),
+    roomName(r), fmt(r.heating_w, 0), fmt(r.cooling_total_w, 0), fmt(r.ua_calc_w_k, 1), fmt(r.ua_fit_w_k, 1),
     r.fit_ratio === null ? "–" : fmt(r.fit_ratio, 2), r.scale === null ? "–" : fmt(r.scale, 2),
   ]);
   const t = d.totals;
@@ -737,7 +753,8 @@ function drawRooms(d) {
   const missing = d.rooms.some((r) => r.ua_fit_w_k === null);
   document.getElementById("rooms").replaceChildren(
     tableOf(["Room", "Heat loss (W)", "Cooling (W)", "UA calc (W/K)", "UA fitted (W/K)", "Fitted ÷ calc", "Envelope scale"], rows),
-    el("p", { class: "hint" }, missing ? "A room with no UA fitted has no fitted rate yet: its zone's model is not fitted." : ""));
+    el("p", { class: "hint" }, missing ? "A room with no UA fitted has no fitted rate yet: its zone's model is not fitted." : ""),
+    ...assumedList(d.rooms));
 }
 
 function drawEquipment(d) {
@@ -804,7 +821,8 @@ function drawBuildings(d) {
       row("Equipment", "none yet"),
       el("p", { class: "hint" }, "No heater nameplate yet: the design size is what it must supply."));
     parts.push(tableOf(["Room", "Heat loss (W)", "Cooling (W)", "UA calc (W/K)"],
-      r.rooms.map((x) => [x.name, fmt(x.heating_w, 0), fmt(x.cooling_total_w, 0), fmt(x.ua_calc_w_k, 1)])));
+      r.rooms.map((x) => [roomName(x), fmt(x.heating_w, 0), fmt(x.cooling_total_w, 0), fmt(x.ua_calc_w_k, 1)])));
+    parts.push(...assumedList(r.rooms));
     if (r.warnings && r.warnings.length) parts.push(el("p", { class: "hint" }, r.warnings.join(" ")));
     return el("div", { class: "panel" }, ...parts);
   });

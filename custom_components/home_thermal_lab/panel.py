@@ -34,7 +34,7 @@ import voluptuous as vol
 from . import BUILDING, DOMAIN, ENERGY
 from .calls import temperature_series
 from .ha_rows import numbers, recorded
-from .house_model import Nominal
+from .house_model import nominal_from_settings
 from .loads import HUMIDITY_NOTE, assemble_all, design_from_record, equipment_from
 from .manual import HOURS_PER_YEAR, Design
 from .options import STRUCTURE_DOMAIN, has_walls, structure_ducts, structure_rooms
@@ -381,6 +381,13 @@ def _energy_settings(hass) -> dict | None:
     return None
 
 
+def _house_settings(hass) -> dict:
+    """The integration entry's own settings (the envelope defaults among them)."""
+    for entry in hass.config_entries.async_entries(DOMAIN):
+        return dict(entry.data)
+    return {}
+
+
 def _buildings(hass) -> list[dict]:
     """The detached buildings: each sub-entry's name, areas and indoor setpoints."""
     out = []
@@ -467,6 +474,7 @@ async def ws_loads(hass, connection, msg) -> None:
             names[area_id] = area.name
     energy = _energy_settings(hass) or {}
     furnace, ac, equipment_warnings = equipment_from(energy)
+    nominal, envelope_note = nominal_from_settings(_house_settings(hass))
     furnace_area = (
         areas.async_get_area(energy["area_id"]) if energy.get("area_id") else None
     )
@@ -475,13 +483,13 @@ async def ws_loads(hass, connection, msg) -> None:
             rooms,
             names,
             _rates(hass),
-            Nominal(),
+            nominal,
             design,
             buildings=_buildings(hass),
             furnace=furnace,
             ac=ac,
             design_info=info,
-            extra_warnings=[HUMIDITY_NOTE, *equipment_warnings],
+            extra_warnings=[envelope_note, HUMIDITY_NOTE, *equipment_warnings],
             ducts=structure_ducts(hass.data.get(STRUCTURE_DOMAIN)),
             furnace_room=furnace_area.name if furnace_area else None,
         )

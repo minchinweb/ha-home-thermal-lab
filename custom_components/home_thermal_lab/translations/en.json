@@ -12,7 +12,11 @@
           "preview": "Redraw the map (does not save)",
           "ground_mean": "Ground temperature: yearly mean (C)",
           "ground_swing": "Ground temperature: swing (C)",
-          "ground_coldest_day": "Ground temperature: coldest day of the year"
+          "ground_coldest_day": "Ground temperature: coldest day of the year",
+          "infiltration_ach": "Loads: air leakage (air changes per hour)",
+          "wall_r": "Loads: outside wall R-value (imperial)",
+          "roof_r": "Loads: roof R-value (imperial)",
+          "basement_floor_r": "Loads: basement floor R-value (imperial)"
         },
         "data_description": {
           "outdoor_entity": "Used by the shadow zone and the contribution chart.",
@@ -22,7 +26,11 @@
           "preview": "Tick and press Submit to redraw the map with the rotation typed above. Nothing is saved until you submit with this unticked.",
           "ground_mean": "For below-ground rooms without a ground sensor. Leave empty for the defaults (5.7, 5.6 and 95), measured at 1.8 m in Regina (hypothesis 03).",
           "ground_swing": "Half the gap between the warmest and coldest ground. About 0.4 of the air's swing at basement depth.",
-          "ground_coldest_day": "Day of the year (1 to 365) the ground is coldest: roughly 70 days after the coldest air at basement depth."
+          "ground_coldest_day": "Day of the year (1 to 365) the ground is coldest: roughly 70 days after the coldest air at basement depth.",
+          "infiltration_ach": "Natural air changes per hour for the Manual J. Leave empty for 0.35, a fairly tight house; an older house is often 0.5 to 0.7. From a blower-door test, roughly ACH50 divided by 20.",
+          "wall_r": "The effective R-value of the outside walls, studs included (R-20 batts in 2x6 framing are about R-15 overall). Leave empty for R-20. A wall part in House Structure with its own R-value keeps it.",
+          "roof_r": "The effective R-value of the ceilings under the roof. Leave empty for R-35. A roof part with its own R-value keeps it.",
+          "basement_floor_r": "The basement slab and the soil under it, as one effective R-value against the design ground temperature. Leave empty for R-11, an uninsulated slab."
         }
       },
       "reconfigure": {
@@ -35,7 +43,11 @@
           "preview": "Redraw the map (does not save)",
           "ground_mean": "Ground temperature: yearly mean (C)",
           "ground_swing": "Ground temperature: swing (C)",
-          "ground_coldest_day": "Ground temperature: coldest day of the year"
+          "ground_coldest_day": "Ground temperature: coldest day of the year",
+          "infiltration_ach": "Loads: air leakage (air changes per hour)",
+          "wall_r": "Loads: outside wall R-value (imperial)",
+          "roof_r": "Loads: roof R-value (imperial)",
+          "basement_floor_r": "Loads: basement floor R-value (imperial)"
         },
         "description": "Change the outdoor sensor, the house rotation or the roofs. Rooms pick up the change.\n\n{map}",
         "data_description": {
@@ -46,7 +58,11 @@
           "preview": "Tick and press Submit to redraw the map with the rotation typed above. Nothing is saved until you submit with this unticked.",
           "ground_mean": "For below-ground rooms without a ground sensor. Leave empty for the defaults (5.7, 5.6 and 95), measured at 1.8 m in Regina (hypothesis 03).",
           "ground_swing": "Half the gap between the warmest and coldest ground. About 0.4 of the air's swing at basement depth.",
-          "ground_coldest_day": "Day of the year (1 to 365) the ground is coldest: roughly 70 days after the coldest air at basement depth."
+          "ground_coldest_day": "Day of the year (1 to 365) the ground is coldest: roughly 70 days after the coldest air at basement depth.",
+          "infiltration_ach": "Natural air changes per hour for the Manual J. Leave empty for 0.35, a fairly tight house; an older house is often 0.5 to 0.7. From a blower-door test, roughly ACH50 divided by 20.",
+          "wall_r": "The effective R-value of the outside walls, studs included (R-20 batts in 2x6 framing are about R-15 overall). Leave empty for R-20. A wall part in House Structure with its own R-value keeps it.",
+          "roof_r": "The effective R-value of the ceilings under the roof. Leave empty for R-35. A roof part with its own R-value keeps it.",
+          "basement_floor_r": "The basement slab and the soil under it, as one effective R-value against the design ground temperature. Leave empty for R-11, an uninsulated slab."
         }
       }
     },
@@ -55,7 +71,11 @@
       "reconfigure_successful": "Saved."
     },
     "error": {
-      "invalid_roofs": "Write each roof as [name=]face pitch, for example: Front=S 30, Back=W 4:12 (names must differ)."
+      "invalid_roofs": "Write each roof as [name=]face pitch, for example: Front=S 30, Back=W 4:12 (names must differ).",
+      "invalid_infiltration_ach": "Must be more than 0.",
+      "invalid_wall_r": "Must be more than 0.",
+      "invalid_roof_r": "Must be more than 0.",
+      "invalid_basement_floor_r": "Must be more than 0."
     }
   },
   "config_subentries": {

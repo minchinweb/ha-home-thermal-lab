@@ -217,9 +217,9 @@ def assemble(
         furnace_room: The name of the room the furnace sits in, if chosen.
 
     Returns:
-        ``design``, ``rooms`` (each with its calculated and fitted conductance and
-        the envelope scale), ``totals``, ``equipment``, ``ducts`` and
-        ``warnings``, all plain values.
+        ``design``, ``rooms`` (each with its calculated and fitted conductance,
+        the envelope scale and ``assumed``: the sizes that were assumed),
+        ``totals``, ``equipment``, ``ducts`` and ``warnings``, all plain values.
     """
     full_names = {a: names.get(a) or rooms[a].get("title") or a for a in rooms}
     project, warnings = build_project(rooms, nominal, design, full_names, ducts)
@@ -227,7 +227,7 @@ def assemble(
     result = calculate(project)
 
     area_of = {full_names[a]: a for a in rooms}
-    capacities = room_capacities(rooms)
+    capacities = room_capacities(rooms, nominal)
     fixed: dict[str, float] = {}
     infiltration: dict[str, float] = {}
     for room in project.rooms:
@@ -261,6 +261,7 @@ def assemble(
                 "fit_ratio": ua_fit / ua_calc if ua_fit and ua_calc else None,
                 "scale": env["scale"] if env else None,
                 "warnings": env["warnings"] if env else [],
+                "assumed": list(room.notes),
             }
         )
 

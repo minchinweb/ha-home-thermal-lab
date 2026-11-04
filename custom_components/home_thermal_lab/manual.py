@@ -117,6 +117,7 @@ class Room:
         ach: Infiltration, air changes per hour.
         people: Occupants at design (cooling).
         gains_w: Sensible internal gains at design, W (appliances, lights).
+        notes: Sizes that were assumed rather than given, to show with it.
     """
 
     name: str
@@ -125,6 +126,7 @@ class Room:
     ach: float = 0.35
     people: int = 0
     gains_w: float = 0.0
+    notes: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)

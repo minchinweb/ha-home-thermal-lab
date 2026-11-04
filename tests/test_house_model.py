@@ -5,10 +5,13 @@ from dataclasses import replace
 import pytest
 
 from custom_components.home_thermal_lab.house_model import (
+    R_IP_TO_SI,
     Nominal,
     build_project,
     envelope_from_fit,
+    nominal_from_settings,
     room_capacities,
+    room_geometry,
 )
 from custom_components.home_thermal_lab.manual import Design, Furnace, calculate
 
@@ -304,3 +307,188 @@ def test_registers_with_no_sections_keep_their_full_duct():
     project, _ = build_project(_tree_rooms(upstream=None), Nominal(), Design())
     (run,) = project.runs[:1]
     assert len(run.segments) == 1  # only its own branch, as before
+
+
+# --- Assumed sizes -------------------------------------------------------------
+
+
+def _wall(face, **extra):
+    azimuth = {"N": 0.0, "E": 90.0, "S": 180.0, "W": 270.0}[face]
+    return {"face": face, "azimuth": azimuth, "tilt": 90.0, "glass_m2": 0.0, **extra}
+
+
+def test_given_sizes_are_used_without_notes():
+    geo = room_geometry(ROOMS["office"], Nominal())
+    assert geo.floor_m2 == pytest.approx(12.0)
+    assert geo.walls == (10.0, 8.0)
+    assert geo.notes == ()
+    assert geo.problems == ()
+
+
+def test_width_and_depth_give_a_rectangle_and_size_the_walls():
+    room = {
+        "title": "Den",
+        "width_m": 4.0,
+        "depth_m": 3.0,
+        "height_m": 2.5,
+        "walls": [_wall("S"), _wall("E")],
+    }
+    geo = room_geometry(room, Nominal())
+    assert geo.floor_m2 == pytest.approx(12.0)
+    assert geo.volume_m3 == pytest.approx(30.0)
+    # a south wall runs along the width, an east wall along the depth
+    assert geo.walls == pytest.approx((10.0, 7.5))
+    assert any("rectangle" in n for n in geo.notes)
+    assert any("Wall areas assumed" in n for n in geo.notes)
+
+
+def test_two_cross_wall_lengths_and_a_height_give_the_room():
+    room = {
+        "title": "Den",
+        "height_m": 2.5,
+        "walls": [_wall("N", length_m=5.0), _wall("W", length_m=4.0)],
+    }
+    geo = room_geometry(room, Nominal())
+    assert geo.floor_m2 == pytest.approx(20.0)
+    assert geo.volume_m3 == pytest.approx(50.0)
+    assert geo.walls == pytest.approx((12.5, 10.0))
+
+
+def test_wall_height_is_used_when_the_room_has_none():
+    room = {
+        "title": "Den",
+        "walls": [_wall("N", length_m=5.0, height_m=2.2), _wall("E", length_m=4.0)],
+    }
+    geo = room_geometry(room, Nominal())
+    assert geo.height_m == pytest.approx(2.2)
+    assert geo.volume_m3 == pytest.approx(20.0 * 2.2)
+    assert any("from its walls" in n for n in geo.notes)
+
+
+def test_a_room_with_only_a_floor_area_is_taken_as_square():
+    room = {"title": "Den", "floor_m2": 16.0, "walls": [_wall("S"), _wall("S")]}
+    geo = room_geometry(room, Nominal(room_height_m=2.5))
+    assert geo.height_m == pytest.approx(2.5)
+    assert any("assumed" in n for n in geo.notes)
+    # two south walls share the square's 4 m side
+    assert geo.walls == pytest.approx((5.0, 5.0))
+    assert any("square room" in n for n in geo.notes)
+
+
+def test_a_wall_that_cannot_be_sized_is_reported():
+    room = {"title": "Den", "walls": [_wall("S")]}
+    geo = room_geometry(room, Nominal())
+    assert geo.walls == (None,)
+    assert any("left out" in p for p in geo.problems)
+
+
+def test_a_volume_alone_gives_a_square_room_at_the_assumed_height():
+    room = {"title": "Den", "volume_m3": 40.0, "walls": [_wall("S")]}
+    geo = room_geometry(room, Nominal(room_height_m=2.5))
+    assert geo.floor_m2 == pytest.approx(16.0)
+    assert geo.walls == pytest.approx((10.0,))
+    assert any("assumed" in n for n in geo.notes)
+
+
+def test_windows_bigger_than_their_wall_are_reported():
+    room = {
+        "title": "Den",
+        "volume_m3": 30.0,
+        "walls": [_wall("S", area_m2=2.0, glass_m2=3.0)],
+    }
+    _, warnings = build_project({"den": room}, Nominal(), Design())
+    assert any("only 2.00 m²" in w for w in warnings)
+
+
+def test_assumed_walls_count_in_the_heat_loss():
+    room = {"title": "Den", "floor_m2": 16.0, "height_m": 2.5, "walls": [_wall("N")]}
+    project, _ = build_project({"den": room}, Nominal(), Design())
+    (wall,) = [s for s in project.rooms[0].surfaces if s.kind == "wall"]
+    assert wall.area == pytest.approx(4.0 * 2.5)
+    assert project.rooms[0].notes
+
+
+def test_a_basement_floor_loses_heat_to_the_ground():
+    room = {
+        "title": "Basement",
+        "floor_m2": 40.0,
+        "height_m": 2.3,
+        "below_ground": True,
+        "below_grade_m": 1.5,
+        "walls": [],
+    }
+    nominal = Nominal(basement_floor_r=2.0)
+    project, _ = build_project({"b": room}, nominal, Design())
+    (floor,) = [s for s in project.rooms[0].surfaces if s.kind == "floor"]
+    assert floor.ground and floor.area == pytest.approx(40.0)
+    loads = calculate(project)["rooms"]["Basement"]["heating_parts"]
+    design = Design()
+    expected = 40.0 / 2.0 * (design.heat_indoor_c - design.ground_c)
+    assert loads["basement floor"] == pytest.approx(expected)
+
+
+def test_the_house_default_depth_is_noted():
+    room = {
+        "title": "Basement",
+        "floor_m2": 40.0,
+        "height_m": 2.3,
+        "below_ground": True,
+        "below_grade_m": 1.8,
+        "below_grade_default": True,
+        "walls": [],
+    }
+    geo = room_geometry(room, Nominal())
+    assert any("house's default" in n for n in geo.notes)
+
+
+def test_a_shared_roof_is_split_by_floor_area():
+    roof = {"area_m2": 40.0, "glass_m2": 0.0, "tilt": 45.0, "area_ids": ["a", "b"]}
+
+    def room(title, floor):
+        return {"title": title, "floor_m2": floor, "height_m": 2.4, "roofs": [roof]}
+
+    rooms = {"a": room("A", 30.0), "b": room("B", 10.0)}
+    project, _ = build_project(rooms, Nominal(), Design())
+    areas = {
+        r.name: sum(s.area for s in r.surfaces if s.kind == "roof")
+        for r in project.rooms
+    }
+    # the roof is counted once in all, not once per room
+    assert areas == pytest.approx({"A": 30.0, "B": 10.0})
+
+
+def test_a_shared_roof_is_split_equally_without_floor_areas():
+    roof = {"area_m2": 40.0, "area_ids": ["a", "b"]}
+    rooms = {
+        "a": {"title": "A", "volume_m3": 20.0, "roofs": [roof]},
+        "b": {"title": "B", "volume_m3": 20.0, "height_m": 2.0, "roofs": [roof]},
+    }
+    # only "b" gives a height, so only "b" gets a floor area exactly; "a" gets
+    # one through the assumed height, so both have one: split by floor area
+    project, _ = build_project(rooms, Nominal(room_height_m=2.0), Design())
+    total = sum(s.area for r in project.rooms for s in r.surfaces if s.kind == "roof")
+    assert total == pytest.approx(40.0)
+    one = {"a": {"title": "A", "roofs": [roof]}, "b": rooms["b"]}
+    project, _ = build_project(one, Nominal(), Design())
+    (b,) = project.rooms  # "a" has no size at all, so is left out
+    assert sum(s.area for s in b.surfaces if s.kind == "roof") == pytest.approx(20.0)
+
+
+def test_settings_override_the_envelope_defaults():
+    nominal, note = nominal_from_settings(
+        {"infiltration_ach": 0.6, "wall_r": 15, "roof_r": "", "basement_floor_r": 0}
+    )
+    assert nominal.ach == pytest.approx(0.6)
+    assert nominal.wall_r == pytest.approx(15 * R_IP_TO_SI)
+    assert nominal.roof_r == Nominal().roof_r
+    assert nominal.basement_floor_r == Nominal().basement_floor_r
+    assert "walls R-15" in note and "0.6 ACH" in note
+    # the unset ones are named as built-in defaults
+    assert "Built-in defaults" in note
+    assert "roofs R-35" in note.split("Built-in defaults")[1]
+
+
+def test_no_settings_say_everything_is_a_default():
+    nominal, note = nominal_from_settings({})
+    assert nominal == Nominal()
+    assert "air leakage 0.35 ACH" in note.split("Built-in defaults")[1]

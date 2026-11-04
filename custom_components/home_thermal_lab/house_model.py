@@ -1,18 +1,32 @@
 """Build the Manual J/S/D project from House Structure's published rooms.
 
 Standard library only. House Structure (``hass.data["house_structure"]``)
-gives each room's volume, below-ground flag, walls and roofs (area, glass,
+gives each room's size, below-ground flag, walls and roofs (area, glass,
 azimuth and tilt) and windows (glass, transmittance and the wall or roof they
-are in). It does not yet give wall or roof R-values, or a window's glazing and
-frame, so those come from ``Nominal``: house-level defaults.
+are in). Wall and roof R-values, and a window's glazing and frame, are used
+when given; otherwise they come from ``Nominal``: house-level defaults.
+
+Sizes that are missing are filled in where the room allows it, and each one is
+noted on the room (``Geometry.notes``) so the Loads tab can show it:
+
+- A room with a width and depth (or a wall's length on each axis) is taken as
+  a rectangle, for its floor area and volume.
+- A wall without an area takes its length (or the room's width or depth on its
+  axis, or the side of a square room of the floor area) times its height (or
+  the room's).
+- A room without a height takes its walls' height, or ``Nominal.room_height_m``.
 
 Internal walls are not counted as losses. A neighbouring room is taken to be
-at the same temperature, as Manual J does for a heated neighbour.
+at the same temperature, as Manual J does for a heated neighbour. A basement's
+floor loses heat to the ground through ``Nominal.basement_floor_r``.
 """
 
 from __future__ import annotations
 
+from collections import Counter
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+import math
 
 from .manual import (
     Design,
@@ -33,30 +47,92 @@ CFM_TO_M3S = 0.000471947
 IN2_TO_M2 = 0.00064516
 FT_TO_M = 0.3048
 
-# Imperial R-values converted to m² K/W: R-20 is 3.5, R-35 is 6.2.
+# Imperial R-values (ft² °F h/BTU) converted to m² K/W: R-20 is 3.5.
+R_IP_TO_SI = 0.17611
 R_20_SI = 3.5
 R_35_SI = 6.2
+# An uninsulated basement slab with the soil under it, as an effective
+# R-value against the design ground temperature (about R-11). A rough value:
+# the slab's loss depends on its width, the depth and the soil.
+BASEMENT_FLOOR_R_SI = 2.0
+ROOM_HEIGHT_M = 2.44  # 8 ft
+NORTH_SOUTH = ("N", "S")
 
 
 @dataclass(frozen=True)
 class Nominal:
-    """House-level defaults for what House Structure does not yet record.
+    """House-level defaults for what House Structure does not record.
 
     Attributes:
         wall_r: Nominal R-value of outside walls, m² K/W.
         roof_r: Nominal R-value of roofs, m² K/W.
+        basement_floor_r: Effective R-value of a below-ground room's floor,
+            slab and soil together, m² K/W.
         glazing: ``double`` or ``triple``, for every window.
         frame: ``vinyl``, ``wood`` or ``aluminium``, for every window.
         ach: Infiltration, air changes per hour (or from a blower-door test).
+        room_height_m: Ceiling height of a room that gives none, m.
         occupants: Occupants per area id, for cooling.
     """
 
     wall_r: float = R_20_SI
     roof_r: float = R_35_SI
+    basement_floor_r: float = BASEMENT_FLOOR_R_SI
     glazing: str = "double"
     frame: str = "vinyl"
     ach: float = 0.35
+    room_height_m: float = ROOM_HEIGHT_M
     occupants: dict[str, int] = field(default_factory=dict)
+
+
+# The integration's settings for the envelope defaults: key, Nominal field, and
+# whether the setting is an imperial R-value (converted to SI).
+ENVELOPE_SETTINGS = (
+    ("infiltration_ach", "ach", False),
+    ("wall_r", "wall_r", True),
+    ("roof_r", "roof_r", True),
+    ("basement_floor_r", "basement_floor_r", True),
+)
+
+
+def nominal_from_settings(settings: Mapping) -> tuple[Nominal, str]:
+    """The envelope defaults from the integration's settings, and a note of them.
+
+    R-values are set as imperial R-values (R-20); infiltration in air changes
+    per hour. Anything not set keeps the built-in default, and the note says
+    which values are the built-in ones.
+    """
+    values: dict = {}
+    for key, name, imperial in ENVELOPE_SETTINGS:
+        value = settings.get(key)
+        if value in (None, ""):
+            continue
+        value = float(value)
+        if value <= 0:
+            continue
+        values[name] = value * R_IP_TO_SI if imperial else value
+    nominal = Nominal(**values)
+    parts = {
+        "wall_r": f"walls R-{nominal.wall_r / R_IP_TO_SI:.0f}",
+        "roof_r": f"roofs R-{nominal.roof_r / R_IP_TO_SI:.0f}",
+        "basement_floor_r": (
+            f"basement floors R-{nominal.basement_floor_r / R_IP_TO_SI:.0f}"
+        ),
+        "ach": f"air leakage {nominal.ach:g} ACH",
+    }
+    unset = [part for name, part in parts.items() if name not in values]
+    note = (
+        "Envelope where a part gives no value of its own: "
+        + ", ".join(parts.values())
+        + f"; windows {nominal.glazing} glazed in {nominal.frame} frames."
+    )
+    if unset:
+        note += (
+            " Built-in defaults, not measured: "
+            + ", ".join(unset)
+            + ". Set them on the integration's Reconfigure form."
+        )
+    return nominal, note
 
 
 def _face(azimuth: float) -> str:
@@ -64,39 +140,185 @@ def _face(azimuth: float) -> str:
     return ("N", "E", "S", "W")[round(azimuth / 90.0) % 4]
 
 
-def _volume(summary: dict) -> float | None:
-    """The room's air volume: given, or floor area times height."""
-    if summary.get("volume_m3"):
-        return summary["volume_m3"]
-    if summary.get("floor_m2") and summary.get("height_m"):
-        return summary["floor_m2"] * summary["height_m"]
-    return None
+def _wall_face(wall: dict) -> str:
+    """A wall's face in the house's grid (from its azimuth when not given)."""
+    return wall.get("face") or _face(wall.get("azimuth") or 0.0)
 
 
-def _height(summary: dict) -> float | None:
-    """The room's height: given, or volume over floor area."""
-    if summary.get("height_m"):
-        return summary["height_m"]
-    volume = _volume(summary)
-    if volume and summary.get("floor_m2"):
-        return volume / summary["floor_m2"]
-    return None
+@dataclass(frozen=True)
+class Geometry:
+    """A room's sizes, with what had to be assumed to get them.
+
+    Attributes:
+        floor_m2: Floor area, m², or None.
+        height_m: Ceiling height, m.
+        volume_m3: Air volume, m³, or None.
+        walls: Each wall's gross area, m², in the order House Structure lists
+            them; None for a wall that could not be sized.
+        notes: What was assumed, for the room's line in the Loads tab.
+        problems: What is wrong or left out, for the warnings.
+    """
+
+    floor_m2: float | None
+    height_m: float
+    volume_m3: float | None
+    walls: tuple[float | None, ...]
+    notes: tuple[str, ...]
+    problems: tuple[str, ...]
 
 
-def ground_fraction(summary: dict) -> float:
+def _longest(walls: list[dict], faces: tuple[str, ...]) -> float | None:
+    """The longest typed length of the walls on these faces."""
+    lengths = [
+        w["length_m"] for w in walls if w.get("length_m") and _wall_face(w) in faces
+    ]
+    return max(lengths) if lengths else None
+
+
+def room_geometry(summary: dict, nominal: Nominal, name: str = "") -> Geometry:
+    """A room's floor, height, volume and wall areas, filling in what is missing.
+
+    See the module's docstring for the order things are tried in. Each value
+    that is not the room's own (or worked out exactly from its own) is noted.
+    """
+    name = name or summary.get("title") or "Room"
+    walls = summary.get("walls") or []
+    notes: list[str] = []
+    problems: list[str] = []
+
+    width = summary.get("width_m")
+    depth = summary.get("depth_m")
+    if not width:
+        width = _longest(walls, NORTH_SOUTH)
+    if not depth:
+        depth = _longest(walls, ("E", "W"))
+    floor = summary.get("floor_m2")
+    height = summary.get("height_m")
+    volume = summary.get("volume_m3")
+    if not floor and width and depth:
+        floor = width * depth
+        notes.append(
+            f"Floor area {floor:.1f} m², as a rectangle {width:.2f} m by {depth:.2f} m."
+        )
+    if not height:
+        wall_heights = [w["height_m"] for w in walls if w.get("height_m")]
+        if volume and floor:
+            height = volume / floor
+        elif wall_heights:
+            height = max(wall_heights)
+            notes.append(f"Ceiling height {height:.2f} m, from its walls.")
+        else:
+            height = nominal.room_height_m
+            notes.append(f"Ceiling height {height:.2f} m, assumed.")
+    if not volume and floor:
+        volume = floor * height
+        if notes:
+            notes.append(f"Volume {volume:.1f} m³, from the floor area and height.")
+    if not floor and volume:
+        floor = volume / height
+
+    # Walls without an area share their axis' length with the others on their face.
+    unsized = Counter(
+        _wall_face(w) for w in walls if not w.get("area_m2") and not w.get("length_m")
+    )
+    sized: list[float | None] = []
+    assumed: list[str] = []
+    for i, wall in enumerate(walls, start=1):
+        face = _wall_face(wall)
+        gross = wall.get("area_m2")
+        wall_height = wall.get("height_m") or height
+        if not gross:
+            side = width if face in NORTH_SOUTH else depth
+            if wall.get("length_m"):
+                gross, how = wall["length_m"] * wall_height, "its length"
+            elif side:
+                axis = "width" if face in NORTH_SOUTH else "depth"
+                gross, how = side / unsized[face] * wall_height, f"the room's {axis}"
+            elif floor:
+                gross = math.sqrt(floor) / unsized[face] * wall_height
+                how = "a square room"
+            else:
+                problems.append(
+                    f"{name}: wall {i} ({face}) has no size, and the room has no "
+                    "floor area or width to assume one from, so it is left out."
+                )
+                sized.append(None)
+                continue
+            assumed.append(f"wall {i} ({face}) {gross:.1f} m² from {how}")
+        glass = wall.get("glass_m2") or 0.0
+        if glass > gross + 1e-6:
+            problems.append(
+                f"{name}: wall {i} ({face}) has {glass:.2f} m² of windows but is "
+                f"only {gross:.2f} m²; check the wall's and windows' sizes."
+            )
+        sized.append(gross)
+    if assumed:
+        notes.append(
+            "Wall areas assumed: "
+            + "; ".join(assumed)
+            + f", {height:.2f} m high unless the wall gives its own height."
+        )
+    if summary.get("below_ground") and summary.get("below_grade_default"):
+        notes.append(
+            f"Below-grade depth {summary.get('below_grade_m'):.2f} m is the house's "
+            "default."
+        )
+    return Geometry(
+        floor_m2=floor,
+        height_m=height,
+        volume_m3=volume,
+        walls=tuple(sized),
+        notes=tuple(notes),
+        problems=tuple(problems),
+    )
+
+
+def ground_fraction(summary: dict, height: float | None = None) -> float:
     """The share (0 to 1) of a room's walls that are below grade.
 
     A basement with a below-grade depth has its walls below the grade line for
     that depth, so the share is the depth over the room's height. Without a
     depth, a below-ground room's walls are all taken as below grade.
+
+    Args:
+        summary: The room, as House Structure publishes it.
+        height: The room's height; from the summary when not given.
     """
     if not summary.get("below_ground"):
         return 0.0
     depth = summary.get("below_grade_m")
-    height = _height(summary)
+    if height is None:
+        height = room_geometry(summary, Nominal()).height_m
     if depth is None or not height:
         return 1.0
     return min(max(depth / height, 0.0), 1.0)
+
+
+def room_floors(rooms: dict[str, dict], nominal: Nominal) -> dict[str, float]:
+    """Each room's floor area (given or assumed), by area id, where there is one."""
+    out = {}
+    for area_id, summary in rooms.items():
+        floor = room_geometry(summary, nominal).floor_m2
+        if floor:
+            out[area_id] = floor
+    return out
+
+
+def roof_share(roof: dict, area_id: str, floors: Mapping[str, float]) -> float:
+    """The share (0 to 1) of a roof that is over this room.
+
+    House Structure lists a roof over several rooms in each of them with its
+    whole area, so each takes a part: its floor area over theirs, or an equal
+    part when any of them has no floor area.
+    """
+    areas = roof.get("area_ids") or [area_id]
+    if len(areas) <= 1:
+        return 1.0
+    if all(a in floors for a in areas):
+        total = sum(floors[a] for a in areas)
+        if total > 0:
+            return floors.get(area_id, 0.0) / total
+    return 1.0 / len(areas)
 
 
 def build_project(
@@ -123,23 +345,29 @@ def build_project(
     warnings: list[str] = []
     built: list[Room] = []
     pending: list[tuple[dict, str, int]] = []
+    floors = room_floors(rooms, nominal)
     for area_id, summary in rooms.items():
         name = names.get(area_id) or summary.get("title") or area_id
-        volume = _volume(summary)
+        geometry = room_geometry(summary, nominal, name)
+        warnings.extend(geometry.problems)
+        volume = geometry.volume_m3
         if not volume:
             warnings.append(
-                f"{name}: no volume, so the room is not in the calculation."
+                f"{name}: no volume, floor area or width and depth, so the room is "
+                "not in the calculation."
             )
             continue
-        below = ground_fraction(summary)
+        below = ground_fraction(summary, geometry.height_m)
         if summary.get("below_ground") and summary.get("below_grade_m") is None:
             warnings.append(
-                f"{name}: no below-grade depth, so all its walls are taken as below "
-                "grade."
+                f"{name}: no below-grade depth (its own or the house's default in "
+                "House Structure), so all its walls are taken as below grade."
             )
         surfaces: list[Surface] = []
-        for i, wall in enumerate(summary.get("walls", []), start=1):
-            net = (wall.get("area_m2") or 0.0) - (wall.get("glass_m2") or 0.0)
+        for i, (wall, gross) in enumerate(
+            zip(summary.get("walls", []), geometry.walls, strict=True), start=1
+        ):
+            net = (gross or 0.0) - (wall.get("glass_m2") or 0.0)
             if net > 0:
                 r = wall.get("r_value_si") or nominal.wall_r
                 if below > 0:
@@ -157,7 +385,8 @@ def build_project(
                         Surface(f"wall {i}", "wall", net * (1 - below), r=r)
                     )
         for i, roof in enumerate(summary.get("roofs", []), start=1):
-            net = (roof.get("area_m2") or 0.0) - (roof.get("glass_m2") or 0.0)
+            share = roof_share(roof, area_id, floors)
+            net = share * ((roof.get("area_m2") or 0.0) - (roof.get("glass_m2") or 0.0))
             if net > 0:
                 r = roof.get("r_value_si") or nominal.roof_r
                 surfaces.append(Surface(f"roof {i}", "roof", net, r=r, face="H"))
@@ -178,6 +407,16 @@ def build_project(
                     face=face,
                 )
             )
+        if summary.get("below_ground") and geometry.floor_m2:
+            surfaces.append(
+                Surface(
+                    "basement floor",
+                    "floor",
+                    geometry.floor_m2,
+                    r=nominal.basement_floor_r,
+                    ground=True,
+                )
+            )
         if not surfaces:
             warnings.append(f"{name}: no walls, roofs or windows with sizes.")
         room = Room(
@@ -186,6 +425,7 @@ def build_project(
             surfaces=tuple(surfaces),
             ach=nominal.ach,
             people=nominal.occupants.get(area_id, 0),
+            notes=geometry.notes,
         )
         built.append(room)
         for j, reg in enumerate(summary.get("registers", []), start=1):
@@ -193,10 +433,6 @@ def build_project(
                 pending.append((reg, name, j))
     if not built:
         raise ValueError("no room has enough data for a Manual J")
-    warnings.append(
-        "Wall and roof R-values and window glazing and frame are the house defaults, "
-        "not measured."
-    )
     runs = _runs(pending, ducts or {}, warnings)
     return Project(rooms=tuple(built), design=design, runs=tuple(runs)), warnings
 
@@ -307,21 +543,25 @@ def envelope_from_fit(
         without a fitted rate or capacity are left out.
     """
     out: dict[str, dict] = {}
+    floors = room_floors(rooms, nominal)
     for area_id, summary in rooms.items():
         if area_id not in rates or area_id not in capacities:
             continue
         # The fit's rate covers the above-grade envelope (the ground has its own
         # term), so a basement's walls count only above the grade line.
-        above = 1.0 - ground_fraction(summary)
+        geometry = room_geometry(summary, nominal)
+        above = 1.0 - ground_fraction(summary, geometry.height_m)
+        walls = summary.get("walls", [])
+        gross = {("wall", i): area for i, area in enumerate(geometry.walls, start=1)}
         elements = []
-        for kind, items in (
-            ("wall", summary.get("walls", [])),
-            ("roof", summary.get("roofs", [])),
-        ):
+        for kind, items in (("wall", walls), ("roof", summary.get("roofs", []))):
             for i, item in enumerate(items, start=1):
-                net = (item.get("area_m2") or 0.0) - (item.get("glass_m2") or 0.0)
+                area = gross.get((kind, i), item.get("area_m2"))
+                net = (area or 0.0) - (item.get("glass_m2") or 0.0)
                 if kind == "wall":
                     net *= above
+                else:
+                    net *= roof_share(item, area_id, floors)
                 if net <= 0:
                     continue
                 r = item.get("r_value_si") or (
@@ -348,10 +588,13 @@ def fixed_conductances(room: Room, design: Design) -> tuple[float, float]:
     return windows, infiltration
 
 
-def room_capacities(rooms: dict[str, dict]) -> dict[str, float]:
+def room_capacities(
+    rooms: dict[str, dict], nominal: Nominal | None = None
+) -> dict[str, float]:
     """Each room's heat capacity (air only), J/K, by area id."""
+    nominal = nominal or Nominal()
     return {
         area_id: room_capacity(volume)
         for area_id, summary in rooms.items()
-        if (volume := _volume(summary))
+        if (volume := room_geometry(summary, nominal).volume_m3)
     }
