@@ -121,6 +121,12 @@ the drawing. The choice is remembered in `localStorage`:
 | Heating runs (registers and their ducts) | House Structure | on |
 | Heat flow (lab overlay) | Thermal Lab, when installed | off |
 
+Apart from the layers, a **Floors: Together / Apart** toggle draws the floors
+apart, each lifted 2.5 m more than the one below, so an upper floor doesn't
+hide the one under it (`plan.svg?exploded=1`; done in `80d5edd`). The
+heating runs are drawn to the lifted floors but measured on the real ones.
+The anchors are worked out after the lift, so overlays follow the floors.
+
 To make that possible, `house_svg` (in `drawing.py`) changes in two ways. The
 page fetches `plan.svg` as text and puts it inline, not in an `<img>`, so it
 can reach inside the drawing.
