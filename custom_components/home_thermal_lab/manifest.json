@@ -1,6 +1,9 @@
 {
   "domain": "home_thermal_lab",
   "name": "Home Thermal Lab",
+  "after_dependencies": [
+    "house_structure"
+  ],
   "codeowners": [
     "@minchinweb"
   ],
@@ -17,8 +20,5 @@
   "issue_tracker": "https://github.com/minchinweb/ha-home-thermal-lab/issues",
   "requirements": [],
   "single_config_entry": true,
-  "version": "0.1.0",
-  "after_dependencies": [
-    "house_structure"
-  ]
+  "version": "0.1.0"
 }
