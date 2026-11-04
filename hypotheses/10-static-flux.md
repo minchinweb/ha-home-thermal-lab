@@ -1,6 +1,6 @@
 # 10 Static heat flux between floors/rooms
 
-**Status:** revised; no static (fan-off) periods in the data; fan-on network fit adds little
+**Status:** testing; first static night 2-3 Nov 2026: the basement-to-main coupling is mostly the fan, upstairs is static
 
 **Claim:** When the furnace/AC and fans are off, the temperature gradient between rooms/floors gives a stable heat-flux coefficient (conductance) per pair.
 
@@ -35,3 +35,7 @@ The hypothesis asks for the coupling when the furnace, AC and fans are off. 08 f
 - Conclusion: with the fan always on, the idle data cannot identify pairwise static coupling. The deliberate no-fan nights are the test.
 
 The no-fan nights are now running (see 08, from 2 November 2026). Rerun `scripts/room_network.py` on those nights' still bins once a few have passed.
+
+### First static data (no-fan night, 2 to 3 November 2026)
+
+Six hours with the blower off and no calls (23:00 to 05:00 UTC-6; details in 08). Against the next night (fan on, no calls, outdoor about 3 C colder), the basement cooled 1.38 C instead of 0.85, while the main floor (-1.39 both nights) and upstairs (-0.58 and -0.62) did not change. So with the fan off the basement is held up much less by the floor above, and the fan-on coupling between the basement and the main floor is mostly the blower. The upstairs coupling is the same with or without the fan, so it is static (conduction and the stairwell). The room spread closed from 0.86 to 0.65 C in both cases. One night is too few for `room_network.py`; rerun it on the still bins once three or four nights have passed.

@@ -109,3 +109,14 @@ The owner did not note the time, so it was found by comparing the kitchen's rate
 - On sunny days, skip or shrink Z4's noon boost: the office faces east, gets no afternoon sun, and rose only 1.3 C for the hour. That would take about 1.5 to 2 C off the kitchen's peak.
 - Z2's half-degree steps make short calls around 11:00 to 12:15 and 14:00 to 15:15, each one also heating the kitchen.
 - While the kitchen gets 68 to 88% of its flow on every call, no schedule on the other zones avoids heating it. A balancing damper on the kitchen's supply runs is the physical fix.
+
+### Bleed into the basement (review, 4 November 2026)
+
+Almost none: the basement is the one direction where the dampers hold.
+
+- Airflow (above): the Z2 rooms get 0 to 4 cfm when another zone calls.
+- `scripts/hvac_bleed_matrix.py --days 3` (18 episodes of 10+ min: Z2 4, Z2 + Z4 6, Z3 + Z4 3, Z4 5): the Z2 thermostat warms +0.26 C/h above its drift on Z4 calls and +0.20 on Z3 + Z4 calls (the 10-day run: -0.2 on Z4), against the kitchen's +2.9 and +2.3. The Z3 + Z4 column is the first data with Z3 calling (the new schedule).
+- It only goes one way: a Z2 call bleeds into the kitchen (+1.2 C/h in this run, +1.9 to 2.1 in the fit), but nothing comes back.
+- The NE basement read +2.3 C/h on the one Z4-only episode with a fresh reading, and the SE basement +0.8 (3). In the 10-day run both were about 0. With the NE bedroom about 2 feet from the furnace, this is more likely heat from the furnace and its ducts than damper leakage; one episode cannot tell.
+- A shared call heats the basement less: with Z2 and Z4 calling together, the NE and SE bedrooms warm +2.7 C/h, against +10.6 and +6.9 with Z2 alone, because the air is split.
+- Heat reaches the basement from the rest of the house mostly through the blower in fan-only mode, not the dampers: on the first no-fan night the basement cooled about 60% faster (see 08).

@@ -1,6 +1,6 @@
 # 08 Heat flux of running the furnace fan
 
-**Status:** revised; the blower never stops for more than 12 minutes, so there is no fan-off baseline; needs a deliberate test
+**Status:** testing; no-fan nights 2-16 Nov 2026; the first night shows the fan keeps the basement warm and does little else
 
 **Claim:** Temperature gradients across several rooms while the fan runs (without heating/cooling) reveal the heat flux the fan moves between rooms.
 
@@ -38,3 +38,22 @@ The first look compared the master bedroom's warming during heating calls with t
 `homeassistant/no_fan_nights.yaml`, installed in Home Assistant as two automations ("No-fan night: start" and "No-fan night: end"): on even days of the year, 23:00 to 06:00 local, every thermostat's fan minimum on-time is set to 0 and the fan mode to auto; at 06:00 (or when Home Assistant starts during the day) they go back to 15 min/h (z2: 40). Heating is unchanged; a heat call still runs the blower and the analysis uses the time between calls. First night 2 November, last 16 November (8 nights, with 7 normal nights between them). `scripts/fan_mixing.py` finds these nights from the thermostats' `fan_min_on_time` attribute.
 
 Owner's note: the blower probably does not stop when a zone goes from a fan-only call to a heating call. That fits the power data: the +0.2 kW "heat on" step in 14 was measured with the blower already running for the fan, so it is the extra draw of heating over fan-only, not the blower starting. It also means the 3-minute "off" gaps above may not be real stops (a furnace usually has a fan-off delay), which would explain why no step shows at them. The no-fan nights will give the first real off-to-on edges for the fan-only power.
+
+### First no-fan night (2 to 3 November 2026, times in UTC-6)
+
+The automations worked: all four thermostats went to a fan minimum of 0 at 23:00 and back at 06:00 (Z4 at 06:04). No zone called from 23:00 to 05:00, so the blower was off for 6 hours, the first fan-off stretch in the data. The night of 3 to 4 November (a normal fan night, as 3 November is an odd day of the year) also had no calls from 23:00 to 05:00, so it is the comparison. Floor means of 15-minute bins:
+
+| 23:00 to 05:00 | No fan (2-3 Nov) | Fan on (3-4 Nov) |
+|---|---|---|
+| Outdoor | about 4.5 C | about 1.8 C |
+| Basement (Z2, S, NE, SE) | 21.72 to 20.34 (-1.38) | 21.11 to 20.26 (-0.85) |
+| Main floor (kitchen, Z4, W bedroom, office) | 21.82 to 20.43 (-1.39) | 21.95 to 20.56 (-1.39) |
+| Upstairs (master, N bedroom, bath) | 20.39 to 19.81 (-0.58) | 20.99 to 20.37 (-0.62) |
+| Spread of all rooms (std) | 0.86 to 0.65 | 0.81 to 0.63 |
+
+- **The blower keeps the basement warm.** Without it the basement cooled about 60% faster, on a night about 3 C milder outside. The S and SE basement bedrooms fell 1.9 and 2.0 C from 23:00 to 06:00, against 1.3 and 0.8 C with the fan. With the fan on, the returns take main-floor air and the basement supplies push it down, so the fan minimum on-time works as a small basement heater fed by the main floor.
+- **Otherwise the fan does little at night.** The main floor and upstairs cooled the same with or without it, and the spread between rooms closed the same way. In the heating season the fan does not help the master bedroom.
+- **The fan-only blower is cheap.** `scripts/blower_power.py --days 3 --edge 5` found 18 clean fan switch-ons (the first real off-to-on edges) with a median step of -0.02 kW (quartiles -0.06 to +0.03), within the whole-house meter's noise: probably under about 50 W. The 7 "fan off" edges at +0.20 kW are most likely the fan flag dropping as a heat call starts (the +0.2 kW heat step in 14), not the blower.
+- **Do not read `fan_mixing.py`'s k table yet.** With 4 days (`--days 4 --bin 5`), "still" has a larger k than "fan only" for most rooms (Z2 basement 2.75 against 1.05/h). All 78 still bins come from this one night, which began just after a Z3 + Z4 heat call (22:00 to 22:20), so the fit mostly measures the house settling after that call. It needs more nights.
+- Caveats: one night. The basement started warmer than on 3 to 4 November (21.7 against 21.1 C) and so had more to lose. The upstairs bathroom rose 0.4 C overnight (probably a shower).
+- Watch for: a colder basement on no-fan nights may make Z2 call overnight, which runs the blower and shortens the still stretch.
