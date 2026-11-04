@@ -1,0 +1,328 @@
+# Splitting the lab into three integrations
+
+Home Thermal Lab has grown three jobs: describing the house, sizing its
+heating and cooling (Manual J, S and D), and the experiments that learn how
+the house behaves and forecast its thermostats. This spec splits them into
+three integrations. Nothing here is built yet.
+
+| Integration | Repo | Domain | Job |
+| --- | --- | --- | --- |
+| House Structure | `ha-house-structure` (exists) | `house_structure` | The house and its parts, drawing it, and the **Thermal Lab** sidebar page that the other two add tabs to |
+| Manual J | `ha-manual-j` (new) | `manual_j` | Manual J, S and D: static loads from the house, the design weather and the equipment |
+| Home Thermal Lab | `ha-home-thermal-lab` (this one) | `home_thermal_lab` | Experiments, fitted models, shadow zones, forecasts, energy sensors |
+
+Dependencies run one way, with one optional back-reference:
+
+```
+House Structure  <--  Manual J  <--(optional)--  Home Thermal Lab
+       ^                                                      |
+       +------------------------------------------------------+
+```
+
+Manual J and Thermal Lab both list `house_structure` under `dependencies` in
+their `manifest.json`. Home Assistant then won't set either of them up unless
+House Structure is installed, and always sets House Structure up first, so
+its rooms are published before they're needed. Neither works on its own:
+
+- Manual J has no input without House Structure. The rooms, walls, windows,
+  ducts, equipment and buildings are what it calculates from.
+- Thermal Lab could keep working from settings typed on each zone, as it does
+  today. But once rotation and roofs live only in House Structure (below),
+  typed window faces have no house to turn by. Keeping the fallback would mean
+  keeping a second copy of the house in the lab, which is what this split is
+  meant to remove. So the fallback goes: a zone is a room (area) in House
+  Structure.
+
+Manual J *reads* Thermal Lab's fitted cooling rates when Thermal Lab is
+installed, to fill the "UA fitted" and "Fitted ÷ calc" columns, and leaves
+them empty when it isn't. That's why it's `after_dependencies`, not a
+dependency. No integration imports another's Python. They share data through
+`hass.data`, as House Structure and the lab already do.
+
+## The Thermal Lab page (House Structure)
+
+House Structure registers the sidebar panel. Its title is **Thermal Lab** and
+its URL is `/thermal-lab`. The page is a frame: a heading, a tab bar across the
+top, and an iframe that shows the chosen tab. Each tab is a page that its own
+integration serves, so each integration ships its own HTML and its own
+websocket commands, and can be released on its own. Chart.js is shared
+(below).
+
+### Registering a tab (the plugin contract)
+
+An integration adds a tab by putting an entry in
+`hass.data["house_structure_tabs"]`. It doesn't have to import House
+Structure or wait for it to load:
+
+```python
+tabs = hass.data.setdefault("house_structure_tabs", {})
+tabs["hvac_design"] = {
+    "title": "HVAC design",
+    "url": "/manual_j_static/index.html?v=<hash>",
+    "order": 20,
+}
+hass.bus.async_fire("house_structure_tabs_updated")
+```
+
+It removes the entry, and fires the event again, when it unloads.
+
+- `title`: the tab's label.
+- `url`: the page to show in the iframe. A cache-busting `?v=` is up to the
+  integration.
+- `order`: where the tab goes, from low to high. House Structure's own tab is
+  10, Manual J is 20, Thermal Lab's tabs start at 30.
+
+The frame lists the tabs over its websocket command
+`house_structure/tabs` (a list of `{key, title, url, order}`, in order). It
+also subscribes to `house_structure_tabs_updated`, so a tab appears or goes
+away without a reload. It remembers the chosen tab in `localStorage` and in
+the URL hash (`/thermal-lab#hvac_design`), so a tab can be linked to.
+
+### What a tab page gets
+
+A tab page sits two iframes deep (the panel, then the frame), so it can't use
+`window.parent.hassConnection` as the lab's page does today. The frame
+re-exports what it gets from Home Assistant:
+
+- `window.hassConnection`: the frame sets it to its parent's, so a tab page
+  still uses `parent.hassConnection` and asks over Home Assistant's own
+  websocket, with no separate login.
+- Theme: a tab page reads Home Assistant's CSS variables and dark mode from
+  `window.top.document` rather than `window.parent.document`. The frame keeps
+  no theme of its own.
+
+`frontend/tab.js` in House Structure holds these two helpers (connection and
+theme), so a tab page can load it from `/house_structure_static/tab.js`
+instead of copying it.
+
+### Chart.js, shipped once
+
+House Structure vendors Chart.js. The lab already does this:
+`chart.umd.min.js`, pinned in `vendor.json`, refreshed with `invoke vendor`,
+checked by `test_vendor.py`. All of it moves to House Structure, which serves
+the file at `/house_structure_static/chart.umd.min.js` with long cache
+headers. Tab pages load it from there, and the lab and Manual J don't carry a
+copy. Both depend on House Structure, so the file is always there. One pinned
+version means one place to upgrade it, and a Chart.js upgrade is a House
+Structure release that the other tabs must keep working with.
+
+### House Structure's own tab: House
+
+Order 10. It draws the whole house, with its rooms put together in place, and
+a picker to show one room on its own (`room.svg`, as now). It also lists the
+equipment parts (below).
+
+The house is drawn as layers that can be switched on and off with chips over
+the drawing. The choice is remembered in `localStorage`:
+
+| Layer | From | Default |
+| --- | --- | --- |
+| Rooms (walls, roofs, windows, doors) | House Structure | always on |
+| Heating runs (registers and their ducts) | House Structure | on |
+| Heat flow (lab overlay) | Thermal Lab, when installed | off |
+
+To make that possible, `house_svg` (in `drawing.py`) changes in two ways. The
+page fetches `plan.svg` as text and puts it inline, not in an `<img>`, so it
+can reach inside the drawing.
+
+- **Layer groups**: each layer is a `<g data-layer="rooms">`,
+  `<g data-layer="runs">`, and so on. The page hides a layer by toggling a
+  class, without fetching the drawing again.
+- **Anchors**: an empty `<g data-layer="anchors">` holds points the drawing
+  already works out but doesn't keep:
+  - `data-room` (area id): each room's projected floor centre;
+  - `data-between="<area>|<area>"`: the middle of each wall two rooms share
+    (`_shared_face`);
+  - `data-outside="<area>|<face>"`: the middle of each outside face;
+  - `data-register` (part id): each register's outlet.
+
+  These are in the drawing's own pixel space, so an overlay can draw arrows
+  and labels at them without knowing about the projection.
+
+### Overlays (the second plugin contract)
+
+An overlay is registered the same way a tab is, in
+`hass.data["house_structure_overlays"]`, followed by the event
+`house_structure_overlays_updated`:
+
+```python
+overlays = hass.data.setdefault("house_structure_overlays", {})
+overlays["heat_flow"] = {
+    "title": "Heat flow",
+    "command": "home_thermal_lab/heat_flow",  # a websocket command
+    "refresh_s": 60,
+}
+```
+
+The House tab shows a chip for each registered overlay. When a chip is on,
+the tab calls the overlay's websocket command, again every `refresh_s`, and
+draws what comes back at the anchors. The command answers with flows in
+watts, all optional:
+
+```json
+{
+  "as_of": "2026-11-04T21:00:00Z",
+  "between": [{"from": "kitchen", "to": "office", "w": 85.0}],
+  "outside": [{"room": "office", "face": "N", "w": -140.0}],
+  "heating": [{"room": "office", "w": 420.0}],
+  "solar": [{"room": "office", "w": 60.0}],
+  "notes": ["Z3 has no fitted model yet."]
+}
+```
+
+House Structure draws these, so every overlay looks alike:
+- an arrow across each shared wall, pointing the way heat moves, sized by its
+  watts and labelled with them;
+- an arrow at each outside face;
+- a flame at the register for `heating`;
+- a sun at the room centre for `solar`;
+- the `notes` under the drawing.
+
+House Structure draws whatever an overlay sends. It doesn't need to know what
+the flows mean.
+
+## House Structure: new parts
+
+Three new sub-entry types. They are parts of the house, and both Manual J and
+the lab read them.
+
+- **Furnace**: the room it's in (area), stage inputs in BTU/h (high, and low if
+  it has two stages), AFUE (%), and the blower curve (the text
+  `parse_blower` reads today). Moved from the lab's energy sub-entry.
+- **Air conditioner**: capacity in tons, sensible capacity in BTU/h
+  (optional). Moved from the lab's energy sub-entry.
+- **Building**: a detached building (a garage, say): its name and its areas.
+  Moved from the lab's building sub-entry. Its setpoints go to Manual J
+  (below), since they're design conditions, not part of the building.
+
+`publish_rooms` adds them to the summary: `hass.data["house_structure"]` gets
+`"equipment": {"furnace": {...}, "ac": {...}}` and `"buildings": [...]`, and
+`SUMMARY_VERSION` goes up by one. They show on the House tab and on Manual J's
+HVAC design tab.
+
+## Manual J
+
+A new integration and repo, set up to the Python style guide (run
+`python-style:audit` when creating it).
+
+Moves from this repo, with their tests:
+
+- `manual.py`, split so each manual is its own file. Each file uses the
+  standard library only, so all of them are tested without Home Assistant.
+  The split follows the sections already in `manual.py`:
+  - `air.py`: air properties and units (`rho_cp`, `air_density`, `inches`,
+    `btu_h`, …).
+  - `building.py`: `Surface`, `Room`, `Design`, the design temperatures from
+    the record, humidity, and the envelope from measurement (`room_capacity`,
+    `ua_from_rate`, `envelope_scale`, window U-values).
+  - `manual_j.py`: room loads (`heating_load`, `cooling_load`,
+    `room_airflow`, `room_load`, `RoomLoad`).
+  - `manual_s.py`: equipment (`Furnace`, `AirConditioner`, `check_heating`,
+    `check_cooling`).
+  - `manual_d.py`: ducts (`Segment`, `Run`, `evaluate_run`,
+    `round_size_for_friction`, `available_static`).
+  - `project.py`: `Project` and `calculate`, which run J, then S, then D.
+
+  `test_manual.py` splits the same way: `test_manual_j.py`,
+  `test_manual_s.py`, `test_manual_d.py` and `test_project.py`.
+- `house_model.py` (the project from House Structure's summary) and
+  `test_house_model.py`
+- `loads.py` (design conditions from the record, equipment, `assemble_all`)
+  and `test_loads.py`
+- From `panel.py`: `ws_loads`, `_hourly_outdoor` and its hourly cache,
+  `_buildings`, `_energy_settings`, `_house_settings`, `_rates`
+- From `frontend/index.html`: the Loads view, which becomes the **HVAC design**
+  tab's page
+- `docs/prior-art-eldr.md`, `docs/prior-art-projects-manual-j.md`, and the
+  Manual J parts of `docs/house-structure-duct-spec.md`
+
+Its own settings (one config entry, no sub-entries):
+
+- **Outdoor temperature sensor**: the recorded record the design temperatures
+  come from (two years of hourly means, as now). This is its only live input.
+  Without it, the assumed design conditions are used, as today.
+- **Envelope defaults**: `infiltration_ach`, `wall_r`, `roof_r`, `door_r` and
+  `basement_floor_r` (`ENVELOPE_SETTINGS`), moved from the lab's integration
+  settings.
+- **Building setpoints**: the indoor heating and cooling design temperatures
+  for each House Structure building, keyed by the building's name. They're
+  moved from the lab's building sub-entry. A building with none set uses the
+  house's.
+
+It reads from House Structure the rooms, ducts, equipment and buildings, and
+reloads its results on `house_structure_updated`. It reads Thermal Lab's
+fitted rates if they're there (below). Its websocket command is
+`manual_j/loads`.
+
+## Home Thermal Lab after the split
+
+- Stops registering its own sidebar panel. Registers the **Zones** tab
+  (order 30) instead, with the zone view of `frontend/index.html`. Later lab
+  views become more tabs (31, 32, …) or views inside Zones.
+- Publishes each zone's fitted cooling rate for Manual J:
+  `hass.data["home_thermal_lab_fitted"] = {area_id: {"a": per_hour}}`, updated
+  when a fit changes, with the event `home_thermal_lab_fitted_updated`. This
+  takes the place of `panel._rates`.
+- Registers the **Heat flow** overlay on the House tab (above), through its
+  command `home_thermal_lab/heat_flow`. Each value is for the current hour:
+  - `between`: each internal wall's temperature difference (House Structure's
+    sensor) times its conductance. The conductance is the wall's area times
+    its U-value (Manual J's nominal for an internal wall) to start with, and
+    the fitted crossover rate where hypothesis 06/10 has one.
+  - `outside`: each room's outside faces, from the zone's fitted loss `a`
+    shared out over the faces by area.
+  - `heating`: the zone's learned heating rate `h` while its register is
+    calling, shared out over the zone's registers.
+  - `solar`: the zone's fitted solar term `g` times the sun on its windows. It
+    is the gain the model credits the room with. House Structure's own window
+    sensors give the glass's figure. The overlay notes both when they differ
+    by more than half.
+
+  A room with no fitted zone gets no values, and a note says so.
+- Drops the envelope settings from its integration settings, the nameplate
+  fields (`afue`, `blower_curve`, `cool_tons`, `ac_sensible_btuh`, `area_id`)
+  from the energy sub-entry, and the building sub-entry. The energy sensors
+  keep their per-state powers (`kw`), which are what they model.
+- Drops the house rotation and roofs from its integration settings, along
+  with its own `orientation.py`, `map_view.py`, the roof parsing in
+  `options.py` and the outline drawing on its settings form. House Structure
+  already measures the rotation from OpenStreetMap and has roof parts, so
+  only one copy is left.
+- Depends on House Structure (above). Each zone, contribution chart and
+  call-statistics sensor takes its room from House Structure: the
+  thermostat, room sensor, windows, roofs, sunlit walls and below-ground
+  setting. Settings typed on the zone that only stood in for the room (window
+  faces, sunlit walls, per-zone rotation) are removed. Overrides that are
+  about the experiment rather than the house (a pinned model, the target
+  wave, the deadband) stay. YAML zones need an `area_id`.
+
+## Moving existing settings
+
+There's one house, so a one-off move by hand is enough: type the furnace, AC
+and garage into House Structure, and the envelope defaults and garage
+setpoints into Manual J, before upgrading the lab. Check that House
+Structure's rotation and roofs match the lab's, and that every zone has a
+room. Diagnostics from the lab before the upgrade keep a
+copy of the old values. The lab's config entry migration then removes the old
+keys.
+
+## Order of work
+
+Each step leaves all three working.
+
+1. **House Structure**: the frame page, `house_structure/tabs`, `tab.js`,
+   Chart.js and its vendoring, the House tab with the layered drawing,
+   anchors and the overlay contract, and the Furnace, Air conditioner and
+   Building parts in the summary. The lab still has its own sidebar entry and
+   its own Chart.js, so for now there are two of each.
+2. **Manual J**: the new repo with the moved code and tests, its
+   settings, and the HVAC design tab. Its fitted columns stay empty until step
+   3 publishes the rates. The lab's own Loads view keeps working alongside it.
+3. **Home Thermal Lab**: register the Zones tab and drop the old panel and its
+   Chart.js, publish the fitted rates, add the Heat flow overlay, remove the moved code, settings and tests, and update the
+   README, CHANGELOG and hypotheses that point at the Loads tab.
+4. **Home Thermal Lab, rotation and roofs**: add the `house_structure`
+   dependency, read rotation and roofs from House Structure, and remove the
+   lab's copies and the zone-typed fallback. This is its own step because it
+   touches the fitting code (`learn.py`, `sensor.py`, `options.py`), not just
+   the panel.
