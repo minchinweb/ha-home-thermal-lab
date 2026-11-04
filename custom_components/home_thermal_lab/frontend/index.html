@@ -60,6 +60,7 @@
   .tile .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
   .chart-main { position: relative; height: 360px; }
   .chart-strip { position: relative; height: 54px; margin-top: 4px; }
+  .chart-outdoor { position: relative; height: 170px; margin-top: 8px; }
   .legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; font-size: 13px; }
   .legend label { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; }
   .swatch { width: 18px; height: 0; border-top: 3px solid; display: inline-block; }
@@ -107,12 +108,14 @@
       <span class="spacer"></span>
       <div class="bar" id="ranges" role="group" aria-label="Range" style="margin:0"></div>
     </div>
-    <div class="chart-main"><canvas id="main" aria-label="Room and outdoor temperature, target band and forecast"></canvas></div>
+    <div class="chart-main"><canvas id="main" aria-label="Room temperature, the other rooms on the thermostat, target band and forecast"></canvas></div>
     <div class="chart-strip"><canvas id="strip" aria-label="Heating calls, and the forecast furnace duty"></canvas></div>
+    <div class="chart-outdoor"><canvas id="outdoor" aria-label="Outdoor temperature and forecast"></canvas></div>
     <div class="legend" id="legend"></div>
     <p class="hint">Dashed lines after the "now" mark are the forecast for the next day (the usual day plus what the zone model, with the thermostat and the neighbouring zones simulated, says differs today).
-      The dotted line is what the forecast said three hours earlier, laid over what happened. The red strip is the zone's heating calls,
-      then the forecast furnace duty.</p>
+      The dotted line is what the forecast said three hours earlier, laid over what happened. The faint lines are the other rooms on the same thermostat.
+      The red strip is the zone's heating calls, then the forecast furnace duty. The room chart keeps one scale for every zone, and shows the outdoor
+      temperature only where it comes into that range; the outdoor chart below keeps one scale all year.</p>
   </section>
 
   <section class="card">
@@ -131,6 +134,7 @@ const REFRESH_MS = 5 * 60e3;
 const state = { zones: [], zone: null, hours: 24, data: null, hidden: new Set() };
 let mainChart = null;
 let stripChart = null;
+let outdoorChart = null;
 
 function remember(key, value) {
   try { localStorage.setItem("home_thermal_lab." + key, JSON.stringify(value)); } catch (e) { /* private mode */ }
@@ -324,27 +328,64 @@ const nowLine = {
 
 const AXIS_WIDTH = 58;
 
-function datasets(d) {
-  const room = css("--room");
+const lineDefaults = (ds) => ({ ...ds, tension: 0, parsing: false, normalized: true });
+
+function outdoorLines(d, width) {
   const outdoor = css("--outdoor");
   return [
+    { key: "outdoor", label: "Outdoor", data: xy(d.history.outdoor), borderWidth: width, pointRadius: 0, borderColor: outdoor, spanGaps: 2 * 3600e3 },
+    { key: "outdoorAhead", label: "Outdoor forecast", data: xy(d.future.outdoor), borderWidth: width, pointRadius: 0, borderColor: outdoor, borderDash: [6, 4] },
+  ];
+}
+
+/* The indoor chart: the zone's room, the other rooms on its thermostat (faint),
+   and the outdoor temperature, which the fixed scale clips to where it comes
+   into the indoor range. */
+function datasets(d) {
+  const room = css("--room");
+  const others = (d.others || []).map((o) => ({
+    key: "others", label: o.name, data: xy(o.points), borderWidth: 1.25, pointRadius: 0,
+    borderColor: room + "59", spanGaps: 30 * 60e3, stepped: "after",
+  }));
+  return [
+    ...others,
     { key: "band", label: "Target band", data: bandPoints(d, "lower"), borderWidth: 0, pointRadius: 0, fill: false, stepped: "after", borderColor: "transparent" },
     { key: "band", label: "Target band (upper)", data: bandPoints(d, "upper"), borderWidth: 1, pointRadius: 0, fill: "-1", stepped: "after", borderColor: css("--band-edge"), backgroundColor: css("--band") },
     { key: "setpoint", label: "Thermostat setpoint", data: xy(d.history.setpoint), borderWidth: 1.5, pointRadius: 0, stepped: "after", borderColor: css("--setpoint"), borderDash: [2, 3], spanGaps: false },
     { key: "room", label: "Room", data: xy(d.history.room), borderWidth: 2, pointRadius: 0, borderColor: room, spanGaps: 30 * 60e3, stepped: "after" },
     { key: "issued", label: "Forecast made 3 h before", data: xy(d.history.issued), borderWidth: 1.5, pointRadius: 0, borderColor: room, borderDash: [1, 3], spanGaps: 60 * 60e3 },
     { key: "ahead", label: "Room forecast", data: xy(d.future.temp), borderWidth: 2, pointRadius: 0, borderColor: room, borderDash: [6, 4] },
-    { key: "outdoor", label: "Outdoor", data: xy(d.history.outdoor), borderWidth: 1.5, pointRadius: 0, borderColor: outdoor, spanGaps: 2 * 3600e3, yAxisID: "y2" },
-    { key: "outdoorAhead", label: "Outdoor forecast", data: xy(d.future.outdoor), borderWidth: 1.5, pointRadius: 0, borderColor: outdoor, borderDash: [6, 4], yAxisID: "y2" },
-  ].map((ds) => ({ ...ds, hidden: state.hidden.has(ds.key), tension: 0, parsing: false, normalized: true }));
+    ...outdoorLines(d, 1.5),
+  ].map((ds) => lineDefaults({ ...ds, hidden: state.hidden.has(ds.key) }));
 }
 
+/* A fixed temperature axis from the server's span, or a self-scaling one. */
+function tempAxis(span, color, title) {
+  return {
+    min: span ? span[0] : undefined, max: span ? span[1] : undefined,
+    grid: { color: css("--line") }, ticks: { color, callback: (v) => v + "°" },
+    title: { display: true, text: title, color },
+    afterFit: (scale) => { scale.width = AXIS_WIDTH; },
+  };
+}
+
+/* Leave out of the tooltip what the fixed scale clips away. */
+function inView(item) {
+  const y = item.parsed.y;
+  const scale = item.chart.scales.y;
+  return y === null || (y >= scale.min && y <= scale.max);
+}
+
+/* show: "labels" (grid and time labels), "grid" (grid only) or false. */
 function xScale(min, max, show) {
   return {
-    type: "linear", min, max, display: show,
+    type: "linear", min, max, display: Boolean(show),
     grid: { color: css("--line") },
     afterBuildTicks: (scale) => { scale.ticks = ticksFor(min, max); },
-    ticks: { color: css("--muted"), maxRotation: 0, autoSkip: true, callback: (v) => tickLabel(v, max - min) },
+    ticks: {
+      display: show === "labels", color: css("--muted"), maxRotation: 0, autoSkip: true,
+      callback: (v) => tickLabel(v, max - min),
+    },
   };
 }
 
@@ -360,8 +401,12 @@ function drawCharts(d) {
       title: (items) => items.length ? new Date(items[0].parsed.x).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" }) : "",
       label: (item) => `${item.dataset.label}: ${item.parsed.y === null ? "–" : item.parsed.y.toFixed(2)} °C`,
     },
-    filter: (item) => item.dataset.label !== "Target band (upper)",
+    filter: (item) => item.dataset.label !== "Target band (upper)" && inView(item),
   };
+  const scales = d.scales || {};
+  // The room chart: one fixed scale for every zone, so zones compare at a
+  // glance. Outdoor gets its own chart below (in winter it is 20 to 40 degrees
+  // below the room, and a shared axis would flatten the room's changes).
   const mainConfig = {
     type: "line",
     data: { datasets: datasets(d) },
@@ -369,26 +414,32 @@ function drawCharts(d) {
       ...common,
       layout: { padding: { top: 14 } },
       scales: {
-        x: xScale(min, max, true),
-        y: {
-          grid: { color: css("--line") }, ticks: { color: css("--room"), callback: (v) => v + "°" },
-          title: { display: true, text: "room", color: css("--room") },
-          afterFit: (scale) => { scale.width = AXIS_WIDTH; },
-        },
-        // Outdoor on its own axis: in winter it is 20 to 40 degrees below the
-        // room, and one axis would flatten the room's half-degree changes.
-        y2: {
-          position: "right", grid: { display: false },
-          ticks: { color: css("--outdoor"), callback: (v) => v + "°" },
-          title: { display: true, text: "outdoor", color: css("--outdoor") },
-          afterFit: (scale) => { scale.width = AXIS_WIDTH; },
-        },
+        x: xScale(min, max, "grid"),
+        y: tempAxis(scales.indoor, css("--room"), "room"),
       },
       plugins: {
         legend: { display: false },
         decimation: { enabled: true, algorithm: "lttb", samples: 600 },
         tooltip,
         nowLine: { now: d.now, label: true },
+      },
+    },
+    plugins: [nowLine],
+  };
+  const outdoorConfig = {
+    type: "line",
+    data: { datasets: outdoorLines(d, 1.75).map((ds) => lineDefaults({ ...ds, key: null })) },
+    options: {
+      ...common,
+      scales: {
+        x: xScale(min, max, "labels"),
+        y: tempAxis(scales.outdoor, css("--outdoor"), "outdoor"),
+      },
+      plugins: {
+        legend: { display: false },
+        decimation: { enabled: true, algorithm: "lttb", samples: 600 },
+        tooltip: { callbacks: tooltip.callbacks },
+        nowLine: { now: d.now, label: false },
       },
     },
     plugins: [nowLine],
@@ -411,10 +462,6 @@ function drawCharts(d) {
           ticks: { display: true, color: css("--muted"), callback: (v) => (v === 1 ? "heat" : "") },
           afterFit: (scale) => { scale.width = AXIS_WIDTH; },
         },
-        y2: {
-          position: "right", min: 0, max: 1, grid: { display: false }, ticks: { display: false },
-          afterFit: (scale) => { scale.width = AXIS_WIDTH; },
-        },
       },
       plugins: {
         legend: { display: false },
@@ -427,21 +474,29 @@ function drawCharts(d) {
   };
   if (mainChart) mainChart.destroy();
   if (stripChart) stripChart.destroy();
+  if (outdoorChart) outdoorChart.destroy();
   mainChart = new Chart(document.getElementById("main"), mainConfig);
   stripChart = new Chart(document.getElementById("strip"), stripConfig);
-  drawLegend();
+  outdoorChart = new Chart(document.getElementById("outdoor"), outdoorConfig);
+  drawLegend(d);
 }
 
-function drawLegend() {
+/* Toggles for the room chart's lines; the outdoor chart always shows its own. */
+function drawLegend(d) {
   const items = [
     ["room", "Room", "", css("--room")],
     ["ahead", "Room forecast", "dashed", css("--room")],
     ["issued", "Forecast made 3 h before", "dotted", css("--room")],
-    ["outdoor", "Outdoor", "", css("--outdoor")],
+  ];
+  if (d.others && d.others.length) {
+    items.push(["others", "Other rooms on this thermostat (" + d.others.map((o) => o.name).join(", ") + ")", "", css("--room") + "59"]);
+  }
+  items.push(
+    ["outdoor", "Outdoor, in the room range", "", css("--outdoor")],
     ["outdoorAhead", "Outdoor forecast", "dashed", css("--outdoor")],
     ["setpoint", "Thermostat setpoint", "dotted", css("--setpoint")],
     ["band", "Target band", "box", null],
-  ];
+  );
   const legend = document.getElementById("legend");
   legend.replaceChildren(...items.map(([key, label, style, color]) => {
     const box = el("input", { type: "checkbox" });

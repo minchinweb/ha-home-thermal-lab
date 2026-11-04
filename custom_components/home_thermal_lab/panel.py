@@ -10,30 +10,51 @@ websocket connection (no separate login):
 * ``home_thermal_lab/zones``: the zones and their sensors.
 * ``home_thermal_lab/zone`` (``zone``, ``hours``): one zone's history (room,
   outdoor, setpoint, target band, forecasts as issued, heating calls), the day
-  ahead, the model card and the status tiles.
+  ahead, the model card and the status tiles; the other rooms on the zone's
+  thermostat (from House Structure); and the fixed chart scales, one indoor
+  span shared by every zone and one outdoor span for the whole year.
 """
 
 from __future__ import annotations
 
+import asyncio
 from datetime import UTC, datetime, timedelta
 import hashlib
+import logging
 from pathlib import Path
 
 from homeassistant.components import frontend, websocket_api
 from homeassistant.components.http import StaticPathConfig
+from homeassistant.components.recorder import get_instance
+from homeassistant.components.recorder.statistics import statistics_during_period
 from homeassistant.core import callback
+from homeassistant.helpers import area_registry as ar
 import voluptuous as vol
 
 from . import DOMAIN
 from .calls import temperature_series
 from .ha_rows import numbers, recorded
-from .options import has_walls
-from .panel_data import archive, future, heating_spans, ms, series
+from .options import STRUCTURE_DOMAIN, has_walls, structure_rooms
+from .panel_data import (
+    archive,
+    future,
+    heating_spans,
+    ms,
+    same_thermostat,
+    series,
+    setpoints,
+    span,
+    statistic_values,
+)
+
+_LOGGER = logging.getLogger(__name__)
 
 STATIC_URL = "/home_thermal_lab_static"
 PANEL_PATH = "home-thermal-lab"
 FRONTEND = Path(__file__).parent / "frontend"
 MAX_HOURS = 24 * 60  # the recorder keeps 60 days here
+SCALES_EVERY = timedelta(hours=6)  # how often the fixed chart scales are redone
+STATISTICS_SINCE = datetime(2000, 1, 1, tzinfo=UTC)  # long-term statistics: all
 
 
 def _version() -> str:
@@ -103,6 +124,93 @@ def _state(hass, entity_id: str | None):
     return state.state if state else None
 
 
+async def _extremes(hass, entity_id: str) -> list[float]:
+    """Every hourly min and max in an entity's long-term statistics (all kept)."""
+    found = await get_instance(hass).async_add_executor_job(
+        statistics_during_period,
+        hass,
+        STATISTICS_SINCE,
+        None,
+        {entity_id},
+        "month",
+        None,
+        {"min", "max"},
+    )
+    return statistic_values(found.get(entity_id, []))
+
+
+async def _work_out_scales(hass) -> dict:
+    """The fixed temperature axes of the charts.
+
+    Indoor: one span for every zone, around each zone's room temperature and
+    thermostat setpoints over the recorder's history (``MAX_HOURS``) and its
+    target wave's band. Outdoor: one span all year, around the outdoor
+    sensor's long-term statistics (its recorded history if it has none).
+    """
+    brains = list(_zones(hass).values())
+    if not brains:
+        return {"indoor": None, "outdoor": None}
+    end = datetime.now(UTC)
+    start = end - timedelta(hours=MAX_HOURS)
+    outdoor_id = brains[0].outdoor_entity
+    ids = {outdoor_id}
+    for brain in brains:
+        ids.add(brain.zone["climate_entity"])
+        if brain.zone.get("room_entity"):
+            ids.add(brain.zone["room_entity"])
+    rows = await recorded(hass, sorted(ids), start, end)
+    indoor: list[float] = []
+    for brain in brains:
+        climate_rows = rows[brain.zone["climate_entity"]]
+        room_id = brain.zone.get("room_entity")
+        room = numbers(rows[room_id]) if room_id else temperature_series(climate_rows)
+        indoor += [v for _, v in room]
+        indoor += setpoints(climate_rows)
+        wave = brain.wave
+        if wave is not None:
+            indoor += [
+                wave.mean - wave.swing - wave.band,
+                wave.mean + wave.swing + wave.band,
+            ]
+    try:
+        outdoor = await _extremes(hass, outdoor_id)
+    except Exception:  # fall back to the recorded history
+        _LOGGER.debug("No long-term statistics for %s", outdoor_id, exc_info=True)
+        outdoor = []
+    if not outdoor:
+        outdoor = [v for _, v in numbers(rows[outdoor_id])]
+    return {"indoor": span(indoor, 1.0), "outdoor": span(outdoor, 5.0)}
+
+
+async def _scales(hass) -> dict:
+    """The fixed chart scales, worked out at most every ``SCALES_EVERY``."""
+    data = hass.data.setdefault(DOMAIN, {})
+    lock = data.setdefault("scales_lock", asyncio.Lock())
+    async with lock:
+        cached = data.get("scales")
+        now = datetime.now(UTC)
+        if cached is None or now - cached[0] > SCALES_EVERY:
+            try:
+                cached = (now, await _work_out_scales(hass))
+            except Exception:  # the charts then scale themselves
+                _LOGGER.warning("Could not work out the chart scales", exc_info=True)
+                cached = (now, {"indoor": None, "outdoor": None})
+            data["scales"] = cached
+        return cached[1]
+
+
+def _others(hass, zone: dict) -> list[tuple[str, str]]:
+    """``(name, temperature sensor)`` of the other rooms on the zone's thermostat."""
+    rooms = structure_rooms(hass.data.get(STRUCTURE_DOMAIN))
+    skip = {zone["room_entity"]} if zone.get("room_entity") else set()
+    areas = ar.async_get(hass)
+    out = []
+    for area_id, sensor in same_thermostat(rooms, zone["climate_entity"], skip):
+        area = areas.async_get_area(area_id)
+        out.append((area.name if area else area_id, sensor))
+    return out
+
+
 @websocket_api.websocket_command(
     {
         vol.Required("type"): "home_thermal_lab/zone",
@@ -127,7 +235,10 @@ async def ws_zone(hass, connection, msg) -> None:
     ent = brain.entities
     ids = [climate_id, brain.outdoor_entity]
     ids += [e for e in (room_id, ent.get("forecast"), ent.get("target")) if e]
+    others = _others(hass, zone)
+    ids += [sensor for _, sensor in others if sensor not in ids]
     rows = await recorded(hass, ids, start, end)
+    scales = await _scales(hass)
     room_rows = rows[room_id] if room_id else []
     room = (
         [[ms(t), v] for t, v in numbers(room_rows)]
@@ -146,6 +257,11 @@ async def ws_zone(hass, connection, msg) -> None:
             "name": zone["name"],
             "now": ms(end),
             "start": ms(start),
+            "scales": scales,
+            "others": [
+                {"name": name, "points": series(rows[sensor])}
+                for name, sensor in others
+            ],
             "history": {
                 "room": room,
                 "outdoor": series(rows[brain.outdoor_entity]),

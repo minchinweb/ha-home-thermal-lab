@@ -8,6 +8,7 @@ unit the chart's time axis uses.
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+import math
 
 from .hvac import runs_from_states
 
@@ -74,6 +75,66 @@ def heating_spans(rows: list[dict], end: datetime) -> list[list[int]]:
         [ms(r.start), ms(r.end)]
         for r in runs_from_states(rows, end, {"heating"}, "hvac_action")
     ]
+
+
+def span(values, step: float = 1.0) -> list[float] | None:
+    """``[low, high]`` around ``values``, out to whole multiples of ``step``.
+
+    The panel's fixed temperature axes: every zone's indoor chart uses one span,
+    and the outdoor chart one span all year. ``None`` values are skipped;
+    ``None`` comes back when nothing is left.
+    """
+    found = [v for v in values if v is not None and math.isfinite(v)]
+    if not found:
+        return None
+    low = math.floor(min(found) / step) * step
+    high = math.ceil(max(found) / step) * step
+    if high <= low:
+        high = low + step
+    return [low, high]
+
+
+def statistic_values(rows: list[dict]) -> list[float]:
+    """Every ``min`` and ``max`` in long-term statistics rows."""
+    out = []
+    for row in rows:
+        for key in ("min", "max"):
+            value = row.get(key)
+            if value is not None:
+                out.append(float(value))
+    return out
+
+
+def setpoints(rows: list[dict]) -> list[float]:
+    """Every heating and cooling setpoint in a thermostat's history."""
+    out = []
+    for row in rows:
+        attrs = row.get("attributes") or {}
+        for key in ("temperature", "target_temp_low", "target_temp_high"):
+            try:
+                out.append(float(attrs[key]))
+            except (KeyError, TypeError, ValueError):
+                continue
+    return out
+
+
+def same_thermostat(
+    rooms: dict[str, dict], climate: str, skip: set[str]
+) -> list[tuple[str, str]]:
+    """``(area id, temperature sensor)`` of House Structure's rooms on ``climate``.
+
+    A room is on the thermostat when one of its registers names it. Rooms
+    without a temperature sensor, and sensors in ``skip`` (the zone's own), are
+    left out; rooms come in area id order.
+    """
+    out = []
+    for area_id, room in sorted(rooms.items()):
+        sensor = room.get("temperature_entity")
+        if not sensor or sensor in skip:
+            continue
+        if any(r.get("climate") == climate for r in room.get("registers", [])):
+            out.append((area_id, sensor))
+    return out
 
 
 def future(points: list[dict]) -> dict[str, list[Point]]:
