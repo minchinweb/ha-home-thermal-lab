@@ -851,7 +851,21 @@ def calculate(project: Project) -> dict:
         "ua_w_per_k": ua_total,
     }
 
-    equipment: dict = {"heating": None, "cooling": None}
+    # The design size is what the loads call for, whether or not the equipment
+    # is configured; the installed size, when there is one, is checked against it.
+    equipment: dict = {
+        "heating": None,
+        "cooling": None,
+        "heating_design": {
+            "load_w": heat_total,
+            "max_w": heat_total * project.heating_max_ratio,
+        },
+        "cooling_design": {
+            "load_total_w": sens_total + lat_total,
+            "load_sensible_w": sens_total,
+            "max_total_w": (sens_total + lat_total) * project.cooling_max_ratio,
+        },
+    }
     system_flow = 0.0
     if project.furnace is not None:
         heat_check = check_heating(

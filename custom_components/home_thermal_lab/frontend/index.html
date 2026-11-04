@@ -727,32 +727,42 @@ function drawRooms(d) {
 
 function drawEquipment(d) {
   const eq = d.equipment;
+  const TON_W = 3516.85;
   const panels = [];
+  const hd = eq.heating_design;
+  const cd = eq.cooling_design;
   if (eq.heating) {
     const h = eq.heating;
     panels.push(el("div", { class: "panel" },
       el("h3", {}, "Furnace", verdictPill(h.verdict)),
       row("Located in", d.furnace_room || "not set"),
-      row("Heat loss at design", fmt(h.load_w, 0, " W")),
-      row("High stage output", fmt(h.capacity_w, 0, " W")),
-      row("High stage ÷ loss", fmt(h.ratio, 2)),
-      row("Low stage ÷ loss", h.low_stage_ratio === null ? "–" : fmt(h.low_stage_ratio, 2)),
+      row("Design size (heat loss at design)", fmt(hd.load_w, 0, " W")),
+      row("Actual size (high stage output)", fmt(h.capacity_w, 0, " W")),
+      row("Actual ÷ design", fmt(h.ratio, 2)),
+      row("Allowed up to", fmt(hd.max_w, 0, " W")),
+      row("Low stage ÷ design", h.low_stage_ratio === null ? "–" : fmt(h.low_stage_ratio, 2)),
       row("Airflow at the temperature rise", fmt(h.airflow_m3s * CFM_PER_M3S, 0, " CFM"))));
   } else {
     panels.push(el("div", { class: "panel" }, el("h3", {}, "Furnace"), row("Located in", d.furnace_room || "not set"),
+      row("Design size (heat loss at design)", fmt(hd.load_w, 0, " W")),
+      row("Actual size", "–"),
       el("p", { class: "hint" }, "No furnace nameplate yet: enter the high-stage input and AFUE on the furnace's energy entry.")));
   }
   if (eq.cooling) {
     const c = eq.cooling;
     panels.push(el("div", { class: "panel" },
       el("h3", {}, "Air conditioner", verdictPill(c.verdict)),
-      row("Cooling load, total", fmt(c.load_total_w, 0, " W")),
-      row("Cooling load, sensible", fmt(c.load_sensible_w, 0, " W")),
-      row("Capacity, total, at design outdoor", fmt(c.capacity_total_w, 0, " W")),
-      row("Total capacity ÷ load", fmt(c.ratio, 2)),
-      row("Sensible capacity ÷ load", fmt(c.sensible_ratio, 2))));
+      row("Design size, total (cooling load)", fmt(c.load_total_w, 0, " W") + " · " + fmt(c.load_total_w / TON_W, 2, " tons")),
+      row("Design size, sensible", fmt(c.load_sensible_w, 0, " W")),
+      row("Allowed up to, total", fmt(cd.max_total_w, 0, " W") + " · " + fmt(cd.max_total_w / TON_W, 2, " tons")),
+      row("Actual size, total, at design outdoor", fmt(c.capacity_total_w, 0, " W") + " · " + fmt(c.capacity_total_w / TON_W, 2, " tons")),
+      row("Actual ÷ design, total", fmt(c.ratio, 2)),
+      row("Actual ÷ design, sensible", fmt(c.sensible_ratio, 2))));
   } else {
     panels.push(el("div", { class: "panel" }, el("h3", {}, "Air conditioner"),
+      row("Design size, total (cooling load)", fmt(cd.load_total_w, 0, " W") + " · " + fmt(cd.load_total_w / TON_W, 2, " tons")),
+      row("Design size, sensible", fmt(cd.load_sensible_w, 0, " W")),
+      row("Actual size", "–"),
       el("p", { class: "hint" }, "No AC nameplate yet: enter the cooling tons and the sensible capacity on the energy entry.")));
   }
   document.getElementById("equipment").replaceChildren(...panels);

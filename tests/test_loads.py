@@ -179,7 +179,11 @@ def test_assemble_without_a_fit_leaves_the_fitted_value_empty():
     result = assemble(rooms, {}, {}, Nominal(), Design())
     assert result["rooms"][0]["ua_fit_w_k"] is None
     assert result["rooms"][0]["fit_ratio"] is None
-    assert result["equipment"] == {"heating": None, "cooling": None}
+    assert result["equipment"]["heating"] is None
+    assert result["equipment"]["cooling"] is None
+    # The design size is there even with no equipment configured.
+    assert result["equipment"]["cooling_design"]["load_total_w"] > 0
+    assert result["equipment"]["heating_design"]["load_w"] > 0
 
 
 def test_the_furnace_room_is_passed_through():
