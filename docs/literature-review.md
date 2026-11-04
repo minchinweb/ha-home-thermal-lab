@@ -74,6 +74,23 @@ Sources were read in a short session; figures and equations quoted from fetch-to
 - **Model the thermostat as hysteresis**, separate from the house. Predheat's 0.5 on / 0.1 off is testable.
 - **Model zones, not rooms, unless the data supports it.** Heating Analytics argues per-room temperatures give poor signal-to-noise. Our per-room aims need evidence.
 
+### What a 5R1C model is, and whether we need a second node
+
+*Explainer, from the RC_BuildingSimulator review and the ISO 13790 method it implements.*
+
+A 5R1C model is a lumped thermal network: five thermal resistances (R, K/W) and one thermal capacitance (C, J/K), analogous to an electrical RC circuit. Temperatures play the role of voltages and heat flows the role of currents. Resistances are the parts that slow heat flow (walls, glazing, ventilation); the capacitance stores heat.
+
+The standard layout has one capacitance on the building mass node and five resistances: mass to inside surface, inside surface to air, opaque envelope to outside, windows, and ventilation. Solar and internal gains enter the nodes, and heating or cooling holds the air at a set point.
+
+**Why a second node matters.** A one-node model (our 1R1C, with decay `k_passive`) has a single time constant `τ = 1/|k_passive|`. A mass node lets stored heat release slowly after sun or heating, which is the thermal lag a one-node model misses. That affects overnight free-floating forecasts and recovery after a cold spell most.
+
+**How it could apply to our forecasting.**
+- *Forecasts:* a two-node version would predict air temperature from weather, solar and HVAC power, with lag built in.
+- *Heating demand:* a network can answer "heat required to hold 20 °C" directly, using the linear probe method in RC_BuildingSimulator.
+- *Model check:* compare `τ` from our fits with `τ` estimated from construction layers and geometry. A large gap suggests the one-node model is missing mass. This needs no full standard.
+
+**Limits for our data.** Five resistances and one capacitance cannot be identified from indoor temperature and HVAC power alone: different combinations give the same predictions. The practical choice is likely a 2R1C (air plus mass, one envelope path), with geometry-based priors for the conductances and, if possible, a wall or floor temperature sensor to identify the mass node. The standard's constants assume the hourly step our pipeline uses, so a sub-hour forecast would need them re-derived.
+
 ### Estimation and identifiability
 - **Gate learned parameters by excitation.** RoomMind's EKF updates a parameter only when the current input can reveal it (non-zero Jacobian entry), and gates control on prediction uncertainty (below 0.5 °C) plus minimum sample counts. Both gates are worth copying.
 - **Say what a weighted estimate converges to.** Heating Analytics weights each hour's update by its solar signal, so the base model converges to dark-equivalent demand rather than the mean. Its docstring states this; ours should too.
