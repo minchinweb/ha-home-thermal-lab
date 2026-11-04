@@ -17,6 +17,7 @@ Sources were read in a short session; figures and equations quoted from fetch-to
 | **Predbat** | [springfall2008/batpred](https://github.com/springfall2008/batpred) (URL in older docs is dead) | Battery, PV and load forecasting and charge scheduling; includes Predheat | Predheat as above; SoC balance per 5 min; ML load MLP (~889k parameters, autoregressive, 48 h) | **Partly**: cloned; `predheat.py`, `docs/predheat.md`, `docs/load-ml.md`, `docs/caution.md` read; `prediction.py` grepped only. |
 | **EMHASS** | [davidusb-geek/emhass](https://github.com/davidusb-geek/emhass) | Energy management optimisation, MILP via CVXPY/HiGHS; includes a thermal battery model | Linear discrete recursion T[k+1] = T[k] + heating − γ_c·dt·(T − T_out); physics utilities for transmission, ventilation, solar, internal gains; degree-day demand; Carnot COP | **Partly**: docs plus about 3/5 of `optimization.py` and first 100 kB of `utils.py` (fetch summaries). |
 | **Home Performance** | [Hugofromfrance/home_performance](https://github.com/Hugofromfrance/home_performance) (HACS, MIT, v1.4.2) | Estimates whole-house heat-loss coefficient K (W/°C) and rates insulation A+ to D | Steady-state K = E_thermal / (ΔT × duration), 7-day rolling window, fixed thresholds, no calibration | **Partly**: `models.py` and `const.py` read. **Confirmed as the installed version** (v1.4.2): Home Assistant entity names ("Home Performance - <room> Avg delta T 24h", "Window open") match this repo's source. |
+| **Versatile Thermostat** | [jmcollin78/versatile_thermostat](https://github.com/jmcollin78/versatile_thermostat) (HACS, v10.6.3) | Feedback thermostat for switch, valve or climate heaters: presets, window, presence, power management, Auto-TPI learning | None for temperature. TPI law Kint·(T_set−T_in)+Kext·(T_set−T_out); EMA and one-step slope; no forecast | **Yes**: `prop_algo_tpi.py`, `ema.py`, `open_window_algorithm.py`, `auto_start_stop_algorithm.py`, and parts of `auto_tpi_manager.py` at commit `0860f19`. See the Versatile Thermostat code review. |
 | **GivTCP** | [britkat1980/giv_tcp](https://github.com/britkat1980/giv_tcp) | GivEnergy inverter/battery bridge (Modbus to MQTT/HA) | None for buildings. PALM sets overnight SoC target from load history and Solcast P10/P50/P90 PV forecast | **Partly**: README, CHANGELOG, `palm_*.py`, `outliers.py` (head). |
 | **Open-Meteo custom component (fork)** | [thuemah/open_meteo](https://github.com/thuemah/open_meteo) | Drop-in replacement for the HA Open-Meteo integration, adding gusts, cloud cover, humidity, pressure, GHI/DNI/DHI | None (data source) | **Yes**, README. |
 | **Plotly Graph Card** | [dbuezas/lovelace-plotly-graph-card](https://github.com/dbuezas/lovelace-plotly-graph-card) | Interactive Plotly charts on HA dashboards | None (display) | README. |
@@ -2571,6 +2572,51 @@ Read from `custom_components/heating_analytics/` at `eba9e6e` (v1.3.16, 2026-10-
 
 
 ---
+
+### Versatile Thermostat code review
+
+Read from a shallow clone of `jmcollin78/versatile_thermostat` at commit `0860f19` (manifest version 10.6.3). Read in full: `prop_algo_tpi.py`, `ema.py`, `open_window_algorithm.py`, and `auto_start_stop_algorithm.py` (lines 80–190). Read in part: `auto_tpi_manager.py` (about 3,200 lines; the functions cited below). Not read: `tpi_identification.py`, `cycle_tick_logic.py`, `pi_algorithm.py`, and the `feature_*` managers. The `documentation/en/*.md` pages were read through fetch summaries only.
+
+**What it does.** A Home Assistant custom integration (HACS) that turns a switch, valve or climate entity into a managed "virtual thermostat". Features: presets, open-window detection, motion, presence, humidity, timed presets, power and central-boiler management, safety mode, heating-failure detection, auto-start/stop, and Auto-TPI (self-learning of the heating gains). It is a feedback controller, not a building model.
+
+**How it "forecasts" (short answer: it doesn't).** There is no forecast of future temperature and no weather input to the control law. The only forward-looking element is a one-step linear extrapolation in auto-start/stop.
+
+1. **Control law: TPI** (`prop_algo_tpi.py`, `calculate()`): `on_percent = tpi_coef_int · (T_target − T_in) + tpi_coef_ext · (T_target − T_out)`, clamped to [0, 1]. Defaults: `coef_int` 0.6, `coef_ext` 0.01. It is a proportional law with an outdoor feed-forward term. There is no integral term and no lookahead. Thresholds force the output to 0 on overshoot, and take effect only when both `tpi_threshold_high` and `tpi_threshold_low` are non-zero.
+2. **Temperature smoothing: EMA** (`ema.py`, wired in `base_thermostat.py:448` and `:2349`). Time-aware alpha, `alpha = 1 − 0.5^(Δt / halflife)`, capped at `max_alpha`. Defaults: halflife 300 s, `max_alpha` 0.5, 3 decimal places.
+3. **Slope** (`open_window_algorithm.py`, `add_temp_measurement`): the two-point difference of the EMA temperature over Δt, in °C/h. It is smoothed as `0.2·old + 0.8·new` and rejected if |slope| > 120 °C/h. It is not used until 4 points are seen (`MIN_NB_POINT`). A fake point is added after 30 minutes without a measurement, so a stale gap does not produce a false slope. Slope feeds open-window detection and auto-start/stop.
+4. **Auto-start/stop** (`auto_start_stop_algorithm.py:148`): `temp_at_dt = T_in + slope_per_min · dt`, where `dt` depends on level (`DT_MIN`). Heating is turned off when `temp_at_dt ≥ target + 0.5` and the accumulated error (capped at `ERROR_THRESHOLD`) says heat is not needed; turned on when `temp_at_dt ≤ target − 0.5`. The error is scaled by elapsed time over `CYCLE_SEC = 120`. This is a constant-slope extrapolation that ignores heat input.
+5. **Auto-TPI** (`auto_tpi_manager.py`). It learns the gains that TPI uses, then runs the same law with them: `power = dir·(T_set − T_in)·K_int + dir·(T_set − T_out)·K_ext + offset` (`_calculate_power_tpi`, line 2030).
+   The learning rules imply a simple heat balance, `dT/dt ≈ K_int·P − K_ext·(T_in − T_out)`. This is inferred from the code; the docs do not state it.
+   - `_learn_indoor` (line 1027): `loss = K_ext·ΔT_out`; `adjusted_theoretical = min(target rise, capacity-limited rise)`; `ratio = adjusted_theoretical / observed_rise · aggressiveness`; `K_int_new = K_int · ratio`. Capped at `max_coef_int`, then averaged.
+   - `_learn_capacity` and `_calculate_adiabatic_capacity` (lines 1404–1409): `capacity = observed_rise_rate + K_ext·ΔT`. The heat rate is the 75th percentile of slope samples after IQR outlier removal (`calculate_capacity_from_slope_sensor`, lines 2120–2330).
+   - Averaging: "average" uses weight `min(count, 50)`. "ema" uses an adaptive alpha, 0.4 for the first 3 cycles and about 0.05 after 20 cycles for capacity (lines 1542–1566).
+   - Continuous K_ext learning: EWMA with alpha 0.04 (`_learn_kext_continuous`, line 2778). It runs only when not saturated and after one successful bootstrap.
+   - Bootstrap: while heat capacity is unknown or fewer than 3 capacity cycles exist, `calculate_power` temporarily sets K_int = 1.0 and K_ext = 0.1, and restores them in a `finally` block (lines 2007–2028).
+   - Learning gates (docs and code): ignore 0% and 100% cycles; skip a cycle where the setpoint changed mid-cycle (line 870); stop when saturated; about 50 cycles per coefficient and about 48 h per session. Auto-TPI is for switch-type heat only and is poor for TRVs.
+
+**Pitfalls to avoid.**
+- **No forecast, so no preheat or planning.** The integration reacts to the current error and a one-step slope. Anything that needs a future trajectory (weather, occupancy, price) must come from our own model.
+- **Slope lags twice.** The EMA (5-minute half-life) lags the real temperature, and the slope is then a 0.2/0.8 smoothed two-point difference of that lagged series. Do not read the slope as the instantaneous rate.
+- **Linear extrapolation ignores heat input.** Auto-start/stop assumes the current slope continues for `dt`, which is wrong while the heater is running.
+- **Learning is biased by the things we already flag.** The docs name direct sun on the sensor, fireplace or stove heat, and drafts from open doors. Stable temperatures bias the gains.
+- **Saturated periods teach nothing.** During cold snaps the heater sits at 100% and learning stops, so the gains describe mild weather only.
+- **Hidden state mutation.** `calculate_power` changes `state.coeff_*` during bootstrap and restores them afterwards. This is safe only because the code is synchronous; any async call between the two lines would see bootstrap values.
+- **Brittle entity naming.** The capacity calibration service builds `sensor.<thermostat>_temperature_slope` and `..._power` from the climate entity name, so renaming an entity silently breaks calibration.
+- **Zero treated as missing in logs.** `current_temp if current_temp else -9999` (display only) treats 0.0 °C as no value. It does not affect control, but do not copy the pattern.
+- **Threshold configuration is easy to get wrong.** Both thresholds must be non-zero, and the high threshold must exceed the low one.
+- **Migrations.** The 10.x changelog moved heating-failure detection and auto-fan into plugins and changed long-term statistics units. Disable the legacy feature before enabling its plugin, or duplicate entities appear.
+
+**Useful pieces to copy or reimplement.**
+- **Time-aware EMA with a cap** (`ema.py`). It handles irregular sensor timestamps correctly, and the `max_alpha` cap stops a long gap from wiping out history. Relevant to our irregular recorder data.
+- **Slope guards** (`open_window_algorithm.py`): a physical bound (|slope| ≤ 120 °C/h), a minimum point count, and a fake point after a 30-minute gap.
+- **Learning-gate rules**: skip setpoint-change cycles, skip saturated cycles, cap the effective sample count at 50 so old history does not freeze the estimate, and use IQR outlier removal before taking a percentile of capacity samples.
+- **Ratio update for the indoor gain**: compare the capacity-limited expected rise with the observed rise and scale the gain by the ratio. Cheap and inspectable. A good baseline to compare with our batch and online estimators.
+- **Adiabatic capacity correction**: `capacity = observed_rise + K_ext·ΔT` is the same heat-balance idea as our 1R1C model, so it can cross-check our C and UA estimates.
+- **Bootstrap with aggressive gains** while the model is unknown, then learned gains. Worth copying for a cold start, with a time limit.
+
+**Relevance to our forecasting.** Versatile Thermostat solves a different problem (feedback control of one room) and does not forecast. Its reusable value for us is the estimation plumbing: the time-aware EMA, slope guards, learning gates, and capacity correction. Its failure modes (lagged slopes, saturation blindness, sensor contamination) are the ones our hypotheses already flag.
+
+*Verification status: code claims come from the files listed above at commit `0860f19`, and formulas are quoted from code. The heat-balance form is inferred from the learning equations, not stated in the docs. The docs were read through fetch summaries.*
 
 ### Warnings from the reviews
 - Self-reported savings or accuracy claims without figures (EcoEdge) should be disregarded.
