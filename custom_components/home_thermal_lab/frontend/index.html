@@ -87,7 +87,7 @@
   th:first-child, td:first-child { text-align: left; }
   th { color: var(--muted); font-weight: 500; font-size: 12px; }
   .banner { background: #fff3e0; color: #6d4c00; border-radius: 8px; padding: 10px 12px; margin-bottom: 12px; }
-  .hidden { display: none; }
+  .hidden { display: none !important; }
   .status { color: var(--muted); font-size: 13px; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
   .spinner { width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; display: inline-block; animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
@@ -757,6 +757,10 @@ function drawRooms(d) {
     ...assumedList(d.rooms));
 }
 
+/* Heating sizes in watts and BTU/h, as the AC's are in watts and tons. */
+const BTU_H_PER_W = 3.41214;
+const watts = (w) => fmt(w, 0, " W") + " · " + fmt(w * BTU_H_PER_W, 0, " BTU/h");
+
 function drawEquipment(d) {
   const eq = d.equipment;
   const TON_W = 3516.85;
@@ -768,15 +772,15 @@ function drawEquipment(d) {
     panels.push(el("div", { class: "panel" },
       el("h3", {}, "Furnace", verdictPill(h.verdict)),
       row("Located in", d.furnace_room || "not set"),
-      row("Design size (heat loss at design)", fmt(hd.load_w, 0, " W")),
-      row("Actual size (high stage output)", fmt(h.capacity_w, 0, " W")),
+      row("Design size (heat loss at design)", watts(hd.load_w)),
+      row("Actual size (high stage output)", watts(h.capacity_w)),
       row("Actual ÷ design", fmt(h.ratio, 2)),
-      row("Allowed up to", fmt(hd.max_w, 0, " W")),
+      row("Allowed up to", watts(hd.max_w)),
       row("Low stage ÷ design", h.low_stage_ratio === null ? "–" : fmt(h.low_stage_ratio, 2)),
       row("Airflow at the temperature rise", fmt(h.airflow_m3s * CFM_PER_M3S, 0, " CFM"))));
   } else {
     panels.push(el("div", { class: "panel" }, el("h3", {}, "Furnace"), row("Located in", d.furnace_room || "not set"),
-      row("Design size (heat loss at design)", fmt(hd.load_w, 0, " W")),
+      row("Design size (heat loss at design)", watts(hd.load_w)),
       row("Actual size", "–"),
       el("p", { class: "hint" }, "No furnace nameplate yet: enter the high-stage input and AFUE on the furnace's energy entry.")));
   }
@@ -815,8 +819,8 @@ function drawBuildings(d) {
     const hd = r.equipment.heating_design;
     const cd = r.equipment.cooling_design;
     parts.push(
-      row("Design size (heat loss at design)", fmt(hd.load_w, 0, " W")),
-      row("Allowed up to", fmt(hd.max_w, 0, " W")),
+      row("Design size (heat loss at design)", watts(hd.load_w)),
+      row("Allowed up to", watts(hd.max_w)),
       row("Design size, total cooling", fmt(cd.load_total_w, 0, " W") + " · " + fmt(cd.load_total_w / TON, 2, " tons")),
       row("Equipment", "none yet"),
       el("p", { class: "hint" }, "No heater nameplate yet: the design size is what it must supply."));

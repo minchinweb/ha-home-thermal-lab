@@ -3,6 +3,10 @@ Changelog
 
 .. release:: unreleased
 
+  - :bug:`-` Only one zone had a forecast: zones are added one by one at startup, and a zone added while the house forecast was being worked out made it fail (``dictionary changed size during iteration``), leaving the other zones' forecast sensors unavailable. The forecast and the learning pass now work from a snapshot of the zones.
+  - :bug:`-` Zone tab: the heating (and cooling) band showed no calls from other zones unless the model had fitted them as neighbours; it now shows every other thermostat's calls.
+  - :bug:`-` Loads tab: the "Calculating" spinner stayed after the data loaded (its display rule beat ``hidden``).
+  - :feature:`-` Loads tab: the furnace's design, actual and allowed sizes show BTU/h beside watts, as the air conditioner's show tons.
   - :bug:`-` Loads tab: a wall with no area in House Structure was dropped from the heat loss without a word, and a roof over several rooms was counted in full in each of them. A shared roof is now split between its rooms by floor area, and walls are sized as below.
   - :feature:`-` Loads tab: missing sizes are **assumed and flagged**. A room with a width and depth (or one wall's length along each axis) and a height is taken as a rectangle for its floor area and volume; a wall with no area takes its length, its axis of the room, or the side of a square room of the floor area, times its height or the room's. Each room shows an "assumed sizes" pill with a list of what was assumed under the table. A wall that cannot be sized, or with more window than wall, is named in the notes.
   - :feature:`-` Loads tab: a **basement floor** loses heat to the ground (an effective R-11 by default), and the envelope defaults (**air leakage, wall, roof and basement floor R-values**) can be set on the integration's Reconfigure form; the notes say which are still the built-in ones. A basement's below-grade depth may come from House Structure's house-wide default, which is noted on the room.

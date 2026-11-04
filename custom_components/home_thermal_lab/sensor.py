@@ -697,8 +697,10 @@ class House:
             _LOGGER.warning("Could not learn the zone models")
             return
         self._ahead_at = None
-        for key, brain in self.brains.items():
-            await brain.apply(found[key], rows, end)
+        # zones are added one by one at startup: skip any added during the fit
+        for key, brain in list(self.brains.items()):
+            if key in found:
+                await brain.apply(found[key], rows, end)
 
     async def ahead(self, key: str, now: datetime) -> _Ahead | None:
         """The zone's part of the house forecast from about ``now``."""
@@ -710,7 +712,8 @@ class House:
     async def _forecast_all(self, now: datetime) -> dict[str, _Ahead]:
         outdoor_now = _state_number(self.hass, self.outdoor_entity)
         keys, zones, inputs = [], [], []
-        for key, brain in self.brains.items():
+        # a snapshot: zones are added one by one at startup, during the awaits
+        for key, brain in list(self.brains.items()):
             attrs, room, setpoint = _zone_now(self.hass, brain.zone)
             if attrs is None or room is None:
                 continue
@@ -818,6 +821,7 @@ class ZoneBrain:
         self._users = 0
         self._stop_house = None
         house.brains[self.key] = self
+        house._ahead_at = None  # the cached forecast lacks this zone
 
     def listen(self, callback):
         """Call ``callback()`` after each learning pass; returns the remover."""

@@ -258,7 +258,9 @@ async def ws_zone(hass, connection, msg) -> None:
     ids += sorted(c for c in climates if c not in ids)
     rows = await recorded(hass, ids, start, end)
     calls = _house_calls(rows, climates, end)
-    neighbours = [c for c in brain.neighbours if c != climate_id and c in climates]
+    # Calls from any other thermostat can bleed in, whether or not the model
+    # fitted them as neighbours (a zone fitted alone has none).
+    neighbours = sorted(c for c in climates if c != climate_id)
     scales = await _scales(hass)
     room_rows = rows[room_id] if room_id else []
     room = (
