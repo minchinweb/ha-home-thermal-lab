@@ -47,19 +47,22 @@ from custom_components.home_thermal_lab.ha_statistics import (
     fetch_statistics_from_url,
 )
 
+# name: (temperature, humidity, neighbouring rooms, air volume in m3); the
+# volumes are the rooms' floor area times ceiling height in Home Assistant
 BATHROOMS = {
     "Upstairs bath": (
         "sensor.upstairs_bathroom_temp_humidity_sensor_temperature",
         "sensor.upstairs_bathroom_temp_humidity_sensor_humidity",
         ["N bedroom", "Z3 master"],
+        7.9,
     ),
     "Main floor bath": (
         "sensor.main_floor_bathroom_temp_humidity_temperature",
         "sensor.main_floor_bathroom_temp_humidity_humidity",
         ["Z1 kitchen"],
+        9.6,
     ),
 }
-AIR_VOLUME = 12.0  # m3, a small bathroom
 AIR_HEAT = 1.2  # kJ per m3 per C
 
 
@@ -85,14 +88,14 @@ def main() -> None:
     end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
     start = end - timedelta(days=args.days)
     bins = int((end - start) / width)
-    entities = [e for t, h, _ in BATHROOMS.values() for e in (t, h)]
+    entities = [e for t, h, _, _ in BATHROOMS.values() for e in (t, h)]
     entities += list(ROOMS.values())
     stats = asyncio.run(
         fetch_statistics_from_url(args.ha_url, token, entities, start, end, "5minute")
     )
     w = max(int(args.window / 5), 1)
     hour = 12
-    for bath, (t_ent, h_ent, neighbours) in BATHROOMS.items():
+    for bath, (t_ent, h_ent, neighbours, volume) in BATHROOMS.items():
         temp = _bin_means(stats.get(t_ent, []), start, bins, width)
         rh = _bin_means(stats.get(h_ent, []), start, bins, width)
         if np.isnan(rh).all():
@@ -152,11 +155,11 @@ def main() -> None:
             )
         abs_rise = np.median([e["abs_rise"] for e in events])
         t_rise = np.median([e["t_rise"] for e in events])
-        latent = abs_rise * AIR_VOLUME * 2.45 / 3600.0  # kWh
-        sensible = t_rise * AIR_VOLUME * AIR_HEAT / 3600.0
+        latent = abs_rise * volume * 2.45 / 3600.0  # kWh
+        sensible = t_rise * volume * AIR_HEAT / 3600.0
         print(
             f"  median: humidity +{abs_rise:.1f} g/m3, temperature +{t_rise:.2f} C; "
-            f"in {AIR_VOLUME:g} m3 of air that is about {latent * 1000:.0f} Wh latent "
+            f"in {volume:g} m3 of air that is about {latent * 1000:.0f} Wh latent "
             f"and {sensible * 1000:.1f} Wh sensible (air only)\n"
         )
 

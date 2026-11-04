@@ -26,7 +26,7 @@ Home Assistant, so they can be re-run later or by others.
 | [15](15-occupancy.md) | Occupancy from room temperature changes | B | three runs: the office signal is the computer, not body heat |
 | [16](16-predict-day.md) | Predict next-day house/room temperature | D. Predict and control | hybrid (profile plus the coupled zone model's departures) beats profile plus offset: 0.44 against 0.46 C over the day, 0.19 against 0.27 C over hours 0-5; live forecast uses it |
 | [17](17-control.md) | Decide whether to run furnace/AC to avoid overshoot | D | shadow mode; sensors ready, not yet deployed |
-| [18](18-shower-heat.md) | Showers from bathroom humidity, and their heat | C | first run: showers detected; heat into the house not measurable |
+| [18](18-shower-heat.md) | Showers from bathroom humidity, and their heat | C | first run: showers detected; heat into the house not measurable; the sensor reports too rarely, and the house meter is too noisy, to time the bath fan |
 
 Findings about the house that are not hypotheses (for example, when the kitchen's east window gets sun) are in [other-findings.md](other-findings.md).
 
