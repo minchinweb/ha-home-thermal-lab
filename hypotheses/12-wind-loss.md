@@ -8,6 +8,8 @@
 
 **Method:** Fit `UA` as a function of wind on each face: `UA = UA0 + k * v^n * f(angle)`. Use night windows to avoid solar gain.
 
+**From the literature review (4 November 2026):** ISO 13789 splits envelope loss into transmission (`H_tr`, fabric) and ventilation (`H_ve`). Wind should act on the ventilation part only, so the effect is a share of `UA`, not all of it: the `b * wind * diff` form in the first test below is right, and a tight house would show a small `b`. See 04 for the split. Heating Analytics notes wind and cloud are poor in standard weather feeds, which is another reason to retest with the weather station.
+
 ## Results
 
 First test (`scripts/wind_loss.py`, 10 days to 2026-11-01; wind from Open-Meteo's forecast endpoint with `past_days`, because the archive lags several days):

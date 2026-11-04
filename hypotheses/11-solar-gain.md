@@ -11,6 +11,12 @@
 - Fit per-room effective window coefficients on daytime idle windows.
 - Validate on held-out days.
 
+**From the literature review (4 November 2026):**
+- Climate Advisor fits the envelope and sun terms together (`rate = k_env * diff + k_solar * sun`) only when the sun signal spans at least 0.30 of its 0-1 range; below that the two terms are collinear and trade off. Add the same guard, and report the sun signal's range for each fit. The finding that the kitchen's sun gain cannot be measured from autumn data is this problem.
+- Sun gain while the furnace runs is hidden (censored): the thermostat cuts the call instead of letting the room warm. Heating Analytics fits it with Tobit, keeps the sun terms non-negative, and checks the censored fit against plain least squares before using it. Needed when the sun is higher.
+- Fit a sun term only after enough sunlit hours (excitation gating, as RoomMind and hypothesis 16 do).
+- ISO 52016-1 also puts transmitted sun straight into the zone air (a `g` value corrected for incidence), as our window model does. RC_BuildingSimulator's solar formulas are a checked reference for the incidence correction.
+
 ## Results
 
 Regression view (10 days from 23 October 2026): a sun term (sine of sun height, daytime only) was significant only for the master bedroom (+0.62 C/h per unit) and the N bedroom (+0.41), both upstairs bedrooms. It was not significant for the kitchen (+0.25) despite its large south and west windows, perhaps because the kitchen is dominated by furnace bleed (06) and late-October sun is low. A longer, sunnier dataset is needed.

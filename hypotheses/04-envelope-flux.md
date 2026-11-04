@@ -9,6 +9,7 @@
 - Temperatures alone give the ratio `UA / C` (the cooling time constant), not `UA`. To get `UA` in watts per degree, add a heat input (furnace runtime, electrical use from 14) or a known thermal mass.
 - Fit on clean windows: night, no furnace or AC running, doors closed, little wind, so only the envelope is acting. Then add the wind (12) and solar (11) corrections.
 - Compare per-room and per-level `UA`, and see whether `UA` for upper rooms shifts with wind while the basement's does not.
+- Split the fitted envelope coefficient into fabric and ventilation, as ISO 13789 does with `H_tr` and `H_ve` (formulas not checked against the standard). The temperatures give only the total. Ventilation should rise with wind (12) and with open windows or doors (09), so those terms separate the two. Without heat flux sensors the split is a model assumption, not a measurement.
 
 **Caveats:** Neighbouring rooms exchange heat too (10), and zoning leakage keeps "off" zones from being isolated.
 

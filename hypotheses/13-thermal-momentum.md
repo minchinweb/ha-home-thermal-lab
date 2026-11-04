@@ -14,6 +14,12 @@
 
 **Feeds:** 16 (prediction) and 17 (control): the overshoot to avoid is this momentum. Shares parameters with 04, 05, 06, 10 and 12.
 
+**From the literature review (4 November 2026):**
+- **Check tau against the construction.** In the one published comparison (Ballarini et al. 2019), ISO 13790's single lumped capacity gave a time constant of 81 h against 296 h for EnergyPlus, and that short tau drove its free-floating error. A fitted tau far from a construction-based estimate means the one-node model is missing mass. Estimate tau from the house's construction layers and floor area, and compare with the fitted 54 h.
+- **A quick prior from ISO 13790's mass classes** (from memory, not checked against the standard): light 110 kJ/m2K and medium 165 kJ/m2K of floor area. For about 2400 sq ft (223 m2) that gives 6.8 and 10.2 kWh/C. The estimate above (6.7 kWh/C) matches a light, wood-frame class.
+- **A second node** (air plus mass, 2R1C) is the most our data can identify; a full 5R1C is not. It would show up as a fast and a slow decay after a call. The overshoot and the master's dip and rebound are candidates. A wall or floor temperature sensor would identify the mass node directly.
+- Smoothing lags: a slope from a smoothed series (as in Versatile Thermostat) is late, so measure the furnace start lag from raw readings.
+
 ## Results
 
 First look (see 05 for the table): after the furnace stops, the office (z4) stops rising almost at once (0.1 C more, peak 3 minutes later), while the basement (z2) keeps rising about 0.6 C for about 14 minutes. That suggests the basement has more momentum, or a slower air path, than the office. Thermostat resolution (about 0.1 C) limits this, and 10 days of data is only a start.

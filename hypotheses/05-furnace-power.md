@@ -21,6 +21,13 @@
 - Fan calls only take effect when there is no heat or AC call, and then all zones are active.
 So the furnace is on whenever any zone calls for heat, and a zone's temperature can rise because of another zone's call. Analyse heating as the union of all zones' heat calls, and treat a zone that is not itself calling as a measure of leakage and spillover.
 
+**From the literature review (4 November 2026; see `docs/literature-review.md`, Summary):**
+- Fit the passive decay and the heated rise on separate windows, split at the call edges. A fit that spans the end of a call mixes the heating ramp into the decay rate (Climate Advisor, `compute_k_passive`).
+- Cross-check each call with the heat balance Versatile Thermostat uses: heating rate = observed rise rate + decay rate at that indoor-outdoor difference. This is the same balance as the fit above, solved per call, so the two should agree.
+- Gate the calls before pooling them: drop calls where the setpoint changed mid-call, remove outliers (IQR) before taking a percentile or mean of per-call rates, and cap the weight of old calls (Versatile Thermostat caps the count at 50).
+- A single on/off heating rate misfits a two-stage furnace (Climate Advisor's `Q` is bang-bang). Keep a rate per stage.
+- If this is reported as energy, CV(RMSE) and NMBE (ASHRAE Guideline 14) apply; for temperatures, use °C.
+
 ## Results
 
 First look (9 days, late October 2026; `scripts/hvac_overview.py`): z4 (office) heated 3.2 h/day in about 11 runs (median 9 min, longest 84 min) on every day. z2 (basement) heated 0.8 h/day in 6 runs (median 6 min). z1 and z3 never called for heat. No cooling. Every zone also shows long fan-only periods (5-14 h/day), including runs of 6-12 h, which will matter for 08 (fan flux).

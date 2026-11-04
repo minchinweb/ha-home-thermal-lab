@@ -11,6 +11,13 @@
 
 **Depends on:** 16, and the wave component as the target.
 
+**From the literature review (4 November 2026):**
+- **Baselines to beat.** Versatile Thermostat's TPI law, `on = Kint * (setpoint - room) + Kext * (setpoint - outdoor)`, is a proportional controller with an outdoor feed-forward and no forecast. Climate Advisor plans one setpoint a day from the weather forecast. Both are simpler than a forecast-driven rule, so the shadow log should compare against them, not only against the thermostat.
+- **Readiness gate.** RoomMind acts on its model only when the predicted error is small (0.5 C) and it has enough idle and heating samples, and runs the plain thermostat otherwise. Act on `skip` in a zone only while that zone's scored forecast beats holding the temperature (z4 now), as hypothesis 16 does for its fallback.
+- **Overshoot.** Climate Advisor's simulator stops heating at the setpoint, so it cannot predict overshoot. Ours should include the measured overshoot (13).
+- **Heat to hold a setpoint.** RC_BuildingSimulator gets the exact power to hold a set point from two solves of its linear model. Our zone model is linear too, so the same probe gives "heat needed over the next hours", a better input to the decision than a skip/heat flag.
+- RoomMind's optimiser is greedy, not optimal. A horizon-optimal plan is a MILP or dynamic-programming problem (EMHASS, Langer and Völling).
+
 ## Results
 
 First shadow run (`scripts/shadow_control.py --days 14`, 15 minute bins from 2026-10-19; nothing was switched). For every heating call, a per-zone no-heat forecast (`dT/dt = a * (outdoor - room) + c + g * light`, fitted on that zone's idle bins; weather measured, standing in for a forecast; sunlight on the room's windows and roof as in 11 and 16) asks whether the room would have stayed within a band below the thermostat's setpoint for the next few hours without the furnace. If it would (with at most 0.5 degree-hours below the band), the call is marked skippable. The thermostat setpoint is the current target; the wave target of the component will replace it.

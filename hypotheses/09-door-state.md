@@ -12,6 +12,11 @@
 
 **Feeds:** 10 (coupling depends on door state).
 
+**From the literature review (4 November 2026):**
+- Versatile Thermostat detects open windows from the slope of a time-aware EMA (`alpha = 1 - 0.5^(dt / halflife)`, half-life 5 minutes), with guards: a physical bound on the slope, at least 4 points, and a reset after a 30-minute gap. That addresses the 5-minute rate feature being pure noise (one 0.1 C step is 1.2 C/h). The smoothed slope lags, so allow for it when timing edges.
+- Climate Advisor uses contact sensors with a delay, not inference. Where a contact exists (the S basement bedroom), use it as an input, and keep inference for the doors without one.
+- In ISO 13789 terms an open door changes the coupling between rooms (10), not the envelope; an open window or outside door adds to the ventilation part of the envelope (04).
+
 ## Results
 
 Ground truth exists: `binary_sensor.s_basement_bedroom_door` (100 open runs since 2026-10-22, 37 of 10+ minutes, 126 hours open in total). The front door contacts only open for seconds, and the S basement bedroom's closet door never opened. The `home_performance_*_window_open` sensors are computed estimates, not contacts.
