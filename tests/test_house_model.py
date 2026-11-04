@@ -5,6 +5,7 @@ import pytest
 from custom_components.home_thermal_lab.house_model import (
     Nominal,
     build_project,
+    envelope_from_fit,
     room_capacities,
 )
 from custom_components.home_thermal_lab.manual import Design, calculate
@@ -86,3 +87,109 @@ def test_room_capacities_use_volume():
 def test_no_usable_room_is_an_error():
     with pytest.raises(ValueError):
         build_project({"empty": ROOMS["empty"]}, Nominal(), Design())
+
+
+def test_register_ducts_become_runs():
+    rooms = {
+        "office": {
+            "title": "Office",
+            "volume_m3": 50.0,
+            "walls": [{"area_m2": 10.0, "glass_m2": 0.0, "azimuth": 0.0}],
+            "roofs": [],
+            "windows": [],
+            "registers": [
+                {
+                    "title": "Office register",
+                    "free_area_in2": 60.0,
+                    "flow_cfm": 90.0,
+                    "duct": [
+                        {
+                            "shape": "round",
+                            "diameter_in": 4.0,
+                            "length_ft": 14.0,
+                            "fittings_k": 0.9,
+                        },
+                        {
+                            "shape": "rect",
+                            "width_in": 10.0,
+                            "height_in": 6.0,
+                            "length_ft": 3.0,
+                            "trunk": True,
+                            "flow_cfm": 400.0,
+                        },
+                    ],
+                }
+            ],
+        }
+    }
+    project, _ = build_project(rooms, Nominal(), Design())
+    (run,) = project.runs
+    assert run.room == "Office"
+    assert run.register_area_m2 == pytest.approx(60 * 0.00064516)
+    assert run.flow_m3s == pytest.approx(90 * 0.000471947)
+    assert len(run.segments) == 2
+    # no furnace, so no blower curve: the duct check is skipped, and says so
+    result = calculate(project)
+    assert result["ducts"]["runs"] == []
+    assert any("Duct check skipped" in w for w in result["warnings"])
+
+
+def test_stored_r_values_and_glazing_override_the_defaults():
+    rooms = {
+        "office": {
+            "title": "Office",
+            "volume_m3": 50.0,
+            "walls": [
+                {"area_m2": 10.0, "glass_m2": 0.0, "azimuth": 0.0, "r_value_si": 5.0}
+            ],
+            "roofs": [],
+            "windows": [
+                {
+                    "in": "wall",
+                    "glass_m2": 2.0,
+                    "azimuth": 180.0,
+                    "transmittance": 0.5,
+                    "glazing": "triple",
+                    "frame": "wood",
+                }
+            ],
+        }
+    }
+    project, _ = build_project(rooms, Nominal(), Design())
+    room = project.rooms[0]
+    wall = next(s for s in room.surfaces if s.kind == "wall")
+    window = next(s for s in room.surfaces if s.kind == "window")
+    assert wall.r == pytest.approx(5.0)
+    assert window.u == pytest.approx(1.0)  # triple wood
+
+
+def test_envelope_from_fit_recovers_the_scale():
+    rooms = {
+        "office": {
+            "title": "Office",
+            "volume_m3": 50.0,
+            "walls": [{"area_m2": 40.0, "glass_m2": 0.0}],
+            "roofs": [],
+            "windows": [],
+        }
+    }
+    nominal_ua = 40.0 / 3.5
+    fixed, infil = 2.0, 5.0
+    cap = room_capacities(rooms)["office"]
+    # the fitted rate that would give a measured envelope of 1.0 x nominal
+    rate = (fixed + infil + nominal_ua) * 3600.0 / cap
+    result = envelope_from_fit(
+        rooms,
+        rates={"office": rate},
+        capacities={"office": cap},
+        fixed_ua={"office": fixed},
+        infiltration={"office": infil},
+        nominal=Nominal(),
+    )
+    assert result["office"]["scale"] == pytest.approx(1.0)
+    assert result["office"]["elements"][0]["r"] == pytest.approx(3.5)
+
+
+def test_rooms_without_a_fit_are_left_out():
+    rooms = {"office": {"volume_m3": 50.0, "walls": [{"area_m2": 9.0}]}}
+    assert envelope_from_fit(rooms, {}, {}, {}, {}, Nominal()) == {}

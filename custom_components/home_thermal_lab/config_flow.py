@@ -29,17 +29,17 @@ import voluptuous as vol
 from . import CALL_STATS, CONTRIBUTION, DOMAIN, ENERGY, ZONE
 from .map_view import OutlineMapView
 from .options import (
+    BTU_H_TO_KW,
     FACES,
     GROUND_KEYS,
     KW_MODES,
-    BTU_H_TO_KW,
     POWER_UNITS,
     FieldError,
     format_lights,
     format_roofs,
     kw_table,
-    parse_blower,
     normalise_roofs,
+    parse_blower,
     parse_lights,
     parse_roofs,
     roof_label,
@@ -314,7 +314,11 @@ def _energy_from_form(form: dict) -> dict:
 
 
 def _energy_to_form(data: dict) -> dict:
-    flat = {k: v for k, v in data.items() if k not in ("kw", "afue", "blower", "ac_sensible_w")}
+    flat = {
+        k: v
+        for k, v in data.items()
+        if k not in ("kw", "afue", "blower", "ac_sensible_w")
+    }
     extra = {}
     if "afue" in data:
         extra["afue"] = data["afue"] * 100.0
