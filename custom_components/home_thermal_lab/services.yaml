@@ -1,0 +1,27 @@
+clear_archive:
+  fields:
+    kinds:
+      required: false
+      selector:
+        select:
+          multiple: true
+          options:
+            - room
+            - outdoor
+    zones:
+      required: false
+      selector:
+        entity:
+          multiple: true
+          filter:
+            domain: sensor
+            integration: home_thermal_lab
+    before:
+      required: false
+      selector:
+        date:
+    dry_run:
+      required: false
+      default: true
+      selector:
+        boolean:

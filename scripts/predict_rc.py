@@ -248,6 +248,47 @@ def _describe(f: NoHeatFit | None) -> str:
     )
 
 
+def _issued_outdoor(directory, measured, start, bins, width):
+    """Each test day's outdoor temperature as forecast at its midnight.
+
+    Reads the outdoor records of the forecast archive (``archive.py``): for each
+    day, the last forecast issued at or before the day's first bin, which gives
+    the temperature of the hour each bin falls in. Bins it does not cover keep
+    the measured temperature.
+    """
+    from custom_components.home_thermal_lab import archive
+
+    records = sorted(
+        archive.read(
+            directory,
+            "outdoor",
+            start - timedelta(days=2),
+            start + bins * width,
+        ),
+        key=lambda r: archive.parse_instant(r["at"]),
+    )
+    out = measured.copy()
+    used = 0
+    for first in range(0, bins, PER_DAY):
+        issue = start + first * width
+        before = [r for r in records if archive.parse_instant(r["at"]) <= issue]
+        if not before:
+            continue
+        by_end = {
+            archive.parse_instant(h[0]): h[1]
+            for h in before[-1]["hours"]
+            if h[1] is not None
+        }
+        for i in range(first, min(first + PER_DAY, bins)):
+            mid = start + (i + 0.5) * width
+            end = mid.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+            if end in by_end:
+                out[i] = by_end[end]
+                used += 1
+    print(f"issued outdoor forecasts used for {used} of {bins} bins")
+    return out
+
+
 def main() -> None:
     """Run the backtest and print the table."""
     load_env()
@@ -266,6 +307,13 @@ def main() -> None:
         "heats most (for it, the others)",
     )
     p.add_argument("--ha-url", default=os.environ.get("HA_URL"))
+    p.add_argument(
+        "--archive",
+        type=Path,
+        help="a copy of the forecast archive directory; the outdoor forecast for "
+        "each test day is then the one issued at its midnight, not the measured "
+        "temperature (days with no record there fall back to measured)",
+    )
     args = p.parse_args()
 
     token = os.environ["HA_TOKEN"]
@@ -335,6 +383,9 @@ def main() -> None:
     notes = []
     index = {z: i for i, z in enumerate(zones)}
     out_list = _lst(t_out)
+    t_fc = t_out
+    if args.archive is not None:
+        t_fc = _issued_outdoor(args.archive, t_out, start, bins, width)
     for d in range(args.first, args.days):
         o = d * PER_DAY
         lo = max(0, o - args.train * PER_DAY)
@@ -442,13 +493,13 @@ def main() -> None:
             if fit_rm is not None:
                 model = model_of(fit_rm, fit_heat_rate(model_of(fit_rm), data))
                 preds["RM"] = _rc(
-                    model, room, t_out, light, sp_day, o, args.deadband, now_on[zone]
+                    model, room, t_fc, light, sp_day, o, args.deadband, now_on[zone]
                 )
             if models_n[zone] is not None:
                 preds["RN meas"] = _rc(
                     models_n[zone],
                     room,
-                    t_out,
+                    t_fc,
                     light,
                     sp_day,
                     o,
@@ -464,10 +515,10 @@ def main() -> None:
         if (
             any(models_n[z] is None for z in zones)
             or any(np.isnan(rooms[z][o - 1]) for z in zones)
-            or np.isnan(t_out[o : o + PER_DAY]).any()
+            or np.isnan(t_fc[o : o + PER_DAY]).any()
         ):
             continue
-        day_out = list(t_out[o : o + PER_DAY])
+        day_out = list(t_fc[o : o + PER_DAY])
         usual_out = fill(typical(out_list, o, PER_DAY), float(np.nanmean(t_out[lo:o])))
 
         def house(models, plan, outdoor, light_of, o=o, now_on=now_on):

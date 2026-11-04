@@ -260,6 +260,32 @@ the data comes over the page's own Home Assistant connection. Chart.js is
 pinned (version and SHA-256) in `frontend/vendor.json` and committed;
 `uv run invoke vendor` fetches it again and checks the hash (see Development).
 
+## Forecast archive
+
+Every forecast the integration issues is also written to files that the
+recorder's purge does not touch, so the scores and the backtests can use weeks
+of forecasts as they were issued:
+
+- **Where:** `<config>/home_thermal_lab/archive/`, as JSON Lines, one file per
+  kind (`room`, `outdoor`) and UTC month (`room-2026-11.jsonl`). A month is
+  gzipped once it is two months old.
+- **What:** a `room` line per zone every 15 minutes (the leads, D's leads, the
+  fitted parameters, and the full day-ahead path once an hour) and an `outdoor`
+  line per Open-Meteo fetch (about hourly). See `docs/forecast-archive-spec.md`.
+- **Size:** roughly 0.3 MB a day for four zones (about 110 MB a year, 15 to
+  25 MB gzipped). The Home Assistant diagnostics download lists what is stored.
+- **Scoring:** the forecast sensor scores from the archive (`scored_from`
+  says which source) and also scores the profile forecast D (`error_d_1h`, …).
+- **Keeping it short:** set *Keep records for (days)* in the integration's
+  options (0, the default, keeps everything).
+- **Clearing it:** call `home_thermal_lab.clear_archive` with any of `kinds`,
+  `zones` and `before` (a date). It only reports what it would remove until
+  you set `dry_run: false`.
+- **Removing the integration does not delete the archive**, because it cannot
+  be rebuilt. Run `clear_archive` before removing it, or delete the directory.
+- **Backtests:** `scripts/predict_rc.py --archive PATH` (a copy of the
+  directory) tests against the outdoor forecast as issued, not the measured one.
+
 ## Dashboard cards
 
 For a zone on your own dashboards, `homeassistant/thermal_lab_dashboard.yaml`

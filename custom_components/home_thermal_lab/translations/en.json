@@ -465,5 +465,40 @@
         "reconfigure_successful": "Saved."
       }
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Forecast archive",
+        "description": "The archive keeps every forecast the integration issues, in files the recorder does not purge. Records older than this many days are removed once a day. 0 keeps everything. The `home_thermal_lab.clear_archive` service removes records by kind, zone or date.",
+        "data": {
+          "archive_keep_days": "Keep records for (days; 0 = forever)"
+        }
+      }
+    }
+  },
+  "services": {
+    "clear_archive": {
+      "name": "Clear the forecast archive",
+      "description": "Remove archived forecasts: all of them, one kind, some zones, or everything before a date. It only reports what it would remove unless dry run is turned off.",
+      "fields": {
+        "kinds": {
+          "name": "Kinds",
+          "description": "`room` and/or `outdoor`. Leave out for both."
+        },
+        "zones": {
+          "name": "Zones",
+          "description": "Forecast sensor entity ids. Leave out for all zones. Applies to room records only."
+        },
+        "before": {
+          "name": "Before",
+          "description": "Remove records issued before this date (UTC). Leave out for everything."
+        },
+        "dry_run": {
+          "name": "Dry run",
+          "description": "Only report what would be removed (default on)."
+        }
+      }
+    }
   }
 }

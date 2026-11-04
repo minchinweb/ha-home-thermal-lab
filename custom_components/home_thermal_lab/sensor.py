@@ -56,6 +56,15 @@ from homeassistant.util import dt as dt_util
 import voluptuous as vol
 
 from . import CALL_STATS, CONTRIBUTION, DOMAIN, ENERGY, ZONE
+from .archive_records import (
+    PARAM_NAMES,
+    d_leads,
+    outdoor_record,
+    path_points,
+    room_record,
+    shared,
+)
+from .archive_store import get_store
 from .calls import (
     calls_from_states,
     heat_setpoints,
@@ -135,7 +144,13 @@ from .outlook import (
 from .panel import async_register_panel
 from .power import power_series
 from .routine import fit_offset_tau
-from .scoring import apply_bias, issued_from_rows, outdoor_bias, score
+from .scoring import (
+    apply_bias,
+    issued_from_archive,
+    issued_from_rows,
+    outdoor_bias,
+    score,
+)
 from .shadow import ZoneModel, decide
 from .solar import solar_azimuth_degrees, solar_elevation_degrees
 from .target import TargetWave
@@ -298,6 +313,13 @@ class _Forecast:
         self._hass = hass
         self._hours: list[ForecastHour] = []
         self._fetched: datetime | None = None
+        self.bias_of = lambda: (None, 0)  # set by the House: (bias, hours)
+        self._archive_failed = False
+
+    @property
+    def fetched(self) -> datetime | None:
+        """When the forecast now held was fetched (the outdoor record's ``at``)."""
+        return self._fetched
 
     async def hours(self) -> list[ForecastHour]:
         now = datetime.now(UTC)
@@ -313,9 +335,40 @@ class _Forecast:
                     )
                 )
                 self._fetched = now
+                await self._archive(now)
             except Exception:  # noqa: BLE001 - keep the last forecast on any failure
                 _LOGGER.warning("Forecast fetch failed; using the last one if any")
         return self._hours
+
+    async def _archive(self, now: datetime) -> None:
+        """Keep the forecast just fetched (the future hours only)."""
+        bias, hours = self.bias_of()
+        record = outdoor_record(
+            at=now,
+            model="best_match",
+            lat=self._hass.config.latitude,
+            lon=self._hass.config.longitude,
+            bias=bias if hours else None,
+            bias_hours=hours,
+            hours=[
+                (
+                    h.time,
+                    h.temperature,
+                    h.light.direct_normal,
+                    h.light.diffuse,
+                    h.light.cloud_cover,
+                )
+                for h in self._hours
+                if h.time > now
+            ],
+        )
+        try:
+            await get_store(self._hass).append(record)
+            self._archive_failed = False
+        except Exception:
+            if not self._archive_failed:
+                _LOGGER.warning("Could not archive the outdoor forecast", exc_info=True)
+            self._archive_failed = True
 
 
 def _light_at(hass, zone: dict, by_end: dict, moment: datetime) -> tuple:
@@ -645,12 +698,19 @@ class House:
     def __init__(self, hass, forecast: _Forecast, outdoor_entity: str):
         self.hass = hass
         self.forecast = forecast
+        forecast.bias_of = self._bias
         self.outdoor_entity = outdoor_entity
         self.brains: dict[str, ZoneBrain] = {}
         self._users = 0
         self._stop_timer = None
         self._ahead: dict[str, _Ahead] = {}
         self._ahead_at: datetime | None = None
+
+    def _bias(self) -> tuple[float | None, int]:
+        """The outdoor forecast's bias at the last learning pass."""
+        for brain in self.brains.values():
+            return brain.bias, brain.bias_hours
+        return None, 0
 
     def start(self):
         """One more user; the first starts the learning. Returns the stopper."""
@@ -1228,12 +1288,14 @@ class ShadowSensor(SensorEntity):
 class ZoneForecastSensor(SensorEntity):
     """The zone's room temperature forecast 3 hours ahead (hypothesis 16).
 
-    The recorder history of this sensor is the archive of forecasts as issued:
-    the state is the forecast for 3 hours on, ``predicted_1h`` and
-    ``predicted_6h`` the other leads, ``start`` the room temperature when it was
-    made. Every ``LEARN_EVERY`` the sensor scores its own last ``SCORE_DAYS``
-    days against the room (``error_1h`` and so on). ``points`` (not recorded)
-    is the full day ahead for the charts.
+    Every forecast is also written to the forecast archive (``archive.py``),
+    which the recorder's purge does not touch. The state is the forecast for 3
+    hours on, ``predicted_1h`` and ``predicted_6h`` the other leads, ``start``
+    the room temperature when it was made. Every ``LEARN_EVERY`` the sensor
+    scores its own last ``SCORE_DAYS`` days against the room (``error_1h`` and
+    so on, and ``error_d_1h`` for the profile forecast D), from the archive and,
+    for the part of the window before it began, the recorder (``scored_from``).
+    ``points`` (not recorded) is the full day ahead for the charts.
     """
 
     _attr_should_poll = False
@@ -1250,6 +1312,9 @@ class ZoneForecastSensor(SensorEntity):
         self._attr_name = f"Forecast {zone['name']}"
         self._attr_unique_id = f"home_thermal_lab_forecast_{zone['climate_entity']}"
         self._scores: dict = {}
+        self._path_hour: datetime | None = None  # the last hour with a path
+        self._archive_errors = 0
+        self._archive_warned: datetime | None = None
 
     async def async_added_to_hass(self) -> None:
         self._brain.entities["forecast"] = self.entity_id
@@ -1270,8 +1335,18 @@ class ZoneForecastSensor(SensorEntity):
         room_id = zone.get("room_entity") or zone["climate_entity"]
         end = datetime.now(UTC)
         start = end - timedelta(days=SCORE_DAYS)
+        store = get_store(self._hass)
         try:
-            rows = await _recorded(self._hass, [self.entity_id, room_id], start, end)
+            records = await store.read("room", start, end, self.entity_id)
+        except Exception:
+            _LOGGER.warning("Could not read the forecast archive", exc_info=True)
+            records = []
+        first = min((datetime.fromisoformat(r["at"]) for r in records), default=None)
+        # the recorder covers the part of the window before the archive began
+        need_recorder = first is None or first - start > timedelta(hours=1)
+        ids = [room_id, *([self.entity_id] if need_recorder else [])]
+        try:
+            rows = await _recorded(self._hass, ids, start, end)
         except Exception:  # noqa: BLE001 - keep the last scores
             _LOGGER.warning("Could not score the forecast for %s", zone["name"])
             return
@@ -1280,17 +1355,49 @@ class ZoneForecastSensor(SensorEntity):
             if zone.get("room_entity")
             else temperature_series(rows[room_id])
         )
-        found = score(issued_from_rows(rows[self.entity_id]), actual, end)
-        self._scores = {
-            f"error_{lead:g}h": {
+        issued = issued_from_archive(records)
+        if need_recorder:
+            old = [
+                f
+                for f in issued_from_rows(rows[self.entity_id])
+                if first is None or f.issued < first
+            ]
+            issued = old + issued
+        source = "recorder" if not records else "both" if need_recorder else "archive"
+        found = score(issued, actual, end)
+        found_d = score(issued_from_archive(records, "leads_d"), actual, end)
+
+        def entry(s) -> dict:
+            return {
                 "mae": round(s.mae, 3),
                 "bias": round(s.bias, 3),
                 "rmse": round(s.rmse, 3),
                 "change_mae": None if s.change_mae is None else round(s.change_mae, 3),
                 "n": s.n,
             }
-            for lead, s in found.items()
+
+        self._scores = {
+            "scored_from": source,
+            **{f"error_{lead:g}h": entry(s) for lead, s in found.items()},
+            **{f"error_d_{lead:g}h": entry(s) for lead, s in found_d.items()},
         }
+
+    async def _archive(self, record: dict) -> None:
+        """Append to the archive; a failure is counted and warned once an hour."""
+        try:
+            await get_store(self._hass).append(record)
+        except Exception:
+            self._archive_errors += 1
+            at = datetime.fromisoformat(record["at"])
+            if self._archive_warned is None or at - self._archive_warned >= timedelta(
+                hours=1
+            ):
+                self._archive_warned = at
+                _LOGGER.warning(
+                    "Could not archive the forecast for %s",
+                    self.entity_id,
+                    exc_info=True,
+                )
 
     async def _refresh(self, _now) -> None:
         brain = self._brain
@@ -1302,7 +1409,11 @@ class ZoneForecastSensor(SensorEntity):
             got = await brain.house.ahead(brain.key, now)
         if got is None:
             self._attr_native_value = None
-            self._attr_extra_state_attributes = {"model": brain.note, **self._scores}
+            self._attr_extra_state_attributes = {
+                "model": brain.note,
+                **self._scores,
+                "archive_errors": self._archive_errors,
+            }
             self.async_write_ha_state()
             return
         # A zone without a learned model is "held": its headline value stays
@@ -1328,20 +1439,23 @@ class ZoneForecastSensor(SensorEntity):
         self._attr_native_value = (
             None if held or leads[3] is None else round(leads[3], 2)
         )
-        self._attr_extra_state_attributes = {
-            "issued": now.isoformat(),
-            "start": round(room, 2),
-            "predicted_1h": None if leads[1] is None else round(leads[1], 2),
-            "predicted_6h": None if leads[6] is None else round(leads[6], 2),
+        names = {
+            "start": room,
             "setpoint": setpoint,
             "method": ahead.method,
             "neighbours": brain.names(brain.neighbours),
+        }
+        common = shared(**names, leads=leads)
+        self._attr_extra_state_attributes = {
+            "issued": now.isoformat(),
+            **common,
             "heating_rate": None if brain.model is None else round(brain.model.h, 3),
             "cooling_rate": None if brain.model is None else round(brain.model.e, 3),
             "cooling_bleed": None if brain.model is None else round(brain.model.y, 3),
             "fan_pull": None if brain.model is None else round(brain.model.f, 3),
             "outdoor_correction": round(got.shift, 2),
             **self._scores,
+            "archive_errors": self._archive_errors,
             "points": outlook_points(
                 outlook,
                 every=2,
@@ -1351,6 +1465,30 @@ class ZoneForecastSensor(SensorEntity):
                 setpoints=None if setpoint is None else got.plan,
             ),
         }
+        # the archive: the full path only on the first issue of each UTC hour
+        hour = now.replace(minute=0)
+        first_of_hour = self._path_hour != hour
+        self._path_hour = hour
+        archived = {k: None for k in leads} if held else leads
+        model = brain.model
+        record = room_record(
+            at=now,
+            zone=self.entity_id,
+            name=zone["name"],
+            shared_fields=common,
+            fallback="no usable fit" if ahead.method == "profile" else None,
+            outdoor_at=self._brain.forecast.fetched,
+            outdoor_shift=got.shift,
+            fit_at=brain.quality.get("fitted_at"),
+            params={
+                k: None if model is None else getattr(model, k, None)
+                for k in PARAM_NAMES
+            },
+            leads=archived,
+            leads_d=d_leads(room, ahead.d, LEADS, STEP_HOURS),
+            path=path_points(temps, 15) if first_of_hour else None,
+        )
+        self.hass.async_create_task(self._archive(record))
         self.async_write_ha_state()
 
 

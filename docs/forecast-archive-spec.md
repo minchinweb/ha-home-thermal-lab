@@ -59,7 +59,7 @@ The sensor must compute D's leads on every issue for `leads_d`. This is new work
 | `bias` | the bias against the outdoor sensor at fetch time (°C, `null` if not enough data), and `bias_hours` |
 | `hours` | `[[hour_end_utc, temperature, dni, diffuse, cloud], …]` for the forecast hours only (not the `past_days` hours) |
 
-A failed fetch writes nothing. The room records' `outdoor_at` then points to the last good fetch, which is the truth.
+`bias` is the bias from the last learning pass (every six hours), not recomputed at the fetch. A failed fetch writes nothing. The room records' `outdoor_at` then points to the last good fetch, which is the truth.
 
 ### Size
 

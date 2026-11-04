@@ -101,6 +101,9 @@ class ZoneAhead:
             (not simulated: the model has no cooling term). None without history.
         fan: Share of each step the fan runs for the zone alone, the usual day's.
             None without history.
+        d: The profile forecast D alone (one value per step after now, None
+            where it has none), whether or not it was issued; None without
+            history. The archive records its leads next to the issued ones.
     """
 
     temps: list[float]
@@ -108,6 +111,7 @@ class ZoneAhead:
     method: str
     cool: list[float] | None = None
     fan: list[float] | None = None
+    d: list[float | None] | None = None
 
 
 def _origin(history: ZoneHistory, now: datetime, step: timedelta) -> int:
@@ -237,14 +241,16 @@ def forecast_house(
         o = _origin(z.history, now, step)
         d = _profile_d(z.history, z.room, o, steps, step_hours)
         if all(v is None for v in d):
-            out.append(ZoneAhead(path, duty, "model" if z.model else "held", cool, fan))
+            out.append(
+                ZoneAhead(path, duty, "model" if z.model else "held", cool, fan, d)
+            )
             continue
         mixed = hybrid(d, path, usual[i][0])
         temps = [z.room] + [
             p if v is None else v for v, p in zip(mixed, path[1:], strict=False)
         ]
         out.append(
-            ZoneAhead(temps, duty, "hybrid" if z.model else "profile", cool, fan)
+            ZoneAhead(temps, duty, "hybrid" if z.model else "profile", cool, fan, d)
         )
     return out
 

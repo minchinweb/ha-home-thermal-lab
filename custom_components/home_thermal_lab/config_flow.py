@@ -21,6 +21,7 @@ from homeassistant.config_entries import (
     ConfigFlow,
     ConfigFlowResult,
     ConfigSubentryFlow,
+    OptionsFlow,
     SubentryFlowResult,
 )
 from homeassistant.helpers import selector
@@ -428,10 +429,43 @@ _NAMES = {
 }
 
 
+class ArchiveOptionsFlow(OptionsFlow):
+    """How long the forecast archive keeps its records."""
+
+    async def async_step_init(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Ask for the retention in days (0 keeps everything)."""
+        if user_input is not None:
+            return self.async_create_entry(
+                data={"archive_keep_days": int(user_input["archive_keep_days"])}
+            )
+        current = self.config_entry.options.get("archive_keep_days", 0)
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Required("archive_keep_days", default=current): (
+                        selector.NumberSelector(
+                            selector.NumberSelectorConfig(
+                                min=0, max=3650, step=1, mode="box"
+                            )
+                        )
+                    )
+                }
+            ),
+        )
+
+
 class HomeThermalLabConfigFlow(ConfigFlow, domain=DOMAIN):
     """Create the single integration entry, with the outdoor temperature sensor."""
 
     VERSION = 1
+
+    @staticmethod
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+        """The forecast archive's retention."""
+        return ArchiveOptionsFlow()
 
     @classmethod
     def async_get_supported_subentry_types(

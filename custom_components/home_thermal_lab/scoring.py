@@ -199,3 +199,30 @@ def issued_from_rows(rows: list[dict]) -> list[Issued]:
                 continue
             out.append(Issued(issued, lead, predicted, start))
     return out
+
+
+def issued_from_archive(records, field: str = "leads") -> list[Issued]:
+    """The forecasts in archived ``room`` records.
+
+    Args:
+        records: Archived room records (``archive.read``).
+        field: ``leads`` for what was issued, ``leads_d`` for the profile
+            forecast D, which is computed on every issue.
+
+    A lead that is null or missing is skipped, never scored as zero error.
+    """
+    out = []
+    for r in records:
+        try:
+            issued = datetime.fromisoformat(r["at"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        start = r.get("start")
+        for key, value in (r.get(field) or {}).items():
+            try:
+                lead, predicted = float(key), float(value)
+            except (TypeError, ValueError):
+                continue
+            if math.isfinite(predicted):
+                out.append(Issued(issued, lead, predicted, start))
+    return out

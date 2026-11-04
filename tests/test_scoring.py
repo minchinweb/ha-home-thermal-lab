@@ -92,3 +92,21 @@ def test_issued_from_rows_reads_each_forecast_once():
         (3.0, 20.3),
     ]
     assert all(f.issued == T0 and f.start == 20.0 for f in got)
+
+
+def test_archive_leads_skip_null_and_score_d_apart():
+    from custom_components.home_thermal_lab.scoring import issued_from_archive
+
+    rec = {
+        "at": T0.isoformat(),
+        "start": 20.0,
+        "leads": {"1": 20.5, "3": None, "6": 21.0},
+        "leads_d": {"1": 19.5, "3": 19.0, "6": None},
+    }
+    h = issued_from_archive([rec])
+    assert sorted(f.lead_hours for f in h) == [1.0, 6.0]
+    d = issued_from_archive([rec], "leads_d")
+    assert sorted(f.lead_hours for f in d) == [1.0, 3.0]
+    actual = [(T0 + H, 20.0), (T0 + 3 * H, 20.0)]
+    assert score(h, actual, T0 + 9 * H)[1.0].bias == 0.5
+    assert score(d, actual, T0 + 9 * H)[1.0].bias == -0.5
