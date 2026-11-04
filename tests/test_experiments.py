@@ -53,6 +53,7 @@ def test_url():
         "longitude=-2.5",
         "start_date=2025-01-01",
         "hourly=temperature_2m",
+        "dew_point_2m",
         "timezone=GMT",
     ):
         assert part in url
@@ -118,3 +119,25 @@ def test_table():
     )
     assert "Tahiti" in text
     assert "paradise" in text
+
+
+def test_dew_point_is_read_when_present():
+    body = {
+        "hourly": {
+            "time": ["2025-07-01T15:00"],
+            "temperature_2m": [27.0],
+            "dew_point_2m": [14.5],
+        }
+    }
+    out = open_meteo.fetch_hourly(
+        Location("X", 0, 0), date(2025, 7, 1), date(2025, 7, 1), lambda _url: body
+    )
+    assert out[0].dew_point == 14.5
+
+
+def test_dew_point_is_none_when_absent():
+    body = {"hourly": {"time": ["2025-07-01T15:00"], "temperature_2m": [27.0]}}
+    out = open_meteo.fetch_hourly(
+        Location("X", 0, 0), date(2025, 7, 1), date(2025, 7, 1), lambda _url: body
+    )
+    assert out[0].dew_point is None

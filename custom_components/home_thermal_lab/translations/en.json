@@ -129,14 +129,20 @@
             "heat_low": "Heat, low stage",
             "heat_high": "Heat, high stage",
             "cool": "Cooling",
-            "cool_tons": "Cooling capacity (tons)"
+            "cool_tons": "Cooling capacity (tons)",
+            "afue": "Furnace efficiency, AFUE (%)",
+            "blower_curve": "Blower curve (flow = static, from the data sheet)",
+            "ac_sensible_btuh": "Air conditioner sensible capacity (BTU/h)"
           },
           "data_description": {
             "climate_entities": "Every zone's thermostat; the furnace state is read from all of them.",
             "power_entity": "Optional. Steps in this sensor when the furnace changes state set the fan and heating powers (needs several days; every 6 hours it refreshes). The powers typed below are used until then, and for any state it cannot learn.",
             "power_unit": "kW, or BTU/h for gas input (80,000 BTU/h is 23.4 kW). Stored in kW.",
             "fan": "Leave a state blank for zero.",
-            "cool_tons": "Air conditioner size in tons (12,000 BTU/h each), as 'tonnes' are used in Canada. It sets the cooling power and overrides the box above. A ton is heat moved, not electricity; for the electric meter type the kW drawn instead."
+            "cool_tons": "Air conditioner size in tons (12,000 BTU/h each), as 'tonnes' are used in Canada. It sets the cooling power and overrides the box above. A ton is heat moved, not electricity; for the electric meter type the kW drawn instead.",
+            "afue": "Gas furnaces: the AFUE from the nameplate, such as 95. Leave empty for electric.",
+            "blower_curve": "Airflow = external static, from the blower's data sheet, such as '400 cfm = 0.30 inWC, 800 = 0.20, 1200 = 0.05'. Units go on the first point and carry to the rest (CFM and inches of water column unless you say otherwise: l/s, m3/s, Pa).",
+            "ac_sensible_btuh": "The sensible (not total) cooling capacity at the rating point, from the data sheet, in BTU/h. Leave empty if unknown."
           }
         },
         "reconfigure": {
@@ -153,18 +159,27 @@
             "heat_low": "Heat, low stage",
             "heat_high": "Heat, high stage",
             "cool": "Cooling",
-            "cool_tons": "Cooling capacity (tons)"
+            "cool_tons": "Cooling capacity (tons)",
+            "afue": "Furnace efficiency, AFUE (%)",
+            "blower_curve": "Blower curve (flow = static, from the data sheet)",
+            "ac_sensible_btuh": "Air conditioner sensible capacity (BTU/h)"
           },
           "data_description": {
             "climate_entities": "Every zone's thermostat; the furnace state is read from all of them.",
             "power_entity": "Optional. Steps in this sensor when the furnace changes state set the fan and heating powers (needs several days; every 6 hours it refreshes). The powers typed below are used until then, and for any state it cannot learn.",
             "power_unit": "kW, or BTU/h for gas input (80,000 BTU/h is 23.4 kW). Stored in kW.",
             "fan": "Leave a state blank for zero.",
-            "cool_tons": "Air conditioner size in tons (12,000 BTU/h each), as 'tonnes' are used in Canada. It sets the cooling power and overrides the box above. A ton is heat moved, not electricity; for the electric meter type the kW drawn instead."
+            "cool_tons": "Air conditioner size in tons (12,000 BTU/h each), as 'tonnes' are used in Canada. It sets the cooling power and overrides the box above. A ton is heat moved, not electricity; for the electric meter type the kW drawn instead.",
+            "afue": "Gas furnaces: the AFUE from the nameplate, such as 95. Leave empty for electric.",
+            "blower_curve": "Airflow = external static, from the blower's data sheet, such as '400 cfm = 0.30 inWC, 800 = 0.20, 1200 = 0.05'. Units go on the first point and carry to the rest (CFM and inches of water column unless you say otherwise: l/s, m3/s, Pa).",
+            "ac_sensible_btuh": "The sensible (not total) cooling capacity at the rating point, from the data sheet, in BTU/h. Leave empty if unknown."
           }
         }
       },
-      "error": {},
+      "error": {
+        "invalid_blower_curve": "The blower curve could not be read: use 'flow = static' pairs, such as '400 cfm = 0.30 inWC, 800 = 0.20'.",
+        "invalid_afue": "AFUE is a percentage, such as 95."
+      },
       "abort": {
         "reconfigure_successful": "Saved."
       }

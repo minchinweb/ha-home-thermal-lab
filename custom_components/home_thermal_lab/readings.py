@@ -15,12 +15,14 @@ class Reading:
         temperature: Air temperature in degrees Celsius.
         weather_code: WMO weather code, when known.
         cloud_cover: Cloud cover in percent, when known.
+        dew_point: Dew point in degrees Celsius, when known.
     """
 
     time: datetime
     temperature: float
     weather_code: int | None = None
     cloud_cover: float | None = None
+    dew_point: float | None = None
 
 
 @dataclass(frozen=True)

@@ -22,7 +22,7 @@ if TYPE_CHECKING:
     from .locations import Location
 
 ARCHIVE_URL = "https://archive-api.open-meteo.com/v1/archive"
-HOURLY_VARIABLES = "temperature_2m,weather_code,cloud_cover"
+HOURLY_VARIABLES = "temperature_2m,weather_code,cloud_cover,dew_point_2m"
 RETRIES = 4
 RETRY_SECONDS = 20.0
 
@@ -101,6 +101,7 @@ def fetch_hourly(
     hourly = fetch(build_url(location, start, end))["hourly"]
     codes = hourly.get("weather_code")
     clouds = hourly.get("cloud_cover")
+    dews = hourly.get("dew_point_2m")
     out = []
     for i, (t, temp) in enumerate(
         zip(hourly["time"], hourly["temperature_2m"], strict=True)
@@ -114,6 +115,7 @@ def fetch_hourly(
                 float(temp),
                 None if code is None else int(code),
                 _optional(clouds, i),
+                _optional(dews, i),
             )
         )
     return out

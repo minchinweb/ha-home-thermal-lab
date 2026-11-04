@@ -32,11 +32,13 @@ from .options import (
     FACES,
     GROUND_KEYS,
     KW_MODES,
+    BTU_H_TO_KW,
     POWER_UNITS,
     FieldError,
     format_lights,
     format_roofs,
     kw_table,
+    parse_blower,
     normalise_roofs,
     parse_lights,
     parse_roofs,
@@ -181,6 +183,9 @@ def _energy_schema(_roof_labels: list[dict]) -> vol.Schema:
             vol.Optional("power_unit", default="kW"): _UNITS,
             **{vol.Optional(mode): _NUMBER for mode in KW_MODES},
             vol.Optional("cool_tons"): _NUMBER,
+            vol.Optional("afue"): _NUMBER,
+            vol.Optional("blower_curve"): _TEXT,
+            vol.Optional("ac_sensible_btuh"): _NUMBER,
         }
     )
 
@@ -294,12 +299,28 @@ def _energy_from_form(form: dict) -> dict:
         data["power_entity"] = form["power_entity"]
     if form.get("learn_days") is not None:
         data["learn_days"] = int(form["learn_days"])
+    # Furnace and air conditioner nameplate data (optional).
+    if form.get("afue") not in (None, ""):
+        afue = float(form["afue"]) / 100.0
+        if not 0 < afue <= 1.0:
+            raise FieldError("afue", "AFUE is a percentage, such as 95")
+        data["afue"] = afue
+    if form.get("blower_curve"):
+        data["blower_curve"] = form["blower_curve"]
+        data["blower"] = [list(point) for point in parse_blower(form["blower_curve"])]
+    if form.get("ac_sensible_btuh") not in (None, ""):
+        data["ac_sensible_w"] = float(form["ac_sensible_btuh"]) * BTU_H_TO_KW * 1000.0
     return data
 
 
 def _energy_to_form(data: dict) -> dict:
-    flat = {k: v for k, v in data.items() if k != "kw"}
-    return {**flat, **data.get("kw", {})}
+    flat = {k: v for k, v in data.items() if k not in ("kw", "afue", "blower", "ac_sensible_w")}
+    extra = {}
+    if "afue" in data:
+        extra["afue"] = data["afue"] * 100.0
+    if "ac_sensible_w" in data:
+        extra["ac_sensible_btuh"] = data["ac_sensible_w"] / BTU_H_TO_KW / 1000.0
+    return {**flat, **data.get("kw", {}), **extra}
 
 
 def _contribution_from_form(form: dict) -> dict:
