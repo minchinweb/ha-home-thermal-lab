@@ -19,6 +19,7 @@ Sources were read in a short session; figures and equations quoted from fetch-to
 | **Home Performance** | [Hugofromfrance/home_performance](https://github.com/Hugofromfrance/home_performance) (HACS, MIT, v1.4.2) | Estimates whole-house heat-loss coefficient K (W/°C) and rates insulation A+ to D | Steady-state K = E_thermal / (ΔT × duration), 7-day rolling window, fixed thresholds, no calibration | **Partly**: `models.py` and `const.py` read. **Confirmed as the installed version** (v1.4.2): Home Assistant entity names ("Home Performance - <room> Avg delta T 24h", "Window open") match this repo's source. |
 | **Versatile Thermostat** | [jmcollin78/versatile_thermostat](https://github.com/jmcollin78/versatile_thermostat) (HACS, v10.6.3) | Feedback thermostat for switch, valve or climate heaters: presets, window, presence, power management, Auto-TPI learning | None for temperature. TPI law Kint·(T_set−T_in)+Kext·(T_set−T_out); EMA and one-step slope; no forecast | **Yes**: `prop_algo_tpi.py`, `ema.py`, `open_window_algorithm.py`, `auto_start_stop_algorithm.py`, and parts of `auto_tpi_manager.py` at commit `0860f19`. See the Versatile Thermostat code review. |
 | **Climate Advisor** | [gunkl/ClimateAdvisor](https://github.com/gunkl/ClimateAdvisor) (HACS default store, MIT, v0.8.60). Searched as [gunkl/SmartHVAC](https://github.com/gunkl/SmartHVAC); the clone was the same integration. | Runs a thermostat from the weather forecast: classifies each day, holds one comfort-edge setpoint, pauses HVAC on open doors and windows, runs natural ventilation, and learns a one-node thermal model | One-node ODE: dT/dt = k_passive·(T − T_out) + Q + k_solar·solar_factor, with Q = ±k_active while the HVAC is driving. Coefficients from OLS and EWMA by confidence grade. | **Partly**: `learning.py` (the k estimators and EWMA cache), the physics simulators in `coordinator.py`, and `docs/08`, `thermal-model-v3-spec.md`. The 16k-line coordinator and 20k-line automation were not read in full. See the Climate Advisor code review. |
+| **RC_BuildingSimulator** | [architecture-building-systems/RC_BuildingSimulator](https://github.com/architecture-building-systems/RC_BuildingSimulator) (MIT, v0.1, last push 7 March 2021). Installable fork: [rcbsim](https://pypi.org/project/rcbsim) 0.3b0 (October 2024). | Python 5R1C simulator of ISO 13790 Annex C, with supply and emission models and EPW-driven solar gains; for building energy design studies | 5R1C with air, surface and mass nodes; one lumped capacitance c_m = 165 kJ/m²K × floor area; hourly Crank–Nicolson step; HVAC demand found by a 10 W/m² probe, with unlimited capacity by default | **Yes**: `building_physics.py`, `supply_system.py`, `emission_system.py` and the solar formulas in `radiation.py`, at `97c1cdd`; the `rcbsim` sdist diffed against it. Not run; wiki theory page not read. See the RC_BuildingSimulator code review. |
 | **GivTCP** | [britkat1980/giv_tcp](https://github.com/britkat1980/giv_tcp) | GivEnergy inverter/battery bridge (Modbus to MQTT/HA) | None for buildings. PALM sets overnight SoC target from load history and Solcast P10/P50/P90 PV forecast | **Partly**: README, CHANGELOG, `palm_*.py`, `outliers.py` (head). |
 | **Open-Meteo custom component (fork)** | [thuemah/open_meteo](https://github.com/thuemah/open_meteo) | Drop-in replacement for the HA Open-Meteo integration, adding gusts, cloud cover, humidity, pressure, GHI/DNI/DHI | None (data source) | **Yes**, README. |
 | **Plotly Graph Card** | [dbuezas/lovelace-plotly-graph-card](https://github.com/dbuezas/lovelace-plotly-graph-card) | Interactive Plotly charts on HA dashboards | None (display) | README. |
@@ -46,7 +47,6 @@ Sources were read in a short session; figures and equations quoted from fetch-to
 | **Predbat add-on, predai, ge_cloud** | Predbat | [springfall2008/predbat_addon](https://github.com/springfall2008/predbat_addon), [predai](https://github.com/springfall2008/predai), [ge_cloud](https://github.com/springfall2008/ge_cloud) | Predbat ecosystem |
 | **Octopus Energy integration** | Predbat | [BottlecapDave/HomeAssistant-OctopusEnergy](https://github.com/BottlecapDave/HomeAssistant-OctopusEnergy) | Tariff data |
 | **Many inverter integrations** (Solax, Sunsynk, Sofar, Sigenergy, Huawei, Fronius, Hanchu, EP Cube, myenergi, Hypervolt, Enphase, ha-solcast-solar) | Predbat | linked in Predbat's report | Hardware integrations, not thermal |
-| **RC_BuildingSimulator** | web search | [architecture-building-systems/RC_BuildingSimulator](https://github.com/architecture-building-systems/RC_BuildingSimulator) | 5R1C ISO 13790 simulator, ETH Zürich; wiki theory page not read |
 | **thermal-rc-toolbox** | web search | [davudtopalovic/thermal-rc-toolbox](https://github.com/davudtopalovic/thermal-rc-toolbox) | 2R2C to 6R3C models, GA parameter fit, CV(RMSE), NMBE, HDBSCAN uncertainty |
 | **EPSM RC** | web search | [SB-Chalmers/epsm_rc](https://github.com/SB-Chalmers/epsm_rc) | ISO 13790 5R1C; synthetic example only |
 | **BUEM** | web search | [pypi.org/project/buem](https://pypi.org/project/buem) | ISO 52016-1 5R1C; not opened |
@@ -2650,6 +2650,53 @@ Read from a shallow clone of `gunkl/ClimateAdvisor` (v0.8.60, 2026-11-04). Read 
 
 *Verification status: equations and constants come from `learning.py`, `coordinator.py` and the docs at the commit cloned on 4 November 2026. The docs were read by heading and in targeted sections, not in full. The `08` analytic form was checked against the code's equation by hand, not by running it.*
 
+### RC_BuildingSimulator code review
+
+Read from a shallow clone of `architecture-building-systems/RC_BuildingSimulator` at `97c1cdd` (last push 7 March 2021), and the `rcbsim` 0.3b0 sdist from PyPI. Read in full: `building_physics.py` (about 590 lines), `supply_system.py` and `emission_system.py`, the solar formulas in `radiation.py`, and the test names. Not read: the examples, `epwreader.py`, the wiki. Tests were not run. The ISO 52016-1 account below comes from a 2019 comparison paper, not the standard text.
+
+**What it does.** A Python `Zone` class that solves the ISO 13790 Annex C 5R1C network hour by hour, then finds the heating or cooling needed to hold the set points. Supply models convert that load into fuel or electricity (boiler efficiencies, and an air-source heat-pump COP curve from Staffell et al.). Emission models decide which node receives the heat. The radiation code computes sun position from an EPW file and window gains. It is a design-calculation tool, not a fitted model.
+
+**The standard.** The code cites ISO 13790:2008. That edition is withdrawn and replaced by EN ISO 52016-1:2017 ([SIS listing](https://www.sis.se/en/produkter/construction-materials-and-building/protection-of-and-in-buildings/thermal-insulation-of-buildings/sseniso137902008/)). Points of the 2008 method that matter here:
+- The 5R1C is an electrical analogue with one capacitance, C_m. The constants 9.1 W/m²K (mass coupling) and 3.45 W/m²K (air to surface), the mass area of 2.5 × floor area, and the medium-weight 165 kJ/m²K all come from the standard.
+- The hourly method is a simplification for energy need, not a tracker of indoor temperature from sensors.
+
+**What ISO 52016-1 changes.** From [Ballarini et al. (2019)](https://publications.ibpsa.org/proceedings/bs/2019/papers/BS2019_210431.pdf), a comparison on one case study (a two-storey single-family house in Turin, IEE TABULA archetype) with EnergyPlus as reference:
+- Each opaque element is a resistance-capacity network per construction layer, with up to five capacitances and four resistances per element, and mass placed by position class. The 2008 method lumps all capacity into one node.
+- Solar gain enters as a total transmitted fraction (g_gl, corrected for incidence by F_w) directly into the zone, not split across surfaces.
+- Convective and long-wave coefficients are time-invariant.
+- It is still hourly, still Crank–Nicolson, and the comparison still uses ideal HVAC with unlimited capacity.
+
+Results for that case: annual heating 5,096 kWh (52016-1), 5,452 kWh (13790), 5,345 kWh (EnergyPlus). Cooling 1,694, 1,758 and 1,689 kWh. Free-floating operative temperature RMSE 0.21 °C (52016-1) against 1.16 °C (13790). Thermal time constant 233 h (52016-1), 296 h (EnergyPlus), 81 h (13790).
+
+**Does ISO 52016-1 make this model more useful?** Partly.
+- For the thermal response, yes. The 2008 lumped capacity gives a time constant about a quarter of EnergyPlus's in that test, and that short constant is what drives its free-floating error. The layered network fixes it, but it needs construction data for the house.
+- For the things we would most need, no. The step is still one hour, HVAC is still ideal and unlimited, and the validation is against simulation, not measured temperatures.
+- The evidence is thin. It is one archetype, and the authors chose consistency options (operative set points, an 11 K sky term, a 40/60 convective/radiative split) that the standard does not fix. I have not read the standard or ISO/TR 52016-2.
+
+**The fork (rcbsim 0.3b0).** Diffing the sdist against the original, the physics, supply, emission and radiation modules are identical except for line endings. The one code change is in `building_physics.py`, which imports `rcbsim.supply_system` and `rcbsim.emission_system` instead of the bare module names, so it works after `pip install`. The sun-position reader file is also renamed. The sdist ships no EPW weather file or schedule CSV, so the examples and any test that reads the EPW may not run from it alone; I did not check. The fork's value is installability, not the model. Not run.
+
+**Pitfalls to skip.**
+- **One-hour step.** The step is baked into `c_m / 3600` and the coefficients. A sub-hour forecast needs the constants re-derived, not just a different `dt`.
+- **Unlimited HVAC by default.** `max_heating_energy_per_floor_area` defaults to infinity, so the solver never reports a shortfall.
+- **Fixed supply temperature per emission system.** New radiators are fixed at 50 °C, so the heat-pump COP cannot respond to a weather-compensated curve.
+- **Heat-pump COP is an unvalidated fit.** `COP = 6.81 − 0.121ΔT + 0.00063ΔT²` comes from manufacturer data, and the code marks it TODO. The clamp at ΔT = 0 gives a COP of about 6.8 at mild temperatures, with no defrost or part-load effects.
+- **Heat goes to the air node by default.** Radiators, the default, put all heat into the air node, so surface and mass lag never appear.
+- **Validation is missing.** `emission_system.py` says "Validation is still required". The tests check fixed expected outputs, not measured data.
+- **Docstrings disagree with the code.** `t_m_prev` is called "previous air temperature" but is the mass temperature. `calc_energy_demand` documents a return it does not make. `t_opperative` is misspelled.
+- **Import path.** `import supply_system` works only when the package folder is on `sys.path`.
+- **Maintenance.** No commits to the original since March 2021.
+
+**Useful pieces to copy or reimplement.**
+1. **The node algebra (C.4–C.11)** as a checked reference for a two-node (air plus mass) version of our model. It is the most direct route from one node to thermal lag.
+2. **The 10 W/m² probe.** Two linear solves give the power that holds a set point exactly. It could feed a forecast output of "heat required to hold 20 °C".
+3. **Geometry-based priors.** The 9.1 and 3.45 coupling constants, the 2.5 × floor mass area and 165 kJ/m²K. Use them as priors for fitted values, not as fixed inputs.
+4. **A time-constant check from the paper.** τ = C / (3600 · H_tot), in hours. For us, τ = 1 / |k_passive| from the fitted decay. If it is far from a layered-construction estimate, the one-node model is missing mass. This is a cheap test of our fits.
+5. **The heat-pump COP curve**, only if a heat pump is in scope.
+
+**Relevance to our forecasting.** This is the closest reviewed source to our question about a second node. The ISO 52016-1 result points to the time constant, not the solar detail, as the driver of free-floating error. The test we can run on our data is τ from our fits against τ from the construction layers, which needs no full standard. Do not copy the fixed hourly step, the ideal HVAC, or the fork's import fix beyond what we need.
+
+*Verification status: equations, constants and defaults come from the cloned source at `97c1cdd` and the `rcbsim` 0.3b0 sdist. The ISO 52016-1 figures are from Ballarini et al. (2019), read from the PDF. The standard text was not read.*
+
 ### Warnings from the reviews
 - Self-reported savings or accuracy claims without figures (EcoEdge) should be disregarded.
 - Stable indoor temperature biases Home Performance's K upward; day/night swings also bias it. Test this on our data.
@@ -2664,7 +2711,7 @@ Read from a shallow clone of `gunkl/ClimateAdvisor` (v0.8.60, 2026-11-04). Read 
 |---|---|---|---|
 | **Steady-state heat-loss coefficient** (K = E / (ΔT·t)) | Home Performance | Simple; one number; easy to explain; no thermal mass to fit | No lag, no solar or internal gain terms; biased by stable temperatures and day/night swings; only comparable within one install |
 | **Single-node RC (1R1C)** | RoomMind, EcoEdge (per room), Predheat (lumped, water loop) | Few parameters; analytic solution for constant inputs; captures warm-up/cooldown time constant | One temperature for the whole room; no fabric vs air split; can't represent stratification or inter-room flow |
-| **Multi-node RC (2R2C, 3R3C, 5R1C, 6R3C)** | ISO 13790 5R1C, RC_BuildingSimulator, thermal-rc-toolbox, Modelica libraries | Separates air and fabric; standard in building science; more realistic lag | More parameters, identifiability problems; ISO 13790 5R1C is designed for monthly calculation |
+| **Multi-node RC (2R2C, 3R3C, 5R1C, 6R3C)** | ISO 13790 5R1C, RC_BuildingSimulator, thermal-rc-toolbox, Modelica libraries | Separates air and fabric; standard in building science; more realistic lag | More parameters, identifiability problems; ISO 13790's hourly 5R1C lumps all capacity into one node, which underestimates the time constant (see the RC_BuildingSimulator review) |
 | **Online filter (EKF / UKF)** | RoomMind (EKF), Radecki & Hencey (UKF), Zamani thesis (UKF) | Learns parameters while running; adapts to change; can estimate unknown loads | Linearisation error (EKF); sensitive to noise and tuning; can drift without excitation; only as good as the model structure |
 | **Batch grey-box fit (ML/Bayesian/maximum-likelihood)** | Bacher & Madsen 2011 method; thermal-rc-toolbox (GA) | Uses full history; reports uncertainty; model selection by likelihood ratio | Needs excitation; slow; results depend on the chosen structure |
 | **Degree-day / efficiency regression** | Heating Analytics (kWh per thermal degree-day), EMHASS demand | Robust for energy totals; uses weather directly; easy to explain | Not a temperature model; poor for short-term control; efficiency term absorbs many effects |
@@ -2697,12 +2744,12 @@ Ordered by how central they are to our work. "Expected application" is what the 
    - *Covers:* MILP home energy management with heat pump, PV, battery and thermal storage; rolling-horizon end-of-horizon effects; battery matters most for self-sufficiency. Code open-source in Julia (JuMP).
    - *Expected application:* a reference for linear optimisation with heat-pump COP and loss terms (EMHASS uses its loss equation, Eq. B.13 per EMHASS docstring, unverified). Relevant when we move from monitoring to control.
 
-4. **ISO 13790:2008.** *Energy performance of buildings: Calculation of energy use for space heating and cooling.* International Organization for Standardization. Not accessed.
+4. **ISO 13790:2008.** *Energy performance of buildings: Calculation of energy use for space heating and cooling.* International Organization for Standardization. Not read directly; its method is described in the 2019 comparison in item 5 and in RC_BuildingSimulator's code.
    - *Covers:* monthly quasi-steady-state method; reduced 5R1C thermal network.
    - *Expected application:* a standard benchmark structure. Not suited to hourly recorder data without modification.
 
-5. **ISO 52016-1:2017.** Energy performance of buildings: energy needs for heating and cooling, internal temperatures and sensible and latent heat loads. Cited by BUEM per search snippet; not opened.
-   - *Expected application:* a newer successor to ISO 13790 for hourly calculation; check before relying on it.
+5. **ISO 52016-1:2017.** Energy performance of buildings: energy needs for heating and cooling, internal temperatures and sensible and latent heat loads. Read through [Ballarini et al. (2019), IBPSA BS2019 paper 210431](https://publications.ibpsa.org/proceedings/bs/2019/papers/BS2019_210431.pdf), a comparison with ISO 13790 and EnergyPlus. The standard text itself was not read, nor ISO/TR 52016-2.
+   - *Expected application:* the current successor to ISO 13790. The 2019 comparison suggests it is closer to EnergyPlus on thermal time constant and free-floating temperature, but it is still an hourly, single-case result. See the RC_BuildingSimulator review.
 
 6. **ASHRAE Guideline 14 (calibration metrics).** Cited in search results for CV(RMSE) and NMBE; not opened.
    - *Expected application:* acceptance thresholds for calibrated models; a standard to compare our fits against.
