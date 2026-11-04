@@ -119,6 +119,7 @@ the drawing. The choice is remembered in `localStorage`:
 | --- | --- | --- |
 | Rooms (walls, roofs, windows, doors) | House Structure | always on |
 | Heating runs (registers and their ducts) | House Structure | on |
+| Roofs (each roof's slope, gables) | House Structure | off |
 | Heat flow (lab overlay) | Thermal Lab, when installed | off |
 
 Apart from the layers, a **Floors: Together / Apart** toggle draws the floors
@@ -160,7 +161,10 @@ overlays["heat_flow"] = {
 }
 ```
 
-The House tab shows a chip for each registered overlay. When a chip is on,
+Values are watts, positive into a room: `between` is positive from `from`
+to `to`, and `outside` is positive coming in. A `heating` value may name its
+`register` (a House Structure part id); otherwise it's shared out over the
+room's outlets. The House tab shows a chip for each registered overlay. When a chip is on,
 the tab calls the overlay's websocket command, again every `refresh_s`, and
 draws what comes back at the anchors. The command answers with flows in
 watts, all optional:
@@ -354,7 +358,12 @@ Each step leaves all three working.
      parts in the summary, and repairs on need. `frontend` is an
      after-dependency, not a dependency: registering an iframe panel doesn't
      need the frontend set up, and the tests don't have its package.
-   - **Next**: the layered drawing, the anchors and the overlay contract.
+   - **Done** (`80d5edd`, `65582f2`, `362621c`): floors apart or together
+     (a room within 3 1/2 ft of a floor stays on it), quarter-turn views,
+     the layers (rooms, runs, roofs), the roofs drawn as slopes and gables,
+     the anchors, and the overlay contract with its drawing on the House tab.
+     Checked with a local preview of the tab, using sample data and
+     screenshots, not yet in a real Home Assistant.
 
    The lab still has its own sidebar entry and its own Chart.js, so for now
    there are two of each.
