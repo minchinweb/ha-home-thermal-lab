@@ -8,6 +8,8 @@
 
 **Method:** Simulate the RC model forward 24 h. Backtest on historical days using the forecasts that were available at the time. Report per-room error against a naive baseline (persistence, or the wave component alone).
 
+**Bias check:** report the mean bias (predicted minus measured, in °C) per room and lead time, next to RMSE. ASHRAE Guideline 14 uses NMBE, which divides the bias by the mean measured value. For indoor temperature in °C that divisor is about 20, so the percentage would hide errors and would not compare with the energy thresholds. Use the unnormalised bias, and set a tolerance before reading a backtest. Not yet computed.
+
 ## Results
 
 First backtest (`scripts/predict_day.py --days 40`): rolling origin, at local midnight (America/Regina) of every test day predict the 24 hourly room temperatures of the day ahead from earlier data only. Hourly long-term statistics, 40 days to 2026-11-02, test days 10 to 39 (15 to 30 days per room: the Zigbee bedroom sensors have about 20 days of history). Outdoor temperature is the measured value, standing in for a perfect forecast. The office sensor and the office air-quality sensor are one room.

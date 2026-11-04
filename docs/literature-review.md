@@ -91,6 +91,18 @@ The standard layout has one capacitance on the building mass node and five resis
 
 **Limits for our data.** Five resistances and one capacitance cannot be identified from indoor temperature and HVAC power alone: different combinations give the same predictions. The practical choice is likely a 2R1C (air plus mass, one envelope path), with geometry-based priors for the conductances and, if possible, a wall or floor temperature sensor to identify the mass node. The standard's constants assume the hourly step our pipeline uses, so a sub-hour forecast would need them re-derived.
 
+### ASHRAE Guideline 14 and ISO 13789: what we can borrow
+
+*Read through secondary sources only. The formulas and thresholds were not checked against the texts, and Guideline 14 has a 2023 edition, so cite the current one.*
+
+**ASHRAE Guideline 14** is an acceptance standard for calibrated energy models. It does not prescribe a model structure. Its statistics are CV(RMSE), the RMSE divided by the mean measured value, and NMBE, the mean bias divided by the mean measured value. Commonly cited limits are 15% and ±5% for monthly data, and 30% and ±10% for hourly data. Sources disagree (one gives 20% for monthly CV(RMSE)).
+- *Borrow: a bias check.* NMBE divides by the mean measured value. For indoor temperature in °C that is about 20, so the percentage would stay near zero whatever the error. Report the unnormalised mean bias, predicted minus measured, in °C, per room and lead time. Applies to Hypothesis 16.
+- *Do not borrow:* the CV(RMSE) and NMBE thresholds, which are for energy. Report RMSE in °C.
+
+**ISO 13789:2017** gives steady-state coefficients for a building: transmission `H_tr` (element areas times U-values, plus thermal bridges) and ventilation `H_ve`. Heat loss is `(H_tr + H_ve) × (T_in − T_out)`.
+- *Borrow: the split.* Our fits give one envelope coefficient from room temperatures. Splitting it into fabric and ventilation is a model assumption, and it should be tested. Ventilation should rise with wind and with open windows or doors, so those terms separate the two. Applies to Hypotheses 04, 09 and 12.
+- *Not borrowable:* `H_tr` needs element areas and U-values, and we have no heat flux sensors to measure them.
+
 ### Estimation and identifiability
 - **Gate learned parameters by excitation.** RoomMind's EKF updates a parameter only when the current input can reveal it (non-zero Jacobian entry), and gates control on prediction uncertainty (below 0.5 °C) plus minimum sample counts. Both gates are worth copying.
 - **Say what a weighted estimate converges to.** Heating Analytics weights each hour's update by its solar signal, so the base model converges to dark-equivalent demand rather than the mean. Its docstring states this; ours should too.
@@ -2768,7 +2780,7 @@ Ordered by how central they are to our work. "Expected application" is what the 
 5. **ISO 52016-1:2017.** Energy performance of buildings: energy needs for heating and cooling, internal temperatures and sensible and latent heat loads. Read through [Ballarini et al. (2019), IBPSA BS2019 paper 210431](https://publications.ibpsa.org/proceedings/bs/2019/papers/BS2019_210431.pdf), a comparison with ISO 13790 and EnergyPlus. The standard text itself was not read, nor ISO/TR 52016-2.
    - *Expected application:* the current successor to ISO 13790. The 2019 comparison suggests it is closer to EnergyPlus on thermal time constant and free-floating temperature, but it is still an hourly, single-case result. See the RC_BuildingSimulator review.
 
-6. **ASHRAE Guideline 14 (calibration metrics).** Cited in search results for CV(RMSE) and NMBE; not opened.
+6. **ASHRAE Guideline 14 (calibration metrics).** Read through secondary sources only; see section c, "ASHRAE Guideline 14 and ISO 13789".
    - *Expected application:* acceptance thresholds for calibrated models; a standard to compare our fits against.
 
 7. **Zamani, V. "Parameter Input Estimation and Temperature Control of RC Thermal Dynamic Systems."** University of Alberta thesis. [Record](https://era.library.ualberta.ca/items/dfd087a7-1cd9-4f68-8aa0-ed1482bc502d). Uses UKF with NLS to estimate RC parameters and inputs with partially missing states. RoomMind's code cites "Zamani et al. (2025), PMC 11798724"; I could not confirm this is the same work.
