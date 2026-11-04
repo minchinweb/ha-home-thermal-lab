@@ -196,9 +196,37 @@ the lab read them.
   (below), since they're design conditions, not part of the building.
 
 `publish_rooms` adds them to the summary: `hass.data["house_structure"]` gets
-`"equipment": {"furnace": {...}, "ac": {...}}` and `"buildings": [...]`, and
-`SUMMARY_VERSION` goes up by one. They show on the House tab and on Manual J's
-HVAC design tab.
+`"equipment": {"furnaces": [...], "air_conditioners": [...]}` and
+`"buildings": [...]`. They're lists, so a house with two furnaces can say so.
+The summary stays at version 1, because keys were only added: the lab checks
+for exactly version 1, so bumping it would have broken the lab for nothing.
+They show on the House tab and on Manual J's HVAC design tab.
+
+## Repairs only when something needs the number
+
+House Structure used to raise a repair for every wall or roof without a size,
+and every room without a floor area. Its own sensors don't use those numbers,
+though, so the repair was only right when another integration did. Now each
+integration says what it uses, and a missing size raises a repair only if
+something needs it. The repair names who needs it:
+
+```python
+needs = hass.data.setdefault("house_structure_needs", {})
+needs["manual_j"] = {
+    "title": "Manual J",
+    "needs": ["wall_size", "roof_size", "room_floor"],
+}
+hass.bus.async_fire("house_structure_needs_updated")
+```
+
+An integration removes its entry, and fires the event again, when it unloads.
+
+- Manual J needs `wall_size`, `roof_size` and `room_floor`.
+- The lab needs `room_floor` for a room's heat capacity.
+
+Any other warning about the house should follow the same rule: it goes in the
+integration that needs the number, or is raised by House Structure only when
+something has said it needs it.
 
 ## Manual J
 
@@ -250,7 +278,9 @@ Its own settings (one config entry, no sub-entries):
   house's.
 
 It reads from House Structure the rooms, ducts, equipment and buildings, and
-reloads its results on `house_structure_updated`. It reads Thermal Lab's
+reloads its results on `house_structure_updated`. It registers its needs
+(above), so a wall without a size raises a repair only once Manual J is
+installed. It reads Thermal Lab's
 fitted rates if they're there (below). Its websocket command is
 `manual_j/loads`.
 
@@ -310,11 +340,18 @@ keys.
 
 Each step leaves all three working.
 
-1. **House Structure**: the frame page, `house_structure/tabs`, `tab.js`,
-   Chart.js and its vendoring, the House tab with the layered drawing,
-   anchors and the overlay contract, and the Furnace, Air conditioner and
-   Building parts in the summary. The lab still has its own sidebar entry and
-   its own Chart.js, so for now there are two of each.
+1. **House Structure**, in two commits:
+   - **Done** (`3fdb2b8` on `thermal-lab-panel`): the frame page,
+     `house_structure/tabs` (a subscription), `tab.js`, Chart.js and its
+     vendoring, a first House tab (the drawing as an image, a room picker,
+     the equipment and buildings), the Furnace, Air conditioner and Building
+     parts in the summary, and repairs on need. `frontend` is an
+     after-dependency, not a dependency: registering an iframe panel doesn't
+     need the frontend set up, and the tests don't have its package.
+   - **Next**: the layered drawing, the anchors and the overlay contract.
+
+   The lab still has its own sidebar entry and its own Chart.js, so for now
+   there are two of each.
 2. **Manual J**: the new repo with the moved code and tests, its
    settings, and the HVAC design tab. Its fitted columns stay empty until step
    3 publishes the rates. The lab's own Loads view keeps working alongside it.
