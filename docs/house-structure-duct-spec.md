@@ -1,10 +1,11 @@
 # Duct and envelope data in House Structure
 
 House Structure (`ha-house-structure`, a local checkout at
-`D:\Code\ha-house-structure`) publishes the house to `ha-home-thermal-lab`
-through `hass.data["house_structure"]`. The consumer is
-`custom_components/home_thermal_lab/house_model.py`, which builds the Manual
-J/S/D project from it. This document is what is implemented, in both repos.
+`D:\Code\ha-house-structure`) publishes the house through
+`hass.data["house_structure"]`. The consumer is `house_model.py` in Manual J
+(`ha-manual-j`), which builds the Manual J/S/D project from it; it was
+`custom_components/home_thermal_lab/house_model.py` here before the split.
+This document is what is implemented, in both repos.
 
 ## Why
 
@@ -78,7 +79,7 @@ its share of the trunk airflow is missing.
   blank).
 - Windows: `glazing` (`double` or `triple`) and `frame` (`vinyl`, `wood` or
   `aluminium`), chosen from lists. Their U-values come from the consumer's table
-  (`manual.window_u`).
+  (`building.window_u` in Manual J, was `manual.window_u`).
 - Rooms: `below_grade_m`, the depth of the walls below grade. The share of each
   wall below grade is that depth over the room's height; the rest of the wall is
   outdoors. Without a depth, a below-ground room's walls are all taken as below
@@ -95,6 +96,7 @@ unchanged: the new keys are optional for readers.
 
 - House Structure: `tests/test_ducts.py` (duct text, sections, loops, missing
   names, round trip); `tests/test_parts.py` (the summary carries the new fields).
-- Thermal lab: `tests/test_house_model.py` (sections are shared by their
-  registers, the shared sections carry the summed airflow, unknown and looping
-  sections leave the register out, a register with no airflow is noted).
+- Manual J (was the thermal lab): `tests/test_house_model.py` (sections are
+  shared by their registers, the shared sections carry the summed airflow,
+  unknown and looping sections leave the register out, a register with no
+  airflow is noted).

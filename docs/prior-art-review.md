@@ -6,8 +6,8 @@ Reviewed 2026-11-04 from shallow clones (latest commit only). Nothing was execut
 
 | Project | Licence | What it is | Detailed note |
 |---|---|---|---|
-| [SiliconSaga/eldr](https://github.com/SiliconSaga/eldr) | None found (no LICENSE file) | Python Manual J, S and D engine reading Sweet Home 3D models. Demo-grade, not ACCA-certified. | [prior-art-eldr.md](prior-art-eldr.md) |
-| [Code4Community-Lexington/projects.manual-j](https://github.com/Code4Community-Lexington/projects.manual-j) | GPL-3.0 | Early skeleton: winter-only calculation that does not yet run, a project brief, and a transcribed solar-gain table. | [prior-art-projects-manual-j.md](prior-art-projects-manual-j.md) |
+| [SiliconSaga/eldr](https://github.com/SiliconSaga/eldr) | None found (no LICENSE file) | Python Manual J, S and D engine reading Sweet Home 3D models. Demo-grade, not ACCA-certified. | [prior-art-eldr.md](https://github.com/minchinweb/ha-manual-j/blob/master/docs/prior-art-eldr.md) (in Manual J) |
+| [Code4Community-Lexington/projects.manual-j](https://github.com/Code4Community-Lexington/projects.manual-j) | GPL-3.0 | Early skeleton: winter-only calculation that does not yet run, a project brief, and a transcribed solar-gain table. | [prior-art-projects-manual-j.md](https://github.com/minchinweb/ha-manual-j/blob/master/docs/prior-art-projects-manual-j.md) (in Manual J) |
 
 ## Summary
 

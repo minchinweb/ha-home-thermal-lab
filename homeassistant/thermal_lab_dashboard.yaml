@@ -1,6 +1,7 @@
 # A dashboard view for one zone, built from standard cards and apexcharts-card
-# (HACS). The Thermal Lab panel in the sidebar shows the same and more without
-# any setup; this is for putting a zone on your own dashboards.
+# (from the Marketplace). The Zones tab on House Structure's Thermal Lab page
+# shows the same and more without any setup; this is for putting a zone on
+# your own dashboards.
 #
 # Paste into a dashboard's raw configuration editor (as one entry under
 # `views:`), then replace the entity ids:

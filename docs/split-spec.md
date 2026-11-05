@@ -387,6 +387,28 @@ Each step leaves all three working.
 3. **Home Thermal Lab**: register the Zones tab and drop the old panel and its
    Chart.js, publish the fitted rates, add the Heat flow overlay, remove the moved code, settings and tests, and update the
    README, CHANGELOG and hypotheses that point at the Loads tab.
+   **Done** (on `split-plan`, merged to `master`), with these differences
+   from the plan above:
+   - `between` uses each room's temperature sensor from House Structure's
+     summary, which is what its internal-wall sensor subtracts, rather than
+     looking that sensor up. The nominal conductance is 2.0 W/m²K across a
+     wall and 1.4 through a floor (`heat_flow.py`); Manual J has no internal
+     U-value, since an internal wall isn't a loss there.
+   - The fitted crossover is the zone's `n` (coupling to the mean of its
+     neighbouring zones), shared over the room's inside walls and floors by
+     area; with both rooms fitted, the mean of the two.
+   - Fitted rates become watts through the room's air heat capacity, as
+     Manual J's "UA fitted" column does, so the watts compare rooms rather
+     than match a meter. A note on the overlay says so.
+   - The old settings are removed by the config entry's migration (minor
+     version 2, `migrate.py`), which logs a warning naming each one.
+     YAML energy sensors still accept `area_id`, and ignore it.
+   - The manifest drops `frontend` from its dependencies, as nothing
+     registers a panel now. `house_structure` stays an after-dependency
+     until step 4.
+   - Checked with tests against Home Assistant 2026.10 (the tab, the
+     overlay's command, the fitted rates and the migration), not yet in a
+     real Home Assistant.
 4. **Home Thermal Lab, rotation and roofs**: add the `house_structure`
    dependency, read rotation and roofs from House Structure, and remove the
    lab's copies and the zone-typed fallback. This is its own step because it
