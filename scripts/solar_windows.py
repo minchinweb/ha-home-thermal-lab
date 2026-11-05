@@ -10,7 +10,7 @@ four walls:
 * kitchen: a south patio door, two west windows and a small east one.
 
 ``--rotation`` turns every wall by that many degrees clockwise from the compass
-grid (the house is slightly off north; see ``scripts/house_orientation.py``).
+grid (the house is slightly off north; House Structure measures it).
 
 Per room, two fits in bins when its own zone is not calling for heat:
 

@@ -30,8 +30,9 @@ CONTRIBUTION = "contribution"
 async def async_setup_entry(hass, entry) -> bool:
     """Create the sensors for a config entry and reload when it changes.
 
-    It also reloads when House Structure's rooms change, since zones with an
-    area take their windows, walls, thermostat and room sensor from there.
+    It also reloads when House Structure's rooms change, since zones and
+    contributions take their windows, roofs, walls, below-ground setting,
+    thermostat and room sensor from there.
     """
     from datetime import timedelta
 
@@ -76,20 +77,27 @@ async def async_unload_entry(hass, entry) -> bool:
 
 async def async_migrate_entry(hass, entry) -> bool:
     """Remove the settings that moved to House Structure and Manual J (``migrate``)."""
-    from .migrate import (
-        BUILDING,
-        ENVELOPE_KEYS,
-        MINOR_VERSION,
-        NAMEPLATE_KEYS,
-        moved,
-        without,
-    )
+    from .migrate import MINOR_VERSION
 
     if entry.version > 1:
         return False  # from a newer version of the lab
     if entry.minor_version >= MINOR_VERSION:
         return True
-    gone = moved(entry.data, ENVELOPE_KEYS)
+    data = dict(entry.data)
+    if entry.minor_version < 2:
+        data = _move_sizing(hass, entry, data)
+    data = _move_sun(hass, entry, data)
+    hass.config_entries.async_update_entry(
+        entry, data=data, minor_version=MINOR_VERSION
+    )
+    return True
+
+
+def _move_sizing(hass, entry, data: dict) -> dict:
+    """Minor version 2: the envelope, nameplates and buildings went elsewhere."""
+    from .migrate import BUILDING, ENVELOPE_KEYS, NAMEPLATE_KEYS, moved, without
+
+    gone = moved(data, ENVELOPE_KEYS)
     if gone:
         _LOGGER.warning(
             "The envelope defaults (%s) moved to Manual J and were removed from "
@@ -117,10 +125,40 @@ async def async_migrate_entry(hass, entry) -> bool:
                 hass.config_entries.async_update_subentry(
                     entry, subentry, data=without(subentry.data, NAMEPLATE_KEYS)
                 )
-    hass.config_entries.async_update_entry(
-        entry, data=without(entry.data, ENVELOPE_KEYS), minor_version=MINOR_VERSION
-    )
-    return True
+    return without(data, ENVELOPE_KEYS)
+
+
+def _move_sun(hass, entry, data: dict) -> dict:
+    """Minor version 3: the rotation, roofs and rooms' sun are House Structure's."""
+    from .migrate import HOUSE_SUN_KEYS, ROOM_SUN_KEYS, moved, without
+
+    gone = moved(data, HOUSE_SUN_KEYS)
+    if gone:
+        _LOGGER.warning(
+            "The house's %s are House Structure's now and were removed from Home "
+            "Thermal Lab; check that House Structure's match",
+            ", ".join(gone),
+        )
+    for subentry in list(entry.subentries.values()):
+        if subentry.subentry_type not in (ZONE, CONTRIBUTION):
+            continue
+        typed = moved(subentry.data, ROOM_SUN_KEYS)
+        if typed:
+            _LOGGER.warning(
+                "%s: the %s typed on it were removed; the room's windows, roofs, "
+                "walls and below-ground setting come from House Structure",
+                subentry.title,
+                ", ".join(typed),
+            )
+            hass.config_entries.async_update_subentry(
+                entry, subentry, data=without(subentry.data, ROOM_SUN_KEYS)
+            )
+        if not subentry.data.get("area_id"):
+            _LOGGER.warning(
+                "%s has no room (area): choose it on Reconfigure, or it is skipped",
+                subentry.title,
+            )
+    return without(data, HOUSE_SUN_KEYS)
 
 
 async def _reload(hass, entry) -> None:

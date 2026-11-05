@@ -56,6 +56,7 @@ def make_entry(options=None):
                 unique_id=None,
                 data={
                     "name": "A",
+                    "area_id": "office",
                     "climate_entity": "climate.a",
                     "room_entity": "sensor.room_a",
                     "model": {"a": 0.1, "c": 0.0},
@@ -66,7 +67,12 @@ def make_entry(options=None):
 
 
 async def test_setup_writes_archives_and_housekeeps(
-    recorder_mock, hass, enable_custom_integrations, offline, tmp_path
+    recorder_mock,
+    hass,
+    enable_custom_integrations,
+    house_structure,
+    offline,
+    tmp_path,
 ):
     hass.config.config_dir = str(tmp_path)
     hass.states.async_set("sensor.outdoor", "-5.0")
@@ -105,7 +111,13 @@ async def test_setup_writes_archives_and_housekeeps(
 
 
 async def test_daily_housekeeping_timer_and_unload(
-    recorder_mock, hass, enable_custom_integrations, offline, tmp_path, monkeypatch
+    recorder_mock,
+    hass,
+    enable_custom_integrations,
+    house_structure,
+    offline,
+    tmp_path,
+    monkeypatch,
 ):
     hass.config.config_dir = str(tmp_path)
     hass.states.async_set("sensor.outdoor", "-5.0")

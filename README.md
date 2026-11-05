@@ -8,8 +8,9 @@ wave, and for testing hypotheses about how a house behaves thermally.
 - The house itself (rooms, walls, roofs, windows, internal walls, heating
   registers) is described once in
   [House Structure](https://github.com/minchinweb/ha-house-structure), a
-  separate integration; the zones here read their room from it. Its
-  **Thermal Lab** sidebar page shows this integration's **Zones** tab.
+  separate integration that this one needs: each zone here is one of its
+  rooms. Its **Thermal Lab** sidebar page shows this integration's **Zones**
+  tab.
 - Heating and cooling loads (Manual J, S and D) are worked out by
   [Manual J](https://github.com/minchinweb/ha-manual-j), another separate
   integration, which compares them with the cooling rates fitted here.
@@ -27,6 +28,9 @@ wave, and for testing hypotheses about how a house behaves thermally.
    only), and to confirm adding it. By hand: choose **Add from link** in the
    Marketplace and enter `https://github.com/minchinweb/ha-home-thermal-lab`.
 2. Click **Install**. Restart Home Assistant if the Marketplace says to.
+   Install [House Structure](https://github.com/minchinweb/ha-house-structure)
+   the same way, and describe the house there: Home Assistant won't set Home
+   Thermal Lab up without it.
 3. Add the integration, pick the outdoor temperature sensor, then add each
    sensor from the integration's page (below). Or use YAML instead:
 
@@ -45,41 +49,39 @@ recorder (default), and fetches an hourly forecast from Open-Meteo for the home
 location. The `.github/workflows/validate.yml` workflow runs the HACS and
 `hassfest` checks on every push.
 
-## Using House Structure
+## Rooms come from House Structure
 
-With [House Structure](https://github.com/minchinweb/ha-house-structure)
-installed and the house's parts added there, a zone, contribution chart or
-heating-call statistics sensor only needs its **Room (area)**. From that room
-it takes:
+Home Thermal Lab needs
+[House Structure](https://github.com/minchinweb/ha-house-structure), and Home
+Assistant sets that up first. Each zone and contribution chart is a **Room
+(area)** in House Structure, and takes from it:
 
-- the thermostat, from the room's heating register;
-- the room temperature sensor, from the area;
-- the sun: the room's windows and roofs (the `g` term) and its windowless
-  outside walls (the lagged `w` term), each at its own compass bearing, tilt
-  and shading, in place of the window faces, roofs and sunlit walls typed on
-  the zone;
+- the thermostat, from the room's heating register, unless you pick one;
+- the room temperature sensor, from the area, unless you pick one: the one
+  chosen in the area's settings, or the area's only temperature sensor. If
+  the area has several and none is chosen, the zone uses its thermostat's own
+  reading, and a warning in the log names the sensors: choose one in the
+  area's settings (**Settings > Areas**), or pick it on the zone;
+- the sun: the room's windows and roofs (the `g` term) and its outside walls
+  (the lagged `w` term), each at its own compass bearing, tilt and shading. House Structure measures how the house is turned (from the
+  building outline on OpenStreetMap) and holds its roofs, so both are set
+  once, there;
 - whether the room is below ground.
 
-A thermostat, room sensor or below-ground setting typed on the zone wins over
-the room's. The sensors reload when House Structure's rooms change. Without
-House Structure, or for an area with no parts in it, the settings typed on the
-zone are used as before. A pinned `g` or `w` was fitted to the old faces, so
-leave them empty to have them learned again when a zone moves to a room.
+Heating-call statistics take the thermostat from the room when they have one,
+or need only a thermostat. The sensors reload when House Structure's rooms
+change. A zone or contribution chart whose area has no room in House Structure
+is skipped, with an error in the log. A pinned `g` or `w` fitted to the window
+faces that older versions had typed on the zone may not suit the room's
+planes: leave them empty to have them learned again.
 
 ## Sensors
 
 ### From the web interface
 
-Add the integration and set the house once: the outdoor temperature sensor, the
-house rotation (measured from the building outline on OpenStreetMap, which
-needs one request to the Overpass service with your home position, and drawn on
-the form so you can check it; tick **Redraw the map** and submit to see another
-rotation without saving), and its roofs typed as `S 30, W 4:12` (face, then the pitch in
-degrees or as rise:run; give each roof a name, such as
-`Front=S 30, Back=W 4:12, Garage=W 8:12`, and two roofs on one face are fine). Renaming a roof
-(on the same face) updates the rooms that use it; deleting one unlinks them. Rooms then only tick which of those
-roofs they have windows in. Then add the sensors from the integration's page,
-with the buttons in this order:
+Add the integration and set the outdoor temperature sensor, and for
+below-ground rooms the ground's yearly wave (below). Then add the sensors from
+the integration's page, with the buttons in this order:
 
 1. **Add heating-call statistics**: one per zone; only a thermostat is needed.
 2. **Add furnace energy**: one for the blower and one for the gas.
@@ -92,7 +94,7 @@ with the buttons in this order:
      to be clear; the fewer fan-only edges lost to heating calls, the better.
    - Gas: leave the power sensor empty, set the unit to **BTU/h** and type the
      furnace input (80,000 for the high stage, about 65% of that for low).
-3. **Add shadow zone (with sun)**: one per zone. It makes three sensors (shadow,
+3. **Add shadow zone (with sun)**: one per room. It makes three sensors (shadow,
    forecast and target, below) and puts the zone on the **Zones** tab.
    Leave **a** and **c** empty and the integration fits the zone's no-heat
    model on the last 14 days of idle history (the room temperature, the outdoor
@@ -107,32 +109,39 @@ with the buttons in this order:
    attribute says why.
    - **Heating rate h** is learned from the zone's calls (what the room gained
      beyond the no-heat model, per hour of call) unless you type it in.
-   - **Window faces** are the faces with glass (the `g` term). **Sunlit walls
-     without windows** are faces of solid wall the sun hits; they get their own
-     gain `w`, lagged because a wall soaks up the sun slowly (the lag, 1.5, 3
-     or 6 hours, is chosen by the fit).
-   - Tick **Below ground** for a basement room: the model adds `b`, how fast the
-     room trades heat with the soil. The soil is not the air: at basement depth it
-     follows the air's annual wave with a smaller swing and a lag of about 70 days
-     (hypothesis 03). Give a ground temperature sensor if you have one; if not, the
-     ground is the wave `mean - swing * cos(2 pi (day - coldest day) / 365)` with the
-     house's **ground temperature** settings (defaults 5.7, 5.6 and day 95, from
-     Regina at 1.8 m; refit with `scripts/ground_temperature.py` for your site).
-4. **Add contribution chart**: one per zone. Its terms still come from
-   `scripts/fit_contributions.py`. It has its own `walls` band for **sunlit walls**
-   (fill in `w`); it does not use the ground yet.
+   - The sun on the room's windows and roofs is the `g` term. Its outside
+     walls get their own gain `w`, lagged because a wall soaks up the sun
+     slowly (the lag, 1.5, 3 or 6 hours, is chosen by the fit). Each wall
+     counts by its solid area (less its windows and doors) as a share of the
+     room's solid outside wall, times the sun on it in that time step, so the
+     wall around a window counts whether or not the blind is open. A wall with
+     no size in House Structure takes the others' mean; with no sizes at all,
+     only the walls without windows count, equally.
+   - For a room House Structure marks below ground, the model adds `b`, how
+     fast the room trades heat with the soil. The soil is not the air: at
+     basement depth it follows the air's annual wave with a smaller swing and a
+     lag of about 70 days (hypothesis 03). Give a ground temperature sensor if
+     you have one; if not, the ground is the wave
+     `mean - swing * cos(2 pi (day - coldest day) / 365)` with the house's
+     **ground temperature** settings (defaults 5.7, 5.6 and day 95, from Regina
+     at 1.8 m; refit with `scripts/ground_temperature.py` for your site).
+4. **Add contribution chart**: one per room. Its terms still come from
+   `scripts/fit_contributions.py`. It has its own `walls` band for the room's
+   sunlit walls (fill in `w`); it does not use the ground yet.
 
 Each is a sub-entry; the pencil icon edits it and the sensor reloads on save.
 The forms take the same settings as the YAML below, with these differences:
-the rotation and roofs are set once on the integration instead of per room, dimmed lights as `light.office_main_lights=105` (entity and watts at
-full), and the furnace powers are one box per state, in kW or BTU/h. Change the
-outdoor sensor, rotation or roofs with **Reconfigure** on the integration. Entities from the web
+dimmed lights as `light.office_main_lights=105` (entity and watts at full),
+and the furnace powers are one box per state, in kW or BTU/h. Change the
+outdoor sensor or the ground wave with **Reconfigure** on the integration.
+Entities from the web
 and from YAML can both exist; use one or the other so they do not duplicate.
 
 ### From YAML
 
 All four kinds go under one platform entry. Every key is optional except
-where noted; `sensor.py` documents each one.
+where noted; `sensor.py` documents each one. Zones and contribution charts
+need an `area_id`, the room in House Structure.
 
 ```yaml
 sensor:
@@ -143,14 +152,10 @@ sensor:
     # Fit `model` with scripts/shadow_control.py.
     zones:
       - name: Z4 office
-        climate_entity: climate.z4
-        room_entity: sensor.z4_temperature
+        area_id: office          # needed: the room in House Structure
+        climate_entity: climate.z4   # optional: else the room's register
         model: {a: 0.0106, c: 0.0032, g: 0.000229}   # leave out to learn it
-        windows: [E]
-        # sunlit_walls: [S]            # solid walls the sun hits (own gain w, lagged)
-        # below_ground: true          # basement room; ground_entity: sensor.soil_temp (optional)
-        rotation: 10.4
-        shade_below: 18
+        # ground_entity: sensor.soil_temp   # for a room below ground (optional)
         # The forecast's simulated thermostat: calls start this far below the
         # setpoint (default 0.1). Add h: to the model to pin the heating rate.
         deadband: 0.1
@@ -186,15 +191,11 @@ sensor:
     # scripts/fit_contributions.py.
     contributions:
       - name: Z4 office
-        climate_entity: climate.z4
-        room_entity: sensor.z4_temperature
+        area_id: office
         other_climate_entities: [climate.z1, climate.z2, climate.z3]
         plug_entities: [sensor.office_office_computer_plug_power]
         lights: {light.office_main_lights: 105}   # 7 x 15 W LEDs, scaled by the dimmer
         terms: {a: 0.0174, c: -0.069, g: 0.00005, h: 1.67, x: 0.31, p: 1.15}
-        windows: [E]
-        rotation: 10.4
-        shade_below: 18
 ```
 
 The blower figures come from `scripts/blower_power.py` (heating adds about
@@ -263,8 +264,6 @@ a chart of the room, outdoor (on its own axis), setpoint and target band over
 forecast made 3 hours earlier laid over what happened, a strip of heating
 calls and forecast furnace duty, and a card with the model, its grade and how
 well it forecasts. It follows the Home Assistant theme and works on a phone.
-Without House Structure the sensors work, but there is no page to show the
-tab on.
 
 It also adds a **Heat flow** chip to House Structure's House tab, which draws
 where heat is going now, in watts (`heat_flow.py`):

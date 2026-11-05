@@ -64,7 +64,7 @@ Second view: the cooling-law residual in sunny bins (316 of 491 daytime bins wit
 
 ### Windows, roof and house rotation (`scripts/solar_windows.py --rotation 10.4`, same 14 days)
 
-House rotation: the OpenStreetMap outline for the house (8 walls, all on one grid) has its walls 10.4 degrees clockwise of north (`scripts/house_orientation.py`). Rotating the model by 10.4 degrees changes the coefficients modestly (for example master east roof +0.82 against +0.94 at 0 degrees), so it is a refinement, not a big effect at this latitude and season.
+House rotation: the OpenStreetMap outline for the house (8 walls, all on one grid) has its walls 10.4 degrees clockwise of north (measured with `scripts/house_orientation.py`, since removed: House Structure measures it now). Rotating the model by 10.4 degrees changes the coefficients modestly (for example master east roof +0.82 against +0.94 at 0 degrees), so it is a refinement, not a big effect at this latitude and season.
 
 Window and roof layout used (from the house): N bedroom north window + east and west roof faces (roof pitch assumed 25 degrees; 18 degrees changes little); master south window + east/west roof; W bedroom west; office east (limited winter light); kitchen south, west and a small north-east window + a low-slope (10 degree) west roof; S basement and the SE basement bedroom south windows; NE basement an east window low to the ground. The front room (large east window) has no sensor yet.
 

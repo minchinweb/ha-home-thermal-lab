@@ -405,7 +405,7 @@ Each step leaves all three working.
      YAML energy sensors still accept `area_id`, and ignore it.
    - The manifest drops `frontend` from its dependencies, as nothing
      registers a panel now. `house_structure` stays an after-dependency
-     until step 4.
+     until step 4, which makes it a dependency.
    - Checked with tests against Home Assistant 2026.10 (the tab, the
      overlay's command, the fitted rates and the migration), not yet in a
      real Home Assistant.
@@ -414,3 +414,31 @@ Each step leaves all three working.
    lab's copies and the zone-typed fallback. This is its own step because it
    touches the fitting code (`learn.py`, `sensor.py`, `options.py`), not just
    the panel.
+   **Done** (on `split-plan`, merged to `master`), with these differences
+   from the plan above:
+   - `learn.py` needed no change: the fit already worked from the light on
+     the zone's planes. Only `sensor.py`'s light on the windows and walls
+     changed, to House Structure's planes alone, which are already turned by
+     its rotation. `irradiance.light_on_surfaces` (faces and a rotation) stays
+     for the scripts.
+   - The house-wide `shade_below` went too: each of House Structure's parts
+     has its own.
+   - The thermostat and room sensor can still be picked on a zone, and win
+     over the room's, since they choose an entity rather than describe the
+     house. `below_ground` is always the room's. The ground wave and a zone's
+     `ground_entity` stay in the lab.
+   - Heating-call statistics still work from a thermostat alone; with a room,
+     the thermostat comes from its register.
+   - A zone or contribution whose area has no room in House Structure is
+     skipped, with an error in the log. YAML zones and contributions are
+     checked once their room is filled in, so a YAML error shows in the log
+     rather than in the configuration check.
+   - The config entry's migration (minor version 3) removes the house's
+     `rotation`, `roofs` and `shade_below`, and each zone's and
+     contribution's `windows`, `sunlit_walls`, `roofs`, `rotation`,
+     `shade_below` and `below_ground`, logging a warning naming each, and
+     warns about a zone with no room.
+   - `scripts/house_orientation.py` went with `orientation.py`.
+   - The tests stand a mock `house_structure` integration in for the real
+     one (`tests/conftest.py`). Checked with tests against Home Assistant
+     2026.10, not yet in a real Home Assistant.

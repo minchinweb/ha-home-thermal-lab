@@ -25,32 +25,6 @@ from custom_components.home_thermal_lab.panel import (  # noqa: E402
     TABS,
 )
 
-ROOMS = {
-    "version": 1,
-    "rooms": {
-        "office": {
-            "area_id": "office",
-            "title": "Office",
-            "volume_m3": 30.0,
-            "temperature_entity": "sensor.room_a",
-            "walls": [
-                {
-                    "face": "N",
-                    "azimuth": 0.0,
-                    "tilt": 90.0,
-                    "area_m2": 6.0,
-                    "glass_m2": 0.0,
-                }
-            ],
-            "internal_walls": [],
-            "neighbours": [],
-            "windows": [],
-            "roofs": [],
-            "registers": [],
-        }
-    },
-}
-
 
 @pytest.fixture
 def offline(monkeypatch):
@@ -94,10 +68,15 @@ def states(hass):
 
 
 async def test_tab_overlay_and_fitted_rates(
-    recorder_mock, hass, enable_custom_integrations, offline, tmp_path, hass_ws_client
+    recorder_mock,
+    hass,
+    enable_custom_integrations,
+    house_structure,
+    offline,
+    tmp_path,
+    hass_ws_client,
 ):
     hass.config.config_dir = str(tmp_path)
-    hass.data["house_structure"] = ROOMS
     states(hass)
     fitted_events = common.async_capture_events(hass, FITTED_EVENT)
     entry = common.MockConfigEntry(
@@ -140,17 +119,30 @@ async def test_tab_overlay_and_fitted_rates(
 
 
 async def test_old_entries_lose_the_moved_settings(
-    recorder_mock, hass, enable_custom_integrations, offline, tmp_path
+    recorder_mock, hass, enable_custom_integrations, house_structure, offline, tmp_path
 ):
     hass.config.config_dir = str(tmp_path)
     states(hass)
     entry = common.MockConfigEntry(
         domain=DOMAIN,
-        data={"outdoor_entity": "sensor.outdoor", "wall_r": 20.0, "rotation": 10.0},
+        data={
+            "outdoor_entity": "sensor.outdoor",
+            "wall_r": 20.0,
+            "rotation": 10.0,
+            "roofs": [["Back", "W", 18.4]],
+            "shade_below": 8.0,
+            "ground_mean": 6.0,
+        },
         version=1,
         minor_version=1,
         subentries_data=[
-            zone(),
+            zone(
+                windows=["S"],
+                roofs=["Back"],
+                sunlit_walls=["E"],
+                shade_below=10.0,
+                below_ground=True,
+            ),
             ConfigSubentryData(
                 subentry_type=ENERGY,
                 title="Furnace",
@@ -179,12 +171,36 @@ async def test_old_entries_lose_the_moved_settings(
     await hass.async_block_till_done()
 
     assert entry.minor_version == MINOR_VERSION
-    assert entry.data == {"outdoor_entity": "sensor.outdoor", "rotation": 10.0}
+    assert entry.data == {"outdoor_entity": "sensor.outdoor", "ground_mean": 6.0}
     kinds = sorted(s.subentry_type for s in entry.subentries.values())
     assert kinds == [ENERGY, ZONE]
+    (kept,) = [s for s in entry.subentries.values() if s.subentry_type == ZONE]
+    assert dict(kept.data) == zone()["data"]
     (energy,) = [s for s in entry.subentries.values() if s.subentry_type == ENERGY]
     assert dict(energy.data) == {
         "name": "Furnace",
         "climate_entities": ["climate.a"],
         "kw": {"fan": 0.04},
     }
+
+
+async def test_a_zone_needs_a_room_in_house_structure(
+    recorder_mock, hass, enable_custom_integrations, house_structure, offline, tmp_path
+):
+    hass.config.config_dir = str(tmp_path)
+    states(hass)
+    entry = common.MockConfigEntry(
+        domain=DOMAIN,
+        data={"outdoor_entity": "sensor.outdoor"},
+        version=1,
+        minor_version=MINOR_VERSION,
+        subentries_data=[
+            zone(name="B", area_id="attic", climate_entity="climate.b"),
+            zone(),
+        ],
+    )
+    entry.add_to_hass(hass)
+    assert await async_setup_component(hass, DOMAIN, {})
+    await hass.async_block_till_done()
+    # only the zone in House Structure's office got sensors
+    assert set(hass.data[DOMAIN]["zones"]) == {"climate.a"}

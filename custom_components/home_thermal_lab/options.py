@@ -1,16 +1,13 @@
 """Turn the setup forms' text fields into the values the sensors use.
 
-The web setup (``config_flow.py``) cannot show nested lists, so roofs and
-dimmed lights are typed as short text. This module (standard library only, so
+The web setup (``config_flow.py``) cannot show nested lists, so dimmed lights
+are typed as short text. This module (standard library only, so
 it is tested without Home Assistant) converts between that text and the
 structures the YAML configuration uses.
 """
 
 from __future__ import annotations
 
-import math
-
-FACES = ("N", "E", "S", "W")
 KW_MODES = ("off", "fan", "heat_low", "heat_high", "cool")
 POWER_UNITS = ("kW", "BTU/h")
 # the house's ground-temperature wave, shared by its below-ground rooms
@@ -26,171 +23,17 @@ class FieldError(ValueError):
         self.field = field
 
 
-def _pitch(word: str) -> float:
-    """A pitch in degrees (``30``) or as a rise over 12 (``4:12``) or any run."""
-    if ":" in word:
-        rise, _, run = word.partition(":")
-        rise_n, run_n = float(rise), float(run)
-        if rise_n < 0 or run_n <= 0:
-            raise ValueError
-        return math.degrees(math.atan2(rise_n, run_n))
-    return float(word)
+def with_house(data: dict, house: dict) -> dict:
+    """A sub-entry's settings with the house's ground wave filled in.
 
-
-FACE_WORDS = {"N": "North", "E": "East", "S": "South", "W": "West"}
-
-
-def _auto_name(face: str, taken: set[str]) -> str:
-    base = FACE_WORDS[face]
-    name, n = base, 2
-    while name in taken:
-        name, n = f"{base} {n}", n + 1
-    return name
-
-
-def normalise_roofs(roofs: list) -> list[list]:
-    """Roofs as ``[name, face, pitch]``; bare ``[face, pitch]`` pairs are named.
-
-    Pairs (from the YAML, or saved by an earlier version) get ``North``,
-    ``West``, ``West 2`` and so on, skipping names already in use.
-    """
-    taken = {r[0] for r in roofs if len(r) == 3}
-    out = []
-    for roof in roofs:
-        if len(roof) == 3:
-            out.append(list(roof))
-        else:
-            name = _auto_name(roof[0], taken)
-            taken.add(name)
-            out.append([name, roof[0], roof[1]])
-    return out
-
-
-def parse_roofs(text: str) -> list[list]:
-    """``"Front=S 30, W 4:12"`` to ``[["Front", "S", 30.0], ["West", "W", 18.43]]``.
-
-    Each roof is a face and a pitch (degrees, or a ratio of rise to run such as
-    ``4:12``), with an optional ``name=`` in front. Rooms refer to a roof by its
-    name, so a pitch can be edited without losing the link. A roof without a
-    name is called after its face (``West``, ``West 2``); the form shows the
-    names from then on.
-
-    Raises:
-        FieldError: A part is not ``[name=]face pitch``, or a name repeats.
-    """
-    parts: list[tuple[str | None, str, float]] = []
-    for part in text.replace(";", ",").split(","):
-        if not part.strip():
-            continue
-        name, sep, spec = part.rpartition("=")
-        words = spec.split()
-        try:
-            if len(words) != 2 or words[0].upper() not in FACES:
-                raise ValueError
-            parts.append(
-                (
-                    name.strip() if sep and name.strip() else None,
-                    words[0].upper(),
-                    _pitch(words[1]),
-                )
-            )
-        except ValueError:
-            raise FieldError(
-                "roofs", f"not '[name=]face pitch': {part.strip()!r}"
-            ) from None
-    given = [n for n, _, _ in parts if n]
-    if len(given) != len(set(given)):
-        raise FieldError("roofs", "two roofs have the same name")
-    taken = set(given)
-    roofs = []
-    for name, face, pitch in parts:
-        if name is None:
-            name = _auto_name(face, taken)
-            taken.add(name)
-        roofs.append([name, face, pitch])
-    return roofs
-
-
-def roof_renames(old: list, new: list) -> dict[str, str]:
-    """Which roofs were renamed between two versions of the house's roofs.
-
-    The roofs are edited as text, so a rename looks like one name going and
-    another arriving. A name that disappeared is taken to be renamed to a new
-    name on the same face (in order); anything else is a roof removed or added.
-
-    Returns:
-        Old name to new name.
-    """
-    old_roofs = normalise_roofs(old)
-    new_roofs = normalise_roofs(new)
-    kept = {name for name, _, _ in new_roofs} & {name for name, _, _ in old_roofs}
-    gone = [(name, face) for name, face, _ in old_roofs if name not in kept]
-    added = [
-        (name, face)
-        for name, face, _ in new_roofs
-        if name not in {n for n, _, _ in old_roofs}
-    ]
-    renames: dict[str, str] = {}
-    for name, face in gone:
-        for k, (new_name, new_face) in enumerate(added):
-            if new_face == face:
-                renames[name] = new_name
-                del added[k]
-                break
-    return renames
-
-
-def roof_label(face: str, pitch: float) -> str:
-    """``"W 4:12"``: a roof's name on the forms; n:12 pitches show as a ratio."""
-    for rise in range(25):
-        if abs(math.degrees(math.atan2(rise, 12)) - pitch) < 0.01:
-            return f"{face} {rise}:12"
-    return f"{face} {pitch:g}"
-
-
-def format_roofs(roofs: list) -> str:
-    """The inverse of ``parse_roofs``, with every roof's name shown."""
-    return ", ".join(
-        f"{name}={roof_label(face, pitch)}"
-        for name, face, pitch in normalise_roofs(roofs)
-    )
-
-
-def resolve_sun(data: dict, house: dict) -> dict:
-    """A sub-entry's settings with the house's rotation and roofs filled in.
-
-    The house holds the rotation, its named roofs (face and pitch; several may
-    share a face) and a default ``shade_below``. A room lists the roofs it has
-    windows in by name; this turns them into ``[face, pitch]`` pairs, as the
-    YAML does, so a pitch edited on the house reaches every room that uses the
-    roof. A room's own ``shade_below`` wins. Older saved settings still work: a
-    label such as ``"W 4:12"`` finds the roof with that face and pitch, a bare
-    face (``"W"``) means every roof on that face, and a room's own ``[face,
-    pitch]`` roofs and rotation are kept.
+    The integration holds the ground-temperature wave shared by the house's
+    below-ground rooms; a room's own values win. The house's rotation and roofs
+    are House Structure's (``from_structure``).
     """
     out = dict(data)
-    house_roofs = normalise_roofs(house.get("roofs", []))
-    by_name = {name: [face, pitch] for name, face, pitch in house_roofs}
-    by_label = {roof_label(f, p): [f, p] for _, f, p in house_roofs}
-    roofs: list[list] = []
-    for roof in data.get("roofs", []):
-        if not isinstance(roof, str):
-            roofs.append(list(roof))
-        elif roof in by_name:
-            roofs.append(list(by_name[roof]))
-        elif roof in by_label:
-            roofs.append(list(by_label[roof]))
-        else:
-            face = roof.split()[0].upper() if roof.split() else ""
-            roofs += [[f, p] for _, f, p in house_roofs if f == face]
-    out["roofs"] = roofs
-    if house.get("rotation") is not None:
-        out["rotation"] = house["rotation"]
     for key in GROUND_KEYS:
         if key not in out and house.get(key) is not None:
             out[key] = house[key]
-    if "shade_below" not in out and house.get("shade_below") is not None:
-        out["shade_below"] = house["shade_below"]
     return out
 
 
@@ -265,22 +108,84 @@ def _planes(parts: list[dict]) -> list[list[float]]:
     return out
 
 
-def from_structure(data: dict, room: dict | None, ground: bool = True) -> dict:
+def _solid_m2(wall: dict) -> float | None:
+    """A wall's area less its windows and doors, or ``None`` with no area."""
+    if not wall.get("area_m2"):
+        return None
+    open_m2 = float(wall.get("glass_m2") or 0.0) + float(wall.get("door_m2") or 0.0)
+    return max(float(wall["area_m2"]) - open_m2, 0.0)
+
+
+def wall_planes(walls: list[dict]) -> list[list[float]]:
+    """``[azimuth, tilt, shade_below, share]`` of a room's outside walls.
+
+    The light on the walls is each wall's light times its share: its solid area
+    (less its windows and doors) over the room's solid outside wall. So the sun
+    on the wall around a window warms the room through the wall (the lagged
+    ``w`` term), whether or not the blind is open, while the glass stays in the
+    ``g`` term. A wall without an area takes the mean of the others' solid
+    area, less its own glass. With no areas at all, each windowless wall counts
+    the same and a wall with a window is left out, as it can't be split. Walls
+    facing the same way are one plane, with their shares added.
+    """
+    known = [m2 for m2 in map(_solid_m2, walls) if m2 is not None]
+    mean = sum(known) / len(known) if known else None
+    solid = []
+    for wall in walls:
+        m2 = _solid_m2(wall)
+        if m2 is None and mean is not None:
+            m2 = max(mean - float(wall.get("glass_m2") or 0.0), 0.0)
+        elif m2 is None:
+            m2 = 0.0 if wall.get("glass_m2") else 1.0
+        solid.append(m2)
+    total = sum(solid)
+    out: list[list[float]] = []
+    for wall, m2 in zip(walls, solid, strict=True):
+        if m2 <= 0:
+            continue
+        plane = [
+            float(wall["azimuth"]),
+            float(wall["tilt"]),
+            float(wall.get("shade_below") or 0.0),
+        ]
+        for seen in out:
+            if seen[:3] == plane:
+                seen[3] += m2 / total
+                break
+        else:
+            out.append([*plane, m2 / total])
+    return [[*p[:3], round(p[3], 4)] for p in out]
+
+
+def sensor_choices(data: dict, room: dict) -> list[str]:
+    """The area's temperature sensors, when the zone can't tell which is its own.
+
+    Empty when the zone picks its own room sensor, House Structure has one for
+    the room (chosen in the area's settings, or the area's only one), or the
+    area has none: then the thermostat's own reading is used without a doubt.
+    """
+    if data.get("room_entity") or room.get("temperature_entity"):
+        return []
+    choices = list(room.get("temperature_choices") or [])
+    return choices if len(choices) > 1 else []
+
+
+def from_structure(data: dict, room: dict, ground: bool = True) -> dict:
     """A zone's settings, filled in from its area's room in House Structure.
 
     The room's windows and roofs become the zone's window planes (the ``g``
-    term) and its windowless outside walls its sunlit walls (``w``), replacing
-    any faces typed on the zone. The thermostat comes from the room's first
-    register and the room sensor from the area, unless the zone names its own;
-    ``below_ground`` comes from the room unless the zone sets it.
+    term), its outside walls its sunlit walls (``w``, by solid area; see
+    ``wall_planes``), and its
+    ``below_ground`` setting the zone's. The thermostat comes from the room's
+    first register and the room sensor from the area, unless the zone names
+    its own. House Structure's planes are already turned by the house's
+    rotation (compass azimuths).
 
     Args:
-        data: The zone's own settings (after ``resolve_sun``).
-        room: The room's summary, or ``None`` when the area has no parts.
+        data: The zone's own settings (after ``with_house``).
+        room: The room's summary.
         ground: Whether this kind of sensor takes ``below_ground``.
     """
-    if not room:
-        return data
     out = dict(data)
     if not out.get("climate_entity"):
         climates = [r["climate"] for r in room.get("registers", []) if r.get("climate")]
@@ -288,17 +193,14 @@ def from_structure(data: dict, room: dict | None, ground: bool = True) -> dict:
             out["climate_entity"] = climates[0]
     if not out.get("room_entity") and room.get("temperature_entity"):
         out["room_entity"] = room["temperature_entity"]
-    if ground and "below_ground" not in data and room.get("below_ground"):
-        out["below_ground"] = True
+    if ground:
+        out["below_ground"] = bool(room.get("below_ground"))
     windows = room.get("windows", []) + room.get("roofs", [])
-    walls = [w for w in room.get("walls", []) if not w.get("glass_m2")]
-    if windows or walls:
-        out["windows"], out["roofs"], out["sunlit_walls"] = [], [], []
-        out["window_planes"] = _planes(windows)
-        out["wall_planes"] = _planes(walls)
+    out["window_planes"] = _planes(windows)
+    out["wall_planes"] = wall_planes(room.get("walls", []))
     return out
 
 
 def has_walls(zone: dict) -> bool:
     """Whether the zone has sunlit solid walls (the lagged ``w`` term)."""
-    return bool(zone.get("sunlit_walls") or zone.get("wall_planes"))
+    return bool(zone.get("wall_planes"))

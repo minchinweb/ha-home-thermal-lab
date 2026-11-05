@@ -179,7 +179,7 @@ def light_on_planes(
     elevation: float,
     planes: list,
 ) -> float:
-    """Summed light (W/m2) on planes given by compass azimuth.
+    """Summed light (W/m2) on planes given by compass azimuth, each by its share.
 
     Args:
         reading: The hour's irradiance.
@@ -187,18 +187,23 @@ def light_on_planes(
         elevation: Sun elevation in degrees.
         planes: ``[azimuth, tilt, shade_below]`` for each plane: the compass
             bearing it faces, degrees from horizontal, and the sun elevation
-            below which the south-east to south-west beam is blocked.
+            below which the south-east to south-west beam is blocked. A fourth
+            value weights the plane's light (its share of the room's walls,
+            ``options.wall_planes``); without it the plane counts in full.
     """
     if elevation <= 0:
         return 0.0
     total = 0.0
     el = math.radians(elevation)
-    for plane_azimuth, tilt, shade_below in planes:
+    for plane in planes:
+        plane_azimuth, tilt, shade_below = plane[:3]
+        share = plane[3] if len(plane) > 3 else 1.0
         tl = math.radians(tilt)
         cos_incidence = math.sin(el) * math.cos(tl) + math.cos(el) * math.sin(
             tl
         ) * math.cos(math.radians(azimuth - plane_azimuth))
+        light = reading.diffuse_on_plane(tilt, elevation)
         if not (120.0 <= azimuth < 210.0 and elevation < shade_below):
-            total += reading.direct_normal * max(cos_incidence, 0.0)
-        total += reading.diffuse_on_plane(tilt, elevation)
+            light += reading.direct_normal * max(cos_incidence, 0.0)
+        total += share * light
     return total

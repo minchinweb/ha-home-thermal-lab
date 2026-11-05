@@ -1,14 +1,12 @@
 {
   "domain": "home_thermal_lab",
   "name": "Home Thermal Lab",
-  "after_dependencies": [
-    "house_structure"
-  ],
   "codeowners": [
     "@minchinweb"
   ],
   "config_flow": true,
   "dependencies": [
+    "house_structure",
     "http",
     "recorder",
     "websocket_api"

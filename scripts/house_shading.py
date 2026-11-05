@@ -1,6 +1,6 @@
 """The house's own shading of the kitchen windows (hypothesis 11).
 
-The OpenStreetMap outline (``scripts/house_orientation.py``) is two blocks. In
+The OpenStreetMap outline (House Structure measures it) is two blocks. In
 the house frame, in feet, ``x`` runs east along the wall normal at 100.4 degrees
 and ``y`` north at 10.4 degrees, from the kitchen wing's south-west corner:
 

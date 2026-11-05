@@ -104,7 +104,7 @@ from .house import (
 )
 from .hvac import HIGH, runs_from_states, stage_runs
 from .hvac_response import merge_runs
-from .irradiance import fetch_irradiance, light_on_planes, light_on_surfaces
+from .irradiance import fetch_irradiance, light_on_planes
 from .learn import (
     WALL_TAU_HOURS,
     NoHeatFit,
@@ -130,8 +130,9 @@ from .options import (
     STRUCTURE_DOMAIN,
     from_structure,
     has_walls,
-    resolve_sun,
+    sensor_choices,
     structure_rooms,
+    with_house,
 )
 from .outlook import (
     band_at,
@@ -170,27 +171,19 @@ FORECAST_STEPS = 96  # 24 hours
 LEADS = (1, 3, 6)  # hours; the forecast sensor's state is the 3 hour one
 SCORE_DAYS = 7
 BIAS_HOURS = 48  # Open-Meteo's past hours (past_days=2) against the sensor
-FACES = ["N", "E", "S", "W"]
 
 SUN_SCHEMA = {
-    # faces with windows (sun through glass) and faces of solid walls the sun hits
-    vol.Optional("windows", default=[]): [vol.In(FACES)],
-    vol.Optional("sunlit_walls", default=[]): [vol.In(FACES)],
-    vol.Optional("roofs", default=[]): [
-        vol.ExactSequence([vol.In(FACES), vol.Coerce(float)])
-    ],
-    vol.Optional("rotation", default=0.0): vol.Coerce(float),
-    vol.Optional("shade_below", default=0.0): vol.Coerce(float),
-    # from House Structure: [compass azimuth, tilt, shade_below] of the
-    # room's windows and roofs, and of its windowless outside walls
+    # the area (room) in House Structure the sensor is for
+    vol.Required("area_id"): cv.string,
+    # filled in from House Structure: [compass azimuth, tilt, shade_below] of
+    # the room's windows and roofs, and of its outside walls with each one's
+    # share of the solid wall (``options.wall_planes``)
     vol.Optional("window_planes", default=[]): [
         vol.ExactSequence([vol.Coerce(float)] * 3)
     ],
     vol.Optional("wall_planes", default=[]): [
-        vol.ExactSequence([vol.Coerce(float)] * 3)
+        vol.ExactSequence([vol.Coerce(float)] * 4)
     ],
-    # the area (room) whose House Structure parts fill in the above
-    vol.Optional("area_id"): cv.string,
 }
 
 GROUND_SCHEMA = {
@@ -216,8 +209,9 @@ ZONE_SCHEMA = vol.Schema(
                 vol.Optional("h"): vol.Coerce(float),
             }
         ),
-        # a room (partly) below ground: its walls trade heat with the soil. Give a
-        # ground temperature sensor, or leave it out to use the annual ground wave.
+        # a room (partly) below ground, from House Structure: its walls trade heat
+        # with the soil. Give a ground temperature sensor, or leave it out to use
+        # the annual ground wave.
         vol.Optional("below_ground", default=False): cv.boolean,
         vol.Optional("ground_entity"): cv.entity_id,
         **GROUND_SCHEMA,
@@ -296,13 +290,20 @@ CONTRIBUTION_SCHEMA = vol.Schema(
     }
 )
 
+AREA_SCHEMA = vol.Schema(
+    {vol.Required("name"): cv.string, vol.Required("area_id"): cv.string},
+    extra=vol.ALLOW_EXTRA,
+)
+
 PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
     {
         vol.Optional("outdoor_entity"): cv.entity_id,
-        vol.Optional("zones", default=[]): [ZONE_SCHEMA],
+        # zones and contributions are checked once House Structure's room is
+        # filled in (``_with_room``)
+        vol.Optional("zones", default=[]): [AREA_SCHEMA],
         vol.Optional("call_stats", default=[]): [CALL_SCHEMA],
         vol.Optional("energy", default=[]): [ENERGY_SCHEMA],
-        vol.Optional("contributions", default=[]): [CONTRIBUTION_SCHEMA],
+        vol.Optional("contributions", default=[]): [AREA_SCHEMA],
     }
 )
 
@@ -387,16 +388,7 @@ def _surface_light(lat: float, lon: float, zone: dict, reading, moment) -> float
     """Light (W/m2) on the zone's windows and roofs from an hour's irradiance."""
     az = solar_azimuth_degrees(moment, lat, lon)
     el = solar_elevation_degrees(moment, lat, lon)
-    shaded = 120.0 <= az < 210.0 and el < zone["shade_below"]
-    return light_on_surfaces(
-        reading,
-        az,
-        el,
-        zone["windows"],
-        [(f, t) for f, t in zone["roofs"]],
-        zone["rotation"],
-        shaded,
-    ) + light_on_planes(reading, az, el, zone["window_planes"])
+    return light_on_planes(reading, az, el, zone["window_planes"])
 
 
 def _ground_at(zone: dict, moment: datetime) -> float:
@@ -415,10 +407,7 @@ def _wall_light(lat: float, lon: float, zone: dict, reading, moment) -> float:
         return 0.0
     az = solar_azimuth_degrees(moment, lat, lon)
     el = solar_elevation_degrees(moment, lat, lon)
-    shaded = 120.0 <= az < 210.0 and el < zone["shade_below"]
-    return light_on_surfaces(
-        reading, az, el, zone["sunlit_walls"], [], zone["rotation"], shaded
-    ) + light_on_planes(reading, az, el, zone["wall_planes"])
+    return light_on_planes(reading, az, el, zone["wall_planes"])
 
 
 def _learn_blower(rows, item, end, watts):
@@ -1089,7 +1078,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
         try:
             if kind == ZONE:
                 item = ZONE_SCHEMA(
-                    _with_room(rooms, resolve_sun(dict(subentry.data), house))
+                    _with_room(rooms, with_house(dict(subentry.data), house))
                 )
                 entities = _zone_entities(hass, zones, item)
             elif kind == CALL_STATS:
@@ -1102,7 +1091,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
             elif kind == CONTRIBUTION:
                 item = CONTRIBUTION_SCHEMA(
                     _with_room(
-                        rooms, resolve_sun(dict(subentry.data), house), ground=False
+                        rooms, with_house(dict(subentry.data), house), ground=False
                     )
                 )
                 entities = [ContributionSensor(hass, forecast_cache, outdoor, item)]
@@ -1130,26 +1119,47 @@ def _with_room(rooms: dict, data: dict, ground: bool = True, sun: bool = True) -
         data: The sub-entry's settings.
         ground: Whether this kind takes ``below_ground``.
         sun: Whether this kind takes the room's sun and room sensor; heating-call
-            statistics only take the thermostat.
+            statistics only take the thermostat, and work without an area.
+
+    Raises:
+        vol.Invalid: A zone or contribution without a room in House Structure.
     """
     area = data.get("area_id")
-    if not area:
-        return data
-    if area not in rooms:
-        _LOGGER.warning(
-            "%s: House Structure has no parts in area %r; using the settings "
-            "typed on it",
-            data.get("name"),
-            area,
-        )
-        return data
     if not sun:
+        if not area or area not in rooms:
+            return data
         filled = from_structure({}, rooms[area], ground=False)
         out = dict(data)
         if not out.get("climate_entity") and filled.get("climate_entity"):
             out["climate_entity"] = filled["climate_entity"]
         return out
+    if not area:
+        raise vol.Invalid("choose its room (area) on Reconfigure")
+    if area not in rooms:
+        raise vol.Invalid(f"House Structure has no room in area {area!r}")
+    choices = sensor_choices(data, rooms[area])
+    if choices:
+        _LOGGER.warning(
+            "%s: area %r has several temperature sensors (%s) and none is chosen "
+            "in the area's settings, so the thermostat's own reading is used. "
+            "Choose one in the area's settings, or pick a room temperature "
+            "sensor on the zone",
+            data.get("name"),
+            area,
+            ", ".join(choices),
+        )
     return from_structure(data, rooms[area], ground=ground)
+
+
+def _yaml_items(rooms: dict, items: list, schema, ground: bool) -> list[dict]:
+    """YAML zones or contributions, filled in from House Structure and checked."""
+    out = []
+    for data in items:
+        try:
+            out.append(schema(_with_room(rooms, dict(data), ground=ground)))
+        except vol.Invalid as err:
+            _LOGGER.error("Skipping %r: %s", data.get("name"), err)
+    return out
 
 
 async def async_setup_platform(hass, config, async_add_entities, discovery_info=None):
@@ -1161,13 +1171,16 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
         return
     entities: list[SensorEntity] = []
     house = House(hass, forecast_cache, outdoor)
-    for zone in config["zones"]:
+    rooms = structure_rooms(hass.data.get(STRUCTURE_DOMAIN))
+    for zone in _yaml_items(rooms, config["zones"], ZONE_SCHEMA, ground=True):
         entities += _zone_entities(hass, house, zone)
     entities += [CallStatsSensor(hass, item) for item in config["call_stats"]]
     entities += [FurnaceEnergySensor(hass, item) for item in config["energy"]]
     entities += [
         ContributionSensor(hass, forecast_cache, outdoor, item)
-        for item in config["contributions"]
+        for item in _yaml_items(
+            rooms, config["contributions"], CONTRIBUTION_SCHEMA, ground=False
+        )
     ]
     async_add_entities(entities)
     await _register_tab(hass)
