@@ -24,7 +24,7 @@ WIDE = (datetime(2020, 1, 1, tzinfo=UTC), datetime(2030, 1, 1, tzinfo=UTC))
 
 @pytest.fixture
 def offline(monkeypatch):
-    """No network, no panel: Open-Meteo answers with a fixed forecast."""
+    """No network, no tab: Open-Meteo answers with a fixed forecast."""
     now = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
     hours = [
         ForecastHour(
@@ -37,10 +37,10 @@ def offline(monkeypatch):
     monkeypatch.setattr(sensor, "fetch_forecast", lambda *a, **k: hours)
     monkeypatch.setattr(sensor, "fetch_irradiance", lambda *a, **k: [])
 
-    async def no_panel(hass):
+    async def no_tab(hass):
         return
 
-    monkeypatch.setattr(sensor, "_register_panel", no_panel)
+    monkeypatch.setattr(sensor, "_register_tab", no_tab)
     return hours
 
 

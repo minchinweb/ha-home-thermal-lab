@@ -8,7 +8,11 @@ wave, and for testing hypotheses about how a house behaves thermally.
 - The house itself (rooms, walls, roofs, windows, internal walls, heating
   registers) is described once in
   [House Structure](https://github.com/minchinweb/ha-house-structure), a
-  separate integration; the zones here read their room from it.
+  separate integration; the zones here read their room from it. Its
+  **Thermal Lab** sidebar page shows this integration's **Zones** tab.
+- Heating and cooling loads (Manual J, S and D) are worked out by
+  [Manual J](https://github.com/minchinweb/ha-manual-j), another separate
+  integration, which compares them with the cooling rates fitted here.
 - `hypotheses/`: one file per hypothesis (claim, data, method, results).
 - `scripts/`: command-line runners and reports. Copy `.env.example` to `.env` (git-ignored) and fill in your Home Assistant URL, token and sensor.
 
@@ -89,7 +93,7 @@ with the buttons in this order:
    - Gas: leave the power sensor empty, set the unit to **BTU/h** and type the
      furnace input (80,000 for the high stage, about 65% of that for low).
 3. **Add shadow zone (with sun)**: one per zone. It makes three sensors (shadow,
-   forecast and target, below) and puts the zone in the **Thermal Lab** panel.
+   forecast and target, below) and puts the zone on the **Zones** tab.
    Leave **a** and **c** empty and the integration fits the zone's no-heat
    model on the last 14 days of idle history (the room temperature, the outdoor
    sensor and the sun on its windows), retries every 6 hours, and shows the
@@ -121,8 +125,7 @@ with the buttons in this order:
 Each is a sub-entry; the pencil icon edits it and the sensor reloads on save.
 The forms take the same settings as the YAML below, with these differences:
 the rotation and roofs are set once on the integration instead of per room, dimmed lights as `light.office_main_lights=105` (entity and watts at
-full), and the furnace powers are one box per state, in kW or BTU/h (cooling can
-also be given in tons, 12,000 BTU/h each: heat moved, not electricity). Change the
+full), and the furnace powers are one box per state, in kW or BTU/h. Change the
 outdoor sensor, rotation or roofs with **Reconfigure** on the integration. Entities from the web
 and from YAML can both exist; use one or the other so they do not duplicate.
 
@@ -250,22 +253,39 @@ of thermostats) on a zone to choose.
   `mean + swing * cos(2 pi (hour - peak_hour) / 24)`; otherwise the
   thermostat's setpoint with the tolerance below it.
 
-## Thermal Lab panel
+## Zones tab and Heat flow
 
-The integration adds **Thermal Lab** to the sidebar: a page per zone with
-tiles for now (room, target, thermostat, the shadow decision, the forecast in
-3 hours and its live error), a chart of the room, outdoor (on its own axis),
-setpoint and target band over 6 hours to 30 days with the forecast for the
-next day after "now", the forecast made 3 hours earlier laid over what
-happened, a strip of heating calls and forecast furnace duty, and a card with
-the model, its grade and how well it forecasts. It follows the Home Assistant
-theme and works on a phone.
+House Structure puts **Thermal Lab** in the sidebar; this integration adds
+its **Zones** tab: a page per zone with tiles for now (room, target,
+thermostat, the shadow decision, the forecast in 3 hours and its live error),
+a chart of the room, outdoor (on its own axis), setpoint and target band over
+6 hours to 30 days with the forecast for the next day after "now", the
+forecast made 3 hours earlier laid over what happened, a strip of heating
+calls and forecast furnace duty, and a card with the model, its grade and how
+well it forecasts. It follows the Home Assistant theme and works on a phone.
+Without House Structure the sensors work, but there is no page to show the
+tab on.
 
-The page and Chart.js are served by Home Assistant from the integration's
-`frontend/` folder, so opening the panel loads nothing from the internet;
-the data comes over the page's own Home Assistant connection. Chart.js is
-pinned (version and SHA-256) in `frontend/vendor.json` and committed;
-`uv run invoke vendor` fetches it again and checks the hash (see Development).
+It also adds a **Heat flow** chip to House Structure's House tab, which draws
+where heat is going now, in watts (`heat_flow.py`):
+
+- across each inside wall and floor: the two rooms' temperature difference
+  times a nominal conductance, or the zone's fitted coupling to its
+  neighbours where it has one;
+- out through each outside face: the zone's fitted loss to outdoors, shared
+  over its outside walls by area;
+- at the registers: the learned heating rate while the zone calls for heat;
+- the sun: the gain the fitted model credits the room with, with a note when
+  House Structure's window figure differs by more than half.
+
+The fitted rates become watts through each room's air heat capacity, so they
+compare rooms rather than match a meter. Each zone with a room also
+publishes its fitted cooling rate, which Manual J's HVAC design tab sets
+against its calculated conductance.
+
+The page is served by Home Assistant from the integration's `frontend/`
+folder, and Chart.js from House Structure's, so opening the tab loads nothing
+from the internet; the data comes over Home Assistant's own connection.
 
 ## Forecast archive
 
@@ -374,13 +394,12 @@ one `line` series returning `[time, p.temp]`. Both cards are untested.
 uv sync
 uv run invoke check     # lint, formatting and tests
 uv run invoke format    # apply fixes
-uv run invoke vendor    # fetch the panel's pinned Chart.js and check its hash
 ```
 
-To upgrade Chart.js, change the version and URL in
-`custom_components/home_thermal_lab/frontend/vendor.json`, run `invoke vendor`
-(it reports the new hash and refuses the file), check and pin the hash, run it
-again, and commit the file. A test checks the committed file against the pin.
+The tests that need Home Assistant (`test_archive_ha.py`,
+`test_archive_setup.py`, `test_split_setup.py`) are skipped without
+`homeassistant` and `pytest-homeassistant-custom-component`, which don't run
+on Windows; run them in WSL with `pytest -o asyncio_mode=auto`.
 
 ## Credits
 
@@ -388,6 +407,6 @@ again, and commit the file. A test checks the committed file against the pin.
   (MIT): rates over hour-long blocks and rejecting unphysical fits, the heating
   rate learned from calls, a simulated thermostat in the forecast, logging
   forecasts as issued and scoring them, the outdoor forecast's bias, a
-  calibration grade, and the layout of the panel. The code here is our own.
-- [Chart.js](https://www.chartjs.org/) (MIT) draws the panel; it is vendored in
-  `frontend/`.
+  calibration grade, and the layout of the Zones tab. The code here is our own.
+- [Chart.js](https://www.chartjs.org/) (MIT) draws the Zones tab; House
+  Structure ships it.

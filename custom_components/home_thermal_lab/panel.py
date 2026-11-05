@@ -1,11 +1,20 @@
-"""The Thermal Lab dashboard panel in Home Assistant's sidebar (needs Home Assistant).
+"""The Zones tab on House Structure's Thermal Lab page (needs Home Assistant).
 
-Like ClimateAdvisor's panel: a single page (``frontend/index.html``) in an
-iframe, drawn with Chart.js. Chart.js is vendored into ``frontend/`` (pinned in
-``frontend/vendor.json``, refreshed with ``invoke vendor``) and served by Home
-Assistant itself with long cache headers, so opening the panel fetches nothing
-from the internet. The page asks for its data over the parent page's own
-websocket connection (no separate login):
+House Structure registers the Thermal Lab sidebar page; this adds the Zones
+tab to it (``hass.data["house_structure_tabs"]``), a single page
+(``frontend/index.html``) drawn with Chart.js. Chart.js and the page's
+connection and theme helpers (``tab.js``) are House Structure's, served by Home
+Assistant itself, so opening the tab fetches nothing from the internet. Without
+House Structure there is no page to show the tab on; the sensors work anyway.
+
+It also adds the **Heat flow** overlay to House Structure's House tab
+(``hass.data["house_structure_overlays"]``, worked out in ``heat_flow.py``),
+and publishes each zone's fitted cooling rate for Manual J
+(``hass.data["home_thermal_lab_fitted"]``, ``{area_id: {"a": per_hour}}``,
+with the event ``home_thermal_lab_fitted_updated``).
+
+The page asks for its data over Home Assistant's own websocket connection (no
+separate login):
 
 * ``home_thermal_lab/zones``: the zones and their sensors.
 * ``home_thermal_lab/zone`` (``zone``, ``hours``): one zone's history (room,
@@ -13,6 +22,7 @@ websocket connection (no separate login):
   ahead, the model card and the status tiles; the other rooms on the zone's
   thermostat (from House Structure); and the fixed chart scales, one indoor
   span shared by every zone and one outdoor span for the whole year.
+* ``home_thermal_lab/heat_flow``: the Heat flow overlay's flows now.
 """
 
 from __future__ import annotations
@@ -23,21 +33,21 @@ import hashlib
 import logging
 from pathlib import Path
 
-from homeassistant.components import frontend, websocket_api
+from homeassistant.components import websocket_api
 from homeassistant.components.http import StaticPathConfig
 from homeassistant.components.recorder import get_instance
 from homeassistant.components.recorder.statistics import statistics_during_period
 from homeassistant.core import callback
 from homeassistant.helpers import area_registry as ar
+from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
 import voluptuous as vol
 
-from . import BUILDING, DOMAIN, ENERGY
+from . import DOMAIN
 from .calls import temperature_series
 from .ha_rows import numbers, recorded
-from .house_model import nominal_from_settings
-from .loads import HUMIDITY_NOTE, assemble_all, design_from_record, equipment_from
-from .manual import HOURS_PER_YEAR, Design
-from .options import STRUCTURE_DOMAIN, has_walls, structure_ducts, structure_rooms
+from .heat_flow import ZoneNow, flows
+from .options import STRUCTURE_DOMAIN, has_walls, structure_rooms
 from .panel_data import (
     action_spans,
     archive,
@@ -55,53 +65,70 @@ from .panel_data import (
 _LOGGER = logging.getLogger(__name__)
 
 STATIC_URL = "/home_thermal_lab_static"
-PANEL_PATH = "home-thermal-lab"
 FRONTEND = Path(__file__).parent / "frontend"
 MAX_HOURS = 24 * 60  # the recorder keeps 60 days here
 SCALES_EVERY = timedelta(hours=6)  # how often the fixed chart scales are redone
 STATISTICS_SINCE = datetime(2000, 1, 1, tzinfo=UTC)  # long-term statistics: all
-LOADS_HOURS = 2 * HOURS_PER_YEAR  # the record the design temperatures come from
+
+# House Structure's Thermal Lab page: its tabs and the House tab's overlays
+TABS = "house_structure_tabs"
+TABS_EVENT = "house_structure_tabs_updated"
+TAB_KEY = "zones"
+TAB_ORDER = 30
+OVERLAYS = "house_structure_overlays"
+OVERLAYS_EVENT = "house_structure_overlays_updated"
+OVERLAY_KEY = "heat_flow"
+OVERLAY_REFRESH_S = 60
+# Each zone's fitted cooling rate, for Manual J
+FITTED = "home_thermal_lab_fitted"
+FITTED_EVENT = "home_thermal_lab_fitted_updated"
 
 
 def _version() -> str:
-    """A short hash of the page and the vendored script, to bust caches."""
-    digest = hashlib.sha256()
-    for name in ("index.html", "chart.umd.min.js"):
-        digest.update((FRONTEND / name).read_bytes())
-    return digest.hexdigest()[:10]
+    """A short hash of the page, to bust caches when it changes."""
+    return hashlib.sha256((FRONTEND / "index.html").read_bytes()).hexdigest()[:10]
 
 
-async def async_register_panel(hass) -> None:
-    """Register the static files, websocket commands and sidebar panel once."""
+async def async_register_tab(hass) -> None:
+    """Serve the page and add the commands once; add the tab and the overlay."""
     data = hass.data.setdefault(DOMAIN, {})
     if not data.get("static"):
         data["static"] = True
-        await hass.http.async_register_static_paths(
-            [StaticPathConfig(STATIC_URL, str(FRONTEND), cache_headers=True)]
-        )
+        if hass.http is not None:  # None in tests without a web server
+            await hass.http.async_register_static_paths(
+                [StaticPathConfig(STATIC_URL, str(FRONTEND), cache_headers=True)]
+            )
         websocket_api.async_register_command(hass, ws_zones)
         websocket_api.async_register_command(hass, ws_zone)
-        websocket_api.async_register_command(hass, ws_loads)
-    if data.get("panel"):
+        websocket_api.async_register_command(hass, ws_heat_flow)
+    if data.get("tab"):
         return
     version = await hass.async_add_executor_job(_version)
-    frontend.async_register_built_in_panel(
-        hass,
-        "iframe",
-        sidebar_title="Thermal Lab",
-        sidebar_icon="mdi:home-thermometer-outline",
-        frontend_url_path=PANEL_PATH,
-        require_admin=False,
-        config={"url": f"{STATIC_URL}/index.html?v={version}"},
-    )
-    data["panel"] = True
+    hass.data.setdefault(TABS, {})[TAB_KEY] = {
+        "title": "Zones",
+        "url": f"{STATIC_URL}/index.html?v={version}",
+        "order": TAB_ORDER,
+    }
+    hass.bus.async_fire(TABS_EVENT)
+    hass.data.setdefault(OVERLAYS, {})[OVERLAY_KEY] = {
+        "title": "Heat flow",
+        "command": f"{DOMAIN}/heat_flow",
+        "refresh_s": OVERLAY_REFRESH_S,
+    }
+    hass.bus.async_fire(OVERLAYS_EVENT)
+    data["tab"] = True
 
 
-def async_remove_panel(hass) -> None:
-    """Take the panel out of the sidebar (the static files stay until restart)."""
+def async_remove_tab(hass) -> None:
+    """Take the tab, the overlay and the fitted rates back (the files stay)."""
     data = hass.data.get(DOMAIN, {})
-    if data.pop("panel", False):
-        frontend.async_remove_panel(hass, PANEL_PATH)
+    if data.pop("tab", False):
+        hass.data.get(TABS, {}).pop(TAB_KEY, None)
+        hass.bus.async_fire(TABS_EVENT)
+        hass.data.get(OVERLAYS, {}).pop(OVERLAY_KEY, None)
+        hass.bus.async_fire(OVERLAYS_EVENT)
+    if hass.data.pop(FITTED, None) is not None:
+        hass.bus.async_fire(FITTED_EVENT)
 
 
 def _zones(hass) -> dict:
@@ -374,129 +401,101 @@ def _rates(hass) -> dict[str, float]:
     return out
 
 
-def _energy_settings(hass) -> dict | None:
-    """The first energy sub-entry's settings (the furnace and AC nameplates)."""
-    for entry in hass.config_entries.async_entries(DOMAIN):
-        for sub in entry.subentries.values():
-            if sub.subentry_type == ENERGY:
-                return dict(sub.data)
-    return None
+@callback
+def publish_fitted(hass) -> None:
+    """Share the fitted cooling rates, and tell listeners when they change."""
+    new = {area: {"a": a} for area, a in _rates(hass).items()}
+    if hass.data.get(FITTED) != new:
+        hass.data[FITTED] = new
+        hass.bus.async_fire(FITTED_EVENT)
 
 
-def _house_settings(hass) -> dict:
-    """The integration entry's own settings (the envelope defaults among them)."""
-    for entry in hass.config_entries.async_entries(DOMAIN):
-        return dict(entry.data)
-    return {}
+def _number(hass, entity_id: str | None) -> float | None:
+    state = hass.states.get(entity_id) if entity_id else None
+    try:
+        return float(state.state)
+    except (AttributeError, TypeError, ValueError):
+        return None
 
 
-def _buildings(hass) -> list[dict]:
-    """The detached buildings: each sub-entry's name, areas and indoor setpoints."""
-    out = []
-    for entry in hass.config_entries.async_entries(DOMAIN):
-        for sub in entry.subentries.values():
-            if sub.subentry_type == BUILDING:
-                out.append({"name": sub.title, **dict(sub.data)})
+def _glass(hass) -> dict[str, float]:
+    """House Structure's sun through each room's windows now (W), by area.
+
+    Its room sensors are the ``solar_gain`` sensors that list their windows.
+    """
+    entities = er.async_get(hass)
+    devices = dr.async_get(hass)
+    out: dict[str, float] = {}
+    for entry in list(entities.entities.values()):
+        if entry.platform != STRUCTURE_DOMAIN or not entry.unique_id.endswith(
+            "_solar_gain"
+        ):
+            continue
+        state = hass.states.get(entry.entity_id)
+        if state is None or "windows" not in state.attributes:
+            continue
+        area = entry.area_id
+        if area is None and entry.device_id:
+            device = devices.async_get(entry.device_id)
+            area = device.area_id if device else None
+        watts = _number(hass, entry.entity_id)
+        if area and watts is not None:
+            out[area] = watts
     return out
 
 
-def _stamp(value) -> datetime:
-    """A statistics row's start, as an aware time (epoch seconds or a datetime)."""
-    if isinstance(value, datetime):
-        return value if value.tzinfo else value.replace(tzinfo=UTC)
-    return datetime.fromtimestamp(float(value), UTC)
-
-
-async def _hourly_outdoor(hass, entity_id: str, end: datetime) -> list[float | None]:
-    """The outdoor temperature's hourly means over ``LOADS_HOURS`` (None if missing)."""
-    start = end - timedelta(hours=LOADS_HOURS)
-    found = await get_instance(hass).async_add_executor_job(
-        statistics_during_period,
-        hass,
-        start,
-        end,
-        {entity_id},
-        "hour",
-        None,
-        {"mean"},
+async def _zone_now(hass, brain, now: datetime) -> ZoneNow | None:
+    """A fitted zone's terms and what it is doing now (None without a model)."""
+    model = brain.model
+    if model is None:
+        return None
+    climate = hass.states.get(brain.zone["climate_entity"])
+    heating = climate is not None and climate.attributes.get("hvac_action") == "heating"
+    light = None
+    try:
+        _, lights, _, _ = await brain.inputs(now, 1, None)
+        light = lights[0] if lights else None
+    except Exception:  # no forecast yet: no sun drawn
+        _LOGGER.debug("No light for %s", brain.zone["name"], exc_info=True)
+    return ZoneNow(
+        name=brain.zone["name"],
+        a=model.a,
+        g=model.g,
+        h=model.h,
+        n=model.n if brain.neighbours else 0.0,
+        heating=heating,
+        light=light,
     )
-    values: list[float | None] = [None] * LOADS_HOURS
-    for row in found.get(entity_id, []):
-        index = int((_stamp(row["start"]) - start).total_seconds() // 3600)
-        if 0 <= index < LOADS_HOURS and row.get("mean") is not None:
-            values[index] = float(row["mean"])
-    return values
 
 
-_OUTDOOR_CACHE: tuple[tuple[str, datetime], list[float | None]] | None = None
-
-
-async def _cached_hourly_outdoor(
-    hass, entity_id: str, end: datetime
-) -> list[float | None]:
-    """``_hourly_outdoor``, reused until the hour changes.
-
-    The window ends on the hour, so the record only changes hourly; the recorder
-    query is the slow part of the Loads tab, and this skips it on refreshes.
-    """
-    global _OUTDOOR_CACHE
-    key = (entity_id, end)
-    if _OUTDOOR_CACHE is not None and _OUTDOOR_CACHE[0] == key:
-        return list(_OUTDOOR_CACHE[1])
-    values = await _hourly_outdoor(hass, entity_id, end)
-    _OUTDOOR_CACHE = (key, values)
-    return list(values)
-
-
-@websocket_api.websocket_command({vol.Required("type"): "home_thermal_lab/loads"})
+@websocket_api.websocket_command({vol.Required("type"): "home_thermal_lab/heat_flow"})
 @websocket_api.async_response
-async def ws_loads(hass, connection, msg) -> None:
-    """The Manual J, S and D results, set against the recorded and fitted values."""
+async def ws_heat_flow(hass, connection, msg) -> None:
+    """The Heat flow overlay: the flows into and between the rooms now, in watts."""
+    now = datetime.now(UTC)
     rooms = structure_rooms(hass.data.get(STRUCTURE_DOMAIN))
-    if not rooms:
-        connection.send_result(
-            msg["id"],
-            {"available": False, "reason": "House Structure has no rooms yet."},
-        )
-        return
-    end = datetime.now(UTC).replace(minute=0, second=0, microsecond=0)
-    brains = list(_zones(hass).values())
-    hourly: list[float | None] = [None] * LOADS_HOURS
-    if brains:
-        try:
-            hourly = await _cached_hourly_outdoor(hass, brains[0].outdoor_entity, end)
-        except Exception:  # the design then stays the assumed one
-            _LOGGER.debug("No hourly outdoor record", exc_info=True)
-    design, info = design_from_record(hourly, Design())
     areas = ar.async_get(hass)
     names = {}
     for area_id in rooms:
         area = areas.async_get_area(area_id)
         if area is not None:
             names[area_id] = area.name
-    energy = _energy_settings(hass) or {}
-    furnace, ac, equipment_warnings = equipment_from(energy)
-    nominal, envelope_note = nominal_from_settings(_house_settings(hass))
-    furnace_area = (
-        areas.async_get_area(energy["area_id"]) if energy.get("area_id") else None
-    )
-    try:
-        result = assemble_all(
-            rooms,
-            names,
-            _rates(hass),
-            nominal,
-            design,
-            buildings=_buildings(hass),
-            furnace=furnace,
-            ac=ac,
-            design_info=info,
-            extra_warnings=[envelope_note, HUMIDITY_NOTE, *equipment_warnings],
-            ducts=structure_ducts(hass.data.get(STRUCTURE_DOMAIN)),
-            furnace_room=furnace_area.name if furnace_area else None,
-        )
-    except ValueError as err:
-        connection.send_error(msg["id"], "no_rooms", str(err))
-        return
-    result["available"] = True
-    connection.send_result(msg["id"], result)
+    temperatures = {}
+    for area_id, room in rooms.items():
+        value = _number(hass, room.get("temperature_entity"))
+        if value is not None:
+            temperatures[area_id] = value
+    brains = list(_zones(hass).values())
+    zones: dict[str, ZoneNow] = {}
+    for brain in brains:
+        area = brain.zone.get("area_id")
+        if area in rooms and area not in zones:
+            got = await _zone_now(hass, brain, now)
+            if got is not None:
+                zones[area] = got
+            room_t = _number(hass, brain.zone.get("room_entity"))
+            if area not in temperatures and room_t is not None:
+                temperatures[area] = room_t
+    outdoor = _number(hass, brains[0].outdoor_entity) if brains else None
+    result = flows(rooms, names, temperatures, outdoor, zones, _glass(hass))
+    connection.send_result(msg["id"], {"as_of": now.isoformat(), **result})

@@ -7,7 +7,6 @@ from custom_components.home_thermal_lab.options import (
     format_lights,
     format_roofs,
     kw_table,
-    parse_blower,
     parse_lights,
     parse_roofs,
     resolve_sun,
@@ -83,11 +82,6 @@ def test_roof_ratio_rejects_bad_parts(text):
         parse_roofs(text)
 
 
-def test_kw_table_converts_tons():
-    table = kw_table({"cool": 9, "cool_tons": 3})
-    assert table == {"cool": pytest.approx(10.55052)}
-
-
 def test_kw_table_converts_btu():
     table = kw_table({"heat_high": 80000, "fan": ""}, "BTU/h")
     assert table == {"heat_high": pytest.approx(23.4456)}
@@ -161,34 +155,3 @@ def test_added_removed_or_changed_pitch_is_not_a_rename():
     # removed and a different face added: not the same roof
     assert roof_renames(old, parse_roofs("Front=S 30, Shed=N 6:12")) == {}
     assert roof_renames([], parse_roofs("W 4:12")) == {}
-
-
-def test_blower_curve_units_on_first_point_carry_to_rest():
-    points = parse_blower("400 cfm = 0.30 inWC, 800 = 0.20, 1200 = 0.05")
-    assert len(points) == 3
-    flow, static = points[0]
-    assert flow == pytest.approx(400 * 0.000471947)
-    assert static == pytest.approx(0.30 * 249.089)
-    assert points[2][1] == pytest.approx(0.05 * 249.089)
-
-
-def test_blower_curve_defaults_to_cfm_and_inwc():
-    points = parse_blower("400 = 0.3, 800 = 0.2")
-    assert points[1][0] == pytest.approx(800 * 0.000471947)
-
-
-def test_blower_curve_metric_and_mixed_units():
-    points = parse_blower("0.2 m3/s = 60 Pa, 0.1 l/s = 150 Pa")
-    assert points[0] == pytest.approx((0.0001, 150.0))
-    assert points[1] == pytest.approx((0.2, 60.0))
-
-
-def test_blower_curve_errors():
-    for bad in [
-        "400 cfm = 0.3",
-        "400 = 0.3, 400 = 0.2",
-        "400 furlongs = 0.3, 800 = 0.2",
-        "x = 1, 2 = 3",
-    ]:
-        with pytest.raises(FieldError):
-            parse_blower(bad)

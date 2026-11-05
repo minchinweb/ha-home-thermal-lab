@@ -3,12 +3,14 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Thermal Lab</title>
+<title>Zones</title>
 <!--
-  The Home Thermal Lab panel. Served by Home Assistant from the integration's
-  frontend/ folder (see panel.py); Chart.js is vendored next to it (invoke vendor),
-  so nothing is fetched from the internet. Data comes over the parent page's
-  websocket connection: home_thermal_lab/zones and home_thermal_lab/zone.
+  Home Thermal Lab's Zones tab on House Structure's Thermal Lab page. Served
+  by Home Assistant from the integration's frontend/ folder (see panel.py).
+  Chart.js and the connection and theme helpers (tab.js) come from House
+  Structure, so nothing is fetched from the internet. Data comes over Home
+  Assistant's own websocket connection: home_thermal_lab/zones and
+  home_thermal_lab/zone.
 -->
 <style>
   :root {
@@ -91,21 +93,13 @@
   .status { color: var(--muted); font-size: 13px; margin: 0 0 12px; display: flex; align-items: center; gap: 8px; }
   .spinner { width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; display: inline-block; animation: spin 0.8s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  #loads-body { transition: opacity 0.2s; }
-  #loads-body.busy { opacity: 0.5; }
   @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 3s; } }
 </style>
 </head>
 <body>
 <main>
-  <h1>Thermal Lab</h1>
   <div id="error" class="banner hidden"></div>
-  <div class="bar" id="tabs" role="group" aria-label="View">
-    <button class="chip" type="button" data-view="zone" aria-pressed="true">Zone</button>
-    <button class="chip" type="button" data-view="loads" aria-pressed="false">Loads</button>
-  </div>
 
-<div id="view-zone">
   <div class="bar" id="zones" role="group" aria-label="Zone"></div>
 
   <section class="card">
@@ -135,52 +129,18 @@
     <h2>Thermal model</h2>
     <div class="grid2" id="model"></div>
   </section>
-</div>
-
-<div id="view-loads" class="hidden">
-  <div id="loads-error" class="banner hidden"></div>
-  <p id="loads-status" class="status hidden"><span class="spinner" aria-hidden="true"></span>Calculating from the recorded history…</p>
-  <div id="loads-body">
-  <section class="card">
-    <h2>Design conditions</h2>
-    <div id="design"></div>
-  </section>
-  <section class="card">
-    <h2>Rooms: calculated against fitted</h2>
-    <div id="rooms"></div>
-    <p class="hint">Heat loss and cooling are Manual J at the design conditions, from House Structure's areas and the nominal R-values (the house defaults).
-      UA calc is the room's calculated conductance (walls, roofs, windows and infiltration). UA fitted is the zone model's measured cooling rate turned into the same units,
-      so a ratio near 1 means the nominal envelope matches the house. The envelope scale is the factor on the nominal conductances that would match the fit: above 1 means more heat flows than the nominal R-values give.
-      Walls below grade are left out of the fit, which has its own ground term.</p>
-  </section>
-  <section class="card">
-    <h2>Equipment (Manual S)</h2>
-    <div class="grid2" id="equipment"></div>
-  </section>
-  <section class="card">
-    <h2>Detached buildings (Manual J and S)</h2>
-    <div id="buildings"></div>
-  </section>
-  <section class="card">
-    <h2>Ducts (Manual D)</h2>
-    <div id="ducts"></div>
-  </section>
-  <section class="card">
-    <h2>Notes</h2>
-    <ul id="loads-notes" class="hint"></ul>
-  </section>
-  </div>
-</div>
 </main>
 
-<script src="chart.umd.min.js?v=4.4.1"></script>
+<script src="/house_structure_static/chart.umd.min.js"></script>
+<script src="/house_structure_static/tab.js"></script>
 <script>
 "use strict";
 
 const RANGES = [["6h", 6], ["12h", 12], ["24h", 24], ["3d", 72], ["7d", 168], ["30d", 720]];
 const AHEAD_MS = 24 * 3600e3;
 const REFRESH_MS = 5 * 60e3;
-const state = { zones: [], zone: null, hours: 24, data: null, hidden: new Set(), view: "zone" };
+const lab = window.thermalLab;
+const state = { zones: [], zone: null, hours: 24, data: null, hidden: new Set() };
 let mainChart = null;
 let stripChart = null;
 let outdoorChart = null;
@@ -193,40 +153,9 @@ function recall(key, fallback) {
   catch (e) { return fallback; }
 }
 
-/* Follow Home Assistant's theme when the parent page allows it. */
-function applyTheme() {
-  let parentStyle = null;
-  try { parentStyle = getComputedStyle(window.parent.document.documentElement); } catch (e) { return; }
-  const pick = (name) => parentStyle.getPropertyValue(name).trim();
-  const map = {
-    "--bg": "--primary-background-color", "--card": "--card-background-color",
-    "--text": "--primary-text-color", "--muted": "--secondary-text-color",
-    "--line": "--divider-color", "--accent": "--primary-color",
-    "--chip": "--secondary-background-color",
-  };
-  const root = document.documentElement;
-  for (const [ours, theirs] of Object.entries(map)) {
-    const value = pick(theirs);
-    if (value) root.style.setProperty(ours, value);
-  }
-  try {
-    const dark = window.parent.document.querySelector("home-assistant")?.hass?.themes?.darkMode;
-    if (dark !== undefined) root.dataset.theme = dark ? "dark" : "light";
-  } catch (e) { /* not available */ }
-}
 const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-async function connection() {
-  const parent = window.parent;
-  if (!parent || parent === window || !parent.hassConnection) {
-    throw new Error("Open this page from the Thermal Lab panel in Home Assistant's sidebar.");
-  }
-  const { conn } = await parent.hassConnection;
-  return conn;
-}
-async function ask(message) {
-  return (await connection()).sendMessagePromise(message);
-}
+const ask = (message) => lab.ask(message);
 
 function showError(text) {
   const box = document.getElementById("error");
@@ -686,226 +615,6 @@ function drawModel(d) {
     el("div", { class: "panel" }, ...forecast));
 }
 
-/* ---------- loads (Manual J, S and D) ---------- */
-
-const CFM_PER_M3S = 1 / 0.000471947;
-const VERDICT = {
-  ok: ["high", "OK"],
-  oversized: ["medium", "Oversized"],
-  undersized: ["low", "Undersized"],
-};
-
-function tableOf(head, rows) {
-  return el("div", { class: "table-wrap" }, el("table", {},
-    el("thead", {}, el("tr", {}, ...head.map((h) => el("th", {}, h)))),
-    el("tbody", {}, ...rows.map((cells) => el("tr", {}, ...cells.map((c) => el("td", {}, c)))))));
-}
-function verdictPill(verdict) {
-  const [cls, text] = VERDICT[verdict] || ["none", verdict || "–"];
-  return el("span", { class: "pill " + cls }, text);
-}
-
-function drawDesign(d) {
-  const dz = d.design;
-  const info = dz.info || {};
-  const recorded = info.source === "recorded";
-  const assumed = info.assumed || { heat_outdoor_c: dz.heat_outdoor_c, cool_outdoor_c: dz.cool_outdoor_c };
-  const rows = [
-    ["Heating outdoor (exceeded in 99.6% of hours)", fmt(assumed.heat_outdoor_c, 1, " °C"),
-      recorded ? fmt(info.heat_outdoor_c, 1, " °C") : "–",
-      recorded ? "99%: " + fmt(info.heat_outdoor_99_c, 1, " °C") : "–"],
-    ["Cooling outdoor (exceeded in 0.4% of hours)", fmt(assumed.cool_outdoor_c, 1, " °C"),
-      recorded ? fmt(info.cool_outdoor_c, 1, " °C") : "–",
-      recorded ? "1%: " + fmt(info.cool_outdoor_1_c, 1, " °C") : "–"],
-  ];
-  const note = recorded
-    ? `The design uses the recorded values, from ${info.hours} hours of outdoor temperature. The assumed values are the standard ones, for comparison.`
-    : "The design uses the assumed values: " + (info.warnings || []).join(" ");
-  document.getElementById("design").replaceChildren(
-    tableOf(["Condition", "Assumed", "Recorded", "Cross-check"], rows),
-    el("p", { class: "hint" }, note),
-    el("p", { class: "hint" }, `Indoors ${fmt(dz.heat_indoor_c, 0, " °C")} for heating and ${fmt(dz.cool_indoor_c, 0, " °C")} for cooling, at ${fmt(dz.altitude_m, 0, " m")} altitude.`));
-}
-
-// A room's name, with an "assumed sizes" pill when some of its sizes were filled in.
-function roomName(r) {
-  if (!r.assumed || !r.assumed.length) return r.name;
-  return el("span", {}, r.name + " ", el("span", { class: "pill medium", title: r.assumed.join(" ") }, "assumed sizes"));
-}
-
-// The list of each room's assumed sizes, or nothing when none were assumed.
-function assumedList(rooms) {
-  const flagged = rooms.filter((r) => r.assumed && r.assumed.length);
-  if (!flagged.length) return [];
-  return [
-    el("p", { class: "hint" }, "Sizes assumed, not given in House Structure. Give the room's width and depth (or floor area), its height, and each wall's length and height to replace them:"),
-    el("ul", { class: "hint" }, ...flagged.map((r) => el("li", {}, el("strong", {}, r.name + ": "), r.assumed.join(" ")))),
-  ];
-}
-
-function drawRooms(d) {
-  const rows = d.rooms.map((r) => [
-    roomName(r), fmt(r.heating_w, 0), fmt(r.cooling_total_w, 0), fmt(r.ua_calc_w_k, 1), fmt(r.ua_fit_w_k, 1),
-    r.fit_ratio === null ? "–" : fmt(r.fit_ratio, 2), r.scale === null ? "–" : fmt(r.scale, 2),
-  ]);
-  const t = d.totals;
-  rows.push(["Whole house", fmt(t.heating_w, 0), fmt(t.cooling_total_w, 0), fmt(t.ua_w_per_k, 1), "–", "–", "–"]);
-  const missing = d.rooms.some((r) => r.ua_fit_w_k === null);
-  document.getElementById("rooms").replaceChildren(
-    tableOf(["Room", "Heat loss (W)", "Cooling (W)", "UA calc (W/K)", "UA fitted (W/K)", "Fitted ÷ calc", "Envelope scale"], rows),
-    el("p", { class: "hint" }, missing ? "A room with no UA fitted has no fitted rate yet: its zone's model is not fitted." : ""),
-    ...assumedList(d.rooms));
-}
-
-/* Heating sizes in watts and BTU/h, as the AC's are in watts and tons. */
-const BTU_H_PER_W = 3.41214;
-const watts = (w) => fmt(w, 0, " W") + " · " + fmt(w * BTU_H_PER_W, 0, " BTU/h");
-
-function drawEquipment(d) {
-  const eq = d.equipment;
-  const TON_W = 3516.85;
-  const panels = [];
-  const hd = eq.heating_design;
-  const cd = eq.cooling_design;
-  if (eq.heating) {
-    const h = eq.heating;
-    panels.push(el("div", { class: "panel" },
-      el("h3", {}, "Furnace", verdictPill(h.verdict)),
-      row("Located in", d.furnace_room || "not set"),
-      row("Design size (heat loss at design)", watts(hd.load_w)),
-      row("Actual size (high stage output)", watts(h.capacity_w)),
-      row("Actual ÷ design", fmt(h.ratio, 2)),
-      row("Allowed up to", watts(hd.max_w)),
-      row("Low stage ÷ design", h.low_stage_ratio === null ? "–" : fmt(h.low_stage_ratio, 2)),
-      row("Airflow at the temperature rise", fmt(h.airflow_m3s * CFM_PER_M3S, 0, " CFM"))));
-  } else {
-    panels.push(el("div", { class: "panel" }, el("h3", {}, "Furnace"), row("Located in", d.furnace_room || "not set"),
-      row("Design size (heat loss at design)", watts(hd.load_w)),
-      row("Actual size", "–"),
-      el("p", { class: "hint" }, "No furnace nameplate yet: enter the high-stage input and AFUE on the furnace's energy entry.")));
-  }
-  if (eq.cooling) {
-    const c = eq.cooling;
-    panels.push(el("div", { class: "panel" },
-      el("h3", {}, "Air conditioner", verdictPill(c.verdict)),
-      row("Design size, total (cooling load)", fmt(c.load_total_w, 0, " W") + " · " + fmt(c.load_total_w / TON_W, 2, " tons")),
-      row("Design size, sensible", fmt(c.load_sensible_w, 0, " W")),
-      row("Allowed up to, total", fmt(cd.max_total_w, 0, " W") + " · " + fmt(cd.max_total_w / TON_W, 2, " tons")),
-      row("Actual size, total, at design outdoor", fmt(c.capacity_total_w, 0, " W") + " · " + fmt(c.capacity_total_w / TON_W, 2, " tons")),
-      row("Actual ÷ design, total", fmt(c.ratio, 2)),
-      row("Actual ÷ design, sensible", fmt(c.sensible_ratio, 2))));
-  } else {
-    panels.push(el("div", { class: "panel" }, el("h3", {}, "Air conditioner"),
-      row("Design size, total (cooling load)", fmt(cd.load_total_w, 0, " W") + " · " + fmt(cd.load_total_w / TON_W, 2, " tons")),
-      row("Design size, sensible", fmt(cd.load_sensible_w, 0, " W")),
-      row("Actual size", "–"),
-      el("p", { class: "hint" }, "No AC nameplate yet: enter the cooling tons and the sensible capacity on the energy entry.")));
-  }
-  document.getElementById("equipment").replaceChildren(...panels);
-}
-
-function drawBuildings(d) {
-  const TON = 3516.85;
-  const blocks = (d.buildings || []).map((b) => {
-    const parts = [el("h3", {}, b.name)];
-    if (b.missing && b.missing.length) {
-      parts.push(el("p", { class: "hint" }, "No House Structure parts yet in: " + b.missing.join(", ") + "."));
-    }
-    if (!b.result) {
-      parts.push(el("p", { class: "hint" }, "Nothing to size yet: give the building's areas walls, a roof or windows in House Structure."));
-      return el("div", { class: "panel" }, ...parts);
-    }
-    const r = b.result;
-    const hd = r.equipment.heating_design;
-    const cd = r.equipment.cooling_design;
-    parts.push(
-      row("Design size (heat loss at design)", watts(hd.load_w)),
-      row("Allowed up to", watts(hd.max_w)),
-      row("Design size, total cooling", fmt(cd.load_total_w, 0, " W") + " · " + fmt(cd.load_total_w / TON, 2, " tons")),
-      row("Equipment", "none yet"),
-      el("p", { class: "hint" }, "No heater nameplate yet: the design size is what it must supply."));
-    parts.push(tableOf(["Room", "Heat loss (W)", "Cooling (W)", "UA calc (W/K)"],
-      r.rooms.map((x) => [roomName(x), fmt(x.heating_w, 0), fmt(x.cooling_total_w, 0), fmt(x.ua_calc_w_k, 1)])));
-    parts.push(...assumedList(r.rooms));
-    if (r.warnings && r.warnings.length) parts.push(el("p", { class: "hint" }, r.warnings.join(" ")));
-    return el("div", { class: "panel" }, ...parts);
-  });
-  document.getElementById("buildings").replaceChildren(
-    ...(blocks.length ? blocks : [el("p", { class: "hint" }, "No detached buildings. Add one from the integration's page (Detached building) to size a garage or similar.")]));
-}
-
-function drawDucts(d) {
-  const du = d.ducts;
-  const box = document.getElementById("ducts");
-  if (!du.runs || !du.runs.length) {
-    box.replaceChildren(el("p", { class: "hint" }, "No duct check yet: it needs each register's duct and free area, and the furnace's blower curve."));
-    return;
-  }
-  const rows = du.runs.map((r) => [
-    r.name, r.room, fmt(r.flow_m3s * CFM_PER_M3S, 0), fmt(r.loss_pa, 0, " Pa"), fmt(r.margin_pa, 0, " Pa"),
-    r.branch_round_in ? fmt(r.branch_round_in, 1, " in") : "–",
-    el("span", { class: "pill " + (r.ok ? "high" : "low") }, r.ok ? "OK" : "Check"),
-  ]);
-  const budget = du.budget_pa === null || du.budget_pa === undefined
-    ? "" : `The blower gives ${fmt(du.blower_static_pa, 0, " Pa")} at this airflow, less the equipment's share, leaves ${fmt(du.budget_pa, 0, " Pa")} for the ducts.`;
-  box.replaceChildren(
-    tableOf(["Run", "Room", "Airflow (CFM)", "Loss (Pa)", "Margin (Pa)", "Branch", "Result"], rows),
-    el("p", { class: "hint" }, budget));
-}
-
-function drawLoadsNotes(d) {
-  document.getElementById("loads-notes").replaceChildren(...(d.warnings || []).map((w) => el("li", {}, w)));
-}
-
-function showLoadsError(text) {
-  const box = document.getElementById("loads-error");
-  box.textContent = text || "";
-  box.classList.toggle("hidden", !text);
-}
-
-let loadsLoading = 0;
-function setLoadsBusy(busy) {
-  document.getElementById("loads-status").classList.toggle("hidden", !busy);
-  document.getElementById("loads-body").classList.toggle("busy", busy);
-}
-
-async function loadLoads() {
-  const ticket = ++loadsLoading;
-  setLoadsBusy(true);
-  try {
-    const d = await ask({ type: "home_thermal_lab/loads" });
-    if (ticket !== loadsLoading) return;
-    if (!d.available) {
-      showLoadsError(d.reason || "Nothing to calculate yet.");
-      return;
-    }
-    showLoadsError("");
-    drawDesign(d);
-    drawRooms(d);
-    drawEquipment(d);
-    drawBuildings(d);
-    drawDucts(d);
-    drawLoadsNotes(d);
-  } catch (err) {
-    if (ticket !== loadsLoading) return;
-    showLoadsError("Could not load the calculations: " + (err && (err.message || err.code) || err));
-  } finally {
-    if (ticket === loadsLoading) setLoadsBusy(false);
-  }
-}
-
-const VIEWS = ["zone", "loads"];
-function showView(name) {
-  state.view = VIEWS.includes(name) ? name : "zone";
-  remember("view", state.view);
-  document.getElementById("view-zone").classList.toggle("hidden", state.view !== "zone");
-  document.getElementById("view-loads").classList.toggle("hidden", state.view !== "loads");
-  for (const b of document.querySelectorAll("#tabs button")) {
-    b.setAttribute("aria-pressed", String(b.dataset.view === state.view));
-  }
-  if (state.view === "loads") loadLoads();
-}
-
 /* ---------- loading ---------- */
 
 let loading = 0;
@@ -926,23 +635,18 @@ async function load() {
 }
 
 async function start() {
-  applyTheme();
+  lab.applyTheme();
   state.hours = recall("hours", 24);
   state.hidden = new Set(recall("hidden", []));
   drawRanges();
-  for (const b of document.querySelectorAll("#tabs button")) {
-    b.addEventListener("click", () => showView(b.dataset.view));
-  }
-  setInterval(() => { if (state.view === "loads") loadLoads(); }, REFRESH_MS);
-  showView(recall("view", "zone"));
   try {
     state.zones = await ask({ type: "home_thermal_lab/zones" });
   } catch (err) {
-    if (state.view === "zone") showError(err && err.message ? err.message : "Could not reach Home Assistant.");
+    showError(err && err.message ? err.message : "Could not reach Home Assistant.");
     return;
   }
   if (!state.zones.length) {
-    if (state.view === "zone") showError("No zones yet: add a shadow zone on the Home Thermal Lab integration's page.");
+    showError("No zones yet: add a shadow zone on the Home Thermal Lab integration's page.");
     return;
   }
   const saved = recall("zone", null);

@@ -9,7 +9,6 @@ structures the YAML configuration uses.
 from __future__ import annotations
 
 import math
-import re
 
 FACES = ("N", "E", "S", "W")
 KW_MODES = ("off", "fan", "heat_low", "heat_high", "cool")
@@ -17,11 +16,6 @@ POWER_UNITS = ("kW", "BTU/h")
 # the house's ground-temperature wave, shared by its below-ground rooms
 GROUND_KEYS = ("ground_mean", "ground_swing", "ground_coldest_day")
 BTU_H_TO_KW = 0.00029307
-TON_TO_KW = 12000 * BTU_H_TO_KW  # a ton of cooling is 12,000 BTU/h
-# Blower curve units, to SI (m³/s and Pa). A point is written "flow = static".
-FLOW_UNITS = {"cfm": 0.000471947, "l/s": 0.001, "m3/s": 1.0, "m³/s": 1.0}
-STATIC_UNITS = {"inwc": 249.089, "pa": 1.0}  # inches of water column
-_NUMBER_UNIT = re.compile(r"^\s*([0-9]*\.?[0-9]+)\s*([A-Za-z][A-Za-z0-9³/]*)?\s*$")
 
 
 class FieldError(ValueError):
@@ -228,73 +222,19 @@ def format_lights(lights: dict) -> str:
     return ", ".join(f"{entity}={watts:g}" for entity, watts in lights.items())
 
 
-def _number_unit(text: str, field: str) -> tuple[float, str]:
-    match = _NUMBER_UNIT.match(text)
-    if not match:
-        raise FieldError(field, f"not a number with an optional unit: {text.strip()!r}")
-    return float(match.group(1)), (match.group(2) or "").lower()
-
-
-def parse_blower(text: str) -> list[tuple[float, float]]:
-    """A blower curve as SI ``(airflow m³/s, static Pa)`` points, sorted by airflow.
-
-    Each point is ``flow = static``, separated by commas, such as
-    ``400 cfm = 0.30 inWC, 800 = 0.20, 1200 = 0.05``. Units may be given on the
-    first point and are carried by the rest (a point may give its own). Without
-    a unit the defaults are CFM and inches of water column.
-    """
-    parts = [p for p in text.split(",") if p.strip()]
-    if len(parts) < 2:
-        raise FieldError(
-            "blower_curve",
-            "give at least two points, such as '400 cfm = 0.30 inWC, 800 = 0.20'",
-        )
-    flow_unit, static_unit = "cfm", "inwc"
-    points = []
-    for part in parts:
-        left, sep, right = part.partition("=")
-        if not sep:
-            raise FieldError("blower_curve", f"not 'flow = static': {part.strip()!r}")
-        flow, f_unit = _number_unit(left, "blower_curve")
-        static, s_unit = _number_unit(right, "blower_curve")
-        if f_unit:
-            flow_unit = f_unit
-        if s_unit:
-            static_unit = s_unit
-        if flow_unit not in FLOW_UNITS:
-            raise FieldError("blower_curve", f"unknown airflow unit {flow_unit!r}")
-        if static_unit not in STATIC_UNITS:
-            raise FieldError("blower_curve", f"unknown static unit {static_unit!r}")
-        if flow <= 0 or static < 0:
-            raise FieldError(
-                "blower_curve", "airflow must be positive and static not negative"
-            )
-        points.append(
-            (flow * FLOW_UNITS[flow_unit], static * STATIC_UNITS[static_unit])
-        )
-    points.sort()
-    if len({f for f, _ in points}) != len(points):
-        raise FieldError("blower_curve", "two points have the same airflow")
-    return points
-
-
 def kw_table(values: dict, unit: str = "kW") -> dict[str, float]:
     """The powers (kW per furnace state) that were filled in.
 
     Args:
-        values: The form, with a number for each mode in ``KW_MODES``, and
-            optionally ``cool_tons``, cooling in tons (which sets ``cool``).
+        values: The form, with a number for each mode in ``KW_MODES``.
         unit: ``kW``, or ``BTU/h`` to convert (gas input, for instance).
     """
     factor = BTU_H_TO_KW if unit == "BTU/h" else 1.0
-    table = {
+    return {
         mode: float(values[mode]) * factor
         for mode in KW_MODES
         if values.get(mode) not in (None, "")
     }
-    if values.get("cool_tons") not in (None, ""):
-        table["cool"] = float(values["cool_tons"]) * TON_TO_KW
-    return table
 
 
 # House Structure (https://github.com/minchinweb/ha-house-structure) publishes
@@ -302,13 +242,6 @@ def kw_table(values: dict, unit: str = "kW") -> dict[str, float]:
 STRUCTURE_DOMAIN = "house_structure"
 STRUCTURE_EVENT = "house_structure_updated"
 STRUCTURE_VERSION = 1
-
-
-def structure_ducts(data: dict | None) -> dict[str, dict]:
-    """House Structure's shared duct sections by name (none if it has none)."""
-    if not data or data.get("version") != STRUCTURE_VERSION:
-        return {}
-    return data.get("ducts") or {}
 
 
 def structure_rooms(data: dict | None) -> dict[str, dict]:

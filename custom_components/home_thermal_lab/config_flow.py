@@ -27,22 +27,19 @@ from homeassistant.config_entries import (
 from homeassistant.helpers import selector
 import voluptuous as vol
 
-from . import BUILDING, CALL_STATS, CONTRIBUTION, DOMAIN, ENERGY, ZONE
-from .house_model import ENVELOPE_SETTINGS
+from . import CALL_STATS, CONTRIBUTION, DOMAIN, ENERGY, ZONE
 from .map_view import OutlineMapView
+from .migrate import MINOR_VERSION as ENTRY_MINOR_VERSION
 from .options import (
-    BTU_H_TO_KW,
     FACES,
     GROUND_KEYS,
     KW_MODES,
     POWER_UNITS,
-    TON_TO_KW,
     FieldError,
     format_lights,
     format_roofs,
     kw_table,
     normalise_roofs,
-    parse_blower,
     parse_lights,
     parse_roofs,
     roof_label,
@@ -54,8 +51,6 @@ _LOGGER = logging.getLogger(__name__)
 
 # the target wave (target.py); a zone without a mean targets its setpoint
 TARGET_KEYS = ("target_mean", "target_swing", "target_peak_hour", "target_band")
-# the envelope defaults for the Loads tab (house_model.nominal_from_settings)
-ENVELOPE_KEYS = tuple(key for key, _, _ in ENVELOPE_SETTINGS)
 
 _TEXT = selector.TextSelector()
 _NUMBER = selector.NumberSelector(
@@ -63,7 +58,6 @@ _NUMBER = selector.NumberSelector(
 )
 _CLIMATE = selector.EntitySelector(selector.EntitySelectorConfig(domain="climate"))
 _AREA = selector.AreaSelector()
-_AREAS = selector.AreaSelector(selector.AreaSelectorConfig(multiple=True))
 _CLIMATES = selector.EntitySelector(
     selector.EntitySelectorConfig(domain="climate", multiple=True)
 )
@@ -119,7 +113,6 @@ def _house_schema() -> vol.Schema:
             vol.Optional("ground_mean"): _NUMBER,
             vol.Optional("ground_swing"): _NUMBER,
             vol.Optional("ground_coldest_day"): _NUMBER,
-            **{vol.Optional(key): _NUMBER for key in ENVELOPE_KEYS},
             # a form has no extra buttons: ticking this and submitting redraws
             vol.Optional("preview", default=False): selector.BooleanSelector(),
         }
@@ -131,18 +124,13 @@ def _house_from_form(form: dict) -> dict:
     if form.get("outdoor_entity"):
         data["outdoor_entity"] = form["outdoor_entity"]
     data.update(_clean(form, ("rotation", "shade_below", *GROUND_KEYS)))
-    envelope = _clean(form, ENVELOPE_KEYS)
-    for key, value in envelope.items():
-        if float(value) <= 0:
-            raise FieldError(key, "must be more than 0")
-    data.update(envelope)
     if form.get("roofs"):
         data["roofs"] = parse_roofs(form["roofs"])
     return data
 
 
 def _house_to_form(data: dict) -> dict:
-    keys = ("outdoor_entity", "rotation", "shade_below", *GROUND_KEYS, *ENVELOPE_KEYS)
+    keys = ("outdoor_entity", "rotation", "shade_below", *GROUND_KEYS)
     out = {k: data[k] for k in keys if k in data}
     if data.get("roofs"):
         out["roofs"] = format_roofs(data["roofs"])
@@ -194,34 +182,8 @@ def _energy_schema(_roof_labels: list[dict]) -> vol.Schema:
             vol.Optional("learn_days"): _NUMBER,
             vol.Optional("power_unit", default="kW"): _UNITS,
             **{vol.Optional(mode): _NUMBER for mode in KW_MODES},
-            vol.Optional("cool_tons"): _NUMBER,
-            vol.Optional("afue"): _NUMBER,
-            vol.Optional("blower_curve"): _TEXT,
-            vol.Optional("ac_sensible_btuh"): _NUMBER,
-            vol.Optional("area_id"): _AREA,
         }
     )
-
-
-def _building_schema(_roof_labels: list[dict]) -> vol.Schema:
-    return vol.Schema(
-        {
-            vol.Required("name"): _TEXT,
-            vol.Required("areas"): _AREAS,
-            vol.Optional("indoor_heat_c"): _NUMBER,
-            vol.Optional("indoor_cool_c"): _NUMBER,
-        }
-    )
-
-
-def _building_from_form(form: dict) -> dict:
-    if not form.get("areas"):
-        raise FieldError("areas", "choose the areas the building covers")
-    return {
-        "name": form["name"],
-        "areas": list(form["areas"]),
-        **_clean(form, ("indoor_heat_c", "indoor_cool_c")),
-    }
 
 
 def _contribution_schema(roof_labels: list[dict]) -> vol.Schema:
@@ -333,38 +295,12 @@ def _energy_from_form(form: dict) -> dict:
         data["power_entity"] = form["power_entity"]
     if form.get("learn_days") is not None:
         data["learn_days"] = int(form["learn_days"])
-    if form.get("area_id"):
-        data["area_id"] = form["area_id"]  # the room the furnace sits in
-    # Furnace and air conditioner nameplate data (optional).
-    if form.get("afue") not in (None, ""):
-        afue = float(form["afue"]) / 100.0
-        if not 0 < afue <= 1.0:
-            raise FieldError("afue", "AFUE is a percentage, such as 95")
-        data["afue"] = afue
-    if form.get("blower_curve"):
-        data["blower_curve"] = form["blower_curve"]
-        data["blower"] = [list(point) for point in parse_blower(form["blower_curve"])]
-    if form.get("ac_sensible_btuh") not in (None, ""):
-        data["ac_sensible_w"] = float(form["ac_sensible_btuh"]) * BTU_H_TO_KW * 1000.0
-    # The cooling capacity in tons, kept apart from kw["cool"], which is the
-    # compressor's power draw when that is what was typed in.
-    if form.get("cool_tons") not in (None, ""):
-        data["ac_total_w"] = float(form["cool_tons"]) * TON_TO_KW * 1000.0
     return data
 
 
 def _energy_to_form(data: dict) -> dict:
-    flat = {
-        k: v
-        for k, v in data.items()
-        if k not in ("kw", "afue", "blower", "ac_sensible_w", "ac_total_w")
-    }
-    extra = {}
-    if "afue" in data:
-        extra["afue"] = data["afue"] * 100.0
-    if "ac_sensible_w" in data:
-        extra["ac_sensible_btuh"] = data["ac_sensible_w"] / BTU_H_TO_KW / 1000.0
-    return {**flat, **data.get("kw", {}), **extra}
+    flat = {k: v for k, v in data.items() if k != "kw"}
+    return {**flat, **data.get("kw", {})}
 
 
 def _contribution_from_form(form: dict) -> dict:
@@ -410,7 +346,6 @@ _KINDS = {
     ZONE: (_zone_schema, _zone_from_form, _zone_to_form),
     CALL_STATS: (_call_stats_schema, _call_stats_from_form, _plain),
     ENERGY: (_energy_schema, _energy_from_form, _energy_to_form),
-    BUILDING: (_building_schema, _building_from_form, _plain),
     CONTRIBUTION: (
         _contribution_schema,
         _contribution_from_form,
@@ -424,7 +359,6 @@ _NAMES = {
     ZONE: "Zone with sun",
     CALL_STATS: "Heating calls",
     ENERGY: "Furnace blower energy",
-    BUILDING: "Garage",
     CONTRIBUTION: "Contributions",
 }
 
@@ -461,6 +395,7 @@ class HomeThermalLabConfigFlow(ConfigFlow, domain=DOMAIN):
     """Create the single integration entry, with the outdoor temperature sensor."""
 
     VERSION = 1
+    MINOR_VERSION = ENTRY_MINOR_VERSION
 
     @staticmethod
     def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
@@ -478,7 +413,6 @@ class HomeThermalLabConfigFlow(ConfigFlow, domain=DOMAIN):
             ENERGY: EnergySubentryFlow,
             ZONE: ZoneSubentryFlow,
             CONTRIBUTION: ContributionSubentryFlow,
-            BUILDING: BuildingSubentryFlow,
         }
 
     async def async_step_user(
@@ -666,9 +600,3 @@ class ContributionSubentryFlow(_SensorSubentryFlow):
     """What moved one zone's temperature (the contribution chart)."""
 
     kind = CONTRIBUTION
-
-
-class BuildingSubentryFlow(_SensorSubentryFlow):
-    """A detached building (such as a garage), sized on its own in the Loads tab."""
-
-    kind = BUILDING

@@ -12,12 +12,7 @@
           "preview": "Redraw the map (does not save)",
           "ground_mean": "Ground temperature: yearly mean (C)",
           "ground_swing": "Ground temperature: swing (C)",
-          "ground_coldest_day": "Ground temperature: coldest day of the year",
-          "infiltration_ach": "Loads: air leakage (air changes per hour)",
-          "wall_r": "Loads: outside wall R-value (imperial)",
-          "roof_r": "Loads: roof R-value (imperial)",
-          "door_r": "Loads: outside door R-value (imperial)",
-          "basement_floor_r": "Loads: basement floor R-value (imperial)"
+          "ground_coldest_day": "Ground temperature: coldest day of the year"
         },
         "data_description": {
           "outdoor_entity": "Used by the shadow zone and the contribution chart.",
@@ -27,12 +22,7 @@
           "preview": "Tick and press Submit to redraw the map with the rotation typed above. Nothing is saved until you submit with this unticked.",
           "ground_mean": "For below-ground rooms without a ground sensor. Leave empty for the defaults (5.7, 5.6 and 95), measured at 1.8 m in Regina (hypothesis 03).",
           "ground_swing": "Half the gap between the warmest and coldest ground. About 0.4 of the air's swing at basement depth.",
-          "ground_coldest_day": "Day of the year (1 to 365) the ground is coldest: roughly 70 days after the coldest air at basement depth.",
-          "infiltration_ach": "Natural air changes per hour for the Manual J. Leave empty for 0.35, a fairly tight house; an older house is often 0.5 to 0.7. From a blower-door test, roughly ACH50 divided by 20.",
-          "wall_r": "The effective R-value of the outside walls, studs included (R-20 batts in 2x6 framing are about R-15 overall). Leave empty for R-20. A wall part in House Structure with its own R-value keeps it.",
-          "roof_r": "The effective R-value of the ceilings under the roof. Leave empty for R-35. A roof part with its own R-value keeps it.",
-          "door_r": "The R-value of the doors to outside, with their frames. Leave empty for R-3, an insulated steel or solid wood door. A glass patio door is better entered as a window in House Structure.",
-          "basement_floor_r": "The basement slab and the soil under it, as one effective R-value against the design ground temperature. Leave empty for R-11, an uninsulated slab."
+          "ground_coldest_day": "Day of the year (1 to 365) the ground is coldest: roughly 70 days after the coldest air at basement depth."
         }
       },
       "reconfigure": {
@@ -45,12 +35,7 @@
           "preview": "Redraw the map (does not save)",
           "ground_mean": "Ground temperature: yearly mean (C)",
           "ground_swing": "Ground temperature: swing (C)",
-          "ground_coldest_day": "Ground temperature: coldest day of the year",
-          "infiltration_ach": "Loads: air leakage (air changes per hour)",
-          "wall_r": "Loads: outside wall R-value (imperial)",
-          "roof_r": "Loads: roof R-value (imperial)",
-          "door_r": "Loads: outside door R-value (imperial)",
-          "basement_floor_r": "Loads: basement floor R-value (imperial)"
+          "ground_coldest_day": "Ground temperature: coldest day of the year"
         },
         "description": "Change the outdoor sensor, the house rotation or the roofs. Rooms pick up the change.\n\n{map}",
         "data_description": {
@@ -61,12 +46,7 @@
           "preview": "Tick and press Submit to redraw the map with the rotation typed above. Nothing is saved until you submit with this unticked.",
           "ground_mean": "For below-ground rooms without a ground sensor. Leave empty for the defaults (5.7, 5.6 and 95), measured at 1.8 m in Regina (hypothesis 03).",
           "ground_swing": "Half the gap between the warmest and coldest ground. About 0.4 of the air's swing at basement depth.",
-          "ground_coldest_day": "Day of the year (1 to 365) the ground is coldest: roughly 70 days after the coldest air at basement depth.",
-          "infiltration_ach": "Natural air changes per hour for the Manual J. Leave empty for 0.35, a fairly tight house; an older house is often 0.5 to 0.7. From a blower-door test, roughly ACH50 divided by 20.",
-          "wall_r": "The effective R-value of the outside walls, studs included (R-20 batts in 2x6 framing are about R-15 overall). Leave empty for R-20. A wall part in House Structure with its own R-value keeps it.",
-          "roof_r": "The effective R-value of the ceilings under the roof. Leave empty for R-35. A roof part with its own R-value keeps it.",
-          "door_r": "The R-value of the doors to outside, with their frames. Leave empty for R-3, an insulated steel or solid wood door. A glass patio door is better entered as a window in House Structure.",
-          "basement_floor_r": "The basement slab and the soil under it, as one effective R-value against the design ground temperature. Leave empty for R-11, an uninsulated slab."
+          "ground_coldest_day": "Day of the year (1 to 365) the ground is coldest: roughly 70 days after the coldest air at basement depth."
         }
       }
     },
@@ -75,12 +55,7 @@
       "reconfigure_successful": "Saved."
     },
     "error": {
-      "invalid_roofs": "Write each roof as [name=]face pitch, for example: Front=S 30, Back=W 4:12 (names must differ).",
-      "invalid_infiltration_ach": "Must be more than 0.",
-      "invalid_wall_r": "Must be more than 0.",
-      "invalid_roof_r": "Must be more than 0.",
-      "invalid_door_r": "Must be more than 0.",
-      "invalid_basement_floor_r": "Must be more than 0."
+      "invalid_roofs": "Write each roof as [name=]face pitch, for example: Front=S 30, Back=W 4:12 (names must differ)."
     }
   },
   "config_subentries": {
@@ -153,23 +128,13 @@
             "fan": "Fan only",
             "heat_low": "Heat, low stage",
             "heat_high": "Heat, high stage",
-            "cool": "Cooling",
-            "cool_tons": "Cooling capacity (tons)",
-            "afue": "Furnace efficiency, AFUE (%)",
-            "blower_curve": "Blower curve (flow = static, from the data sheet)",
-            "ac_sensible_btuh": "Air conditioner sensible capacity (BTU/h)",
-            "area_id": "Room the furnace is in (optional)"
+            "cool": "Cooling"
           },
           "data_description": {
             "climate_entities": "Every zone's thermostat; the furnace state is read from all of them.",
             "power_entity": "Optional. Steps in this sensor when the furnace changes state set the fan and heating powers (needs several days; every 6 hours it refreshes). The powers typed below are used until then, and for any state it cannot learn.",
             "power_unit": "kW, or BTU/h for gas input (80,000 BTU/h is 23.4 kW). Stored in kW.",
-            "fan": "Leave a state blank for zero.",
-            "cool_tons": "Air conditioner size in tons (12,000 BTU/h each), as 'tonnes' are used in Canada. It sets the cooling power and overrides the box above. A ton is heat moved, not electricity; for the electric meter type the kW drawn instead.",
-            "afue": "Gas furnaces: the AFUE from the nameplate, such as 95. Leave empty for electric.",
-            "blower_curve": "Airflow = external static, from the blower's data sheet, such as '400 cfm = 0.30 inWC, 800 = 0.20, 1200 = 0.05'. Units go on the first point and carry to the rest (CFM and inches of water column unless you say otherwise: l/s, m3/s, Pa).",
-            "ac_sensible_btuh": "The sensible (not total) cooling capacity at the rating point, from the data sheet, in BTU/h. Leave empty if unknown.",
-            "area_id": "Which room the furnace (its air handler) sits in. The Loads tab shows it beside the equipment."
+            "fan": "Leave a state blank for zero."
           }
         },
         "reconfigure": {
@@ -185,29 +150,15 @@
             "fan": "Fan only",
             "heat_low": "Heat, low stage",
             "heat_high": "Heat, high stage",
-            "cool": "Cooling",
-            "cool_tons": "Cooling capacity (tons)",
-            "afue": "Furnace efficiency, AFUE (%)",
-            "blower_curve": "Blower curve (flow = static, from the data sheet)",
-            "ac_sensible_btuh": "Air conditioner sensible capacity (BTU/h)",
-            "area_id": "Room the furnace is in (optional)"
+            "cool": "Cooling"
           },
           "data_description": {
             "climate_entities": "Every zone's thermostat; the furnace state is read from all of them.",
             "power_entity": "Optional. Steps in this sensor when the furnace changes state set the fan and heating powers (needs several days; every 6 hours it refreshes). The powers typed below are used until then, and for any state it cannot learn.",
             "power_unit": "kW, or BTU/h for gas input (80,000 BTU/h is 23.4 kW). Stored in kW.",
-            "fan": "Leave a state blank for zero.",
-            "cool_tons": "Air conditioner size in tons (12,000 BTU/h each), as 'tonnes' are used in Canada. It sets the cooling power and overrides the box above. A ton is heat moved, not electricity; for the electric meter type the kW drawn instead.",
-            "afue": "Gas furnaces: the AFUE from the nameplate, such as 95. Leave empty for electric.",
-            "blower_curve": "Airflow = external static, from the blower's data sheet, such as '400 cfm = 0.30 inWC, 800 = 0.20, 1200 = 0.05'. Units go on the first point and carry to the rest (CFM and inches of water column unless you say otherwise: l/s, m3/s, Pa).",
-            "ac_sensible_btuh": "The sensible (not total) cooling capacity at the rating point, from the data sheet, in BTU/h. Leave empty if unknown.",
-            "area_id": "Which room the furnace (its air handler) sits in. The Loads tab shows it beside the equipment."
+            "fan": "Leave a state blank for zero."
           }
         }
-      },
-      "error": {
-        "invalid_blower_curve": "The blower curve could not be read: use 'flow = static' pairs, such as '400 cfm = 0.30 inWC, 800 = 0.20'.",
-        "invalid_afue": "AFUE is a percentage, such as 95."
       },
       "abort": {
         "reconfigure_successful": "Saved."
@@ -420,51 +371,6 @@
       "error": {
         "invalid_lights": "Write lights as light.id=watts, for example: light.office=105.",
         "invalid_climate_entity": "Choose a room (area) or a thermostat."
-      },
-      "abort": {
-        "reconfigure_successful": "Saved."
-      }
-    },
-    "building": {
-      "entry_type": "Detached building",
-      "initiate_flow": {
-        "user": "Add a detached building (garage)",
-        "reconfigure": "Reconfigure"
-      },
-      "step": {
-        "user": {
-          "title": "Detached building",
-          "description": "A building with no duct or heating connection to the house, such as a garage. Its rooms are taken out of the house's Manual J and sized on their own in the Loads tab. Give it the House Structure parts of its rooms (walls, roof, windows) and pick its Home Assistant areas here.",
-          "data": {
-            "name": "Name",
-            "areas": "Areas the building covers",
-            "indoor_heat_c": "Indoor temperature for heating (°C, optional)",
-            "indoor_cool_c": "Indoor temperature for cooling (°C, optional)"
-          },
-          "data_description": {
-            "areas": "The Home Assistant areas that make up the building. A room is only sized if House Structure has parts in its area.",
-            "indoor_heat_c": "Leave empty to use the house's design indoor temperature.",
-            "indoor_cool_c": "Leave empty to use the house's design indoor temperature."
-          }
-        },
-        "reconfigure": {
-          "title": "Detached building",
-          "description": "A building with no duct or heating connection to the house, such as a garage. Its rooms are taken out of the house's Manual J and sized on their own in the Loads tab. Give it the House Structure parts of its rooms (walls, roof, windows) and pick its Home Assistant areas here.",
-          "data": {
-            "name": "Name",
-            "areas": "Areas the building covers",
-            "indoor_heat_c": "Indoor temperature for heating (°C, optional)",
-            "indoor_cool_c": "Indoor temperature for cooling (°C, optional)"
-          },
-          "data_description": {
-            "areas": "The Home Assistant areas that make up the building. A room is only sized if House Structure has parts in its area.",
-            "indoor_heat_c": "Leave empty to use the house's design indoor temperature.",
-            "indoor_cool_c": "Leave empty to use the house's design indoor temperature."
-          }
-        }
-      },
-      "error": {
-        "invalid_areas": "Choose the areas the building covers."
       },
       "abort": {
         "reconfigure_successful": "Saved."

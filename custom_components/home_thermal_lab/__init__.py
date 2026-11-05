@@ -25,9 +25,6 @@ ZONE = "zone"
 CALL_STATS = "call_stats"
 ENERGY = "energy"
 CONTRIBUTION = "contribution"
-# A detached building (such as a garage): its own Manual J, S and D, apart from
-# the house.
-BUILDING = "building"
 
 
 async def async_setup_entry(hass, entry) -> bool:
@@ -68,13 +65,62 @@ async def async_setup_entry(hass, entry) -> bool:
 
 
 async def async_unload_entry(hass, entry) -> bool:
-    """Remove the sensors of a config entry, and the sidebar panel."""
-    from .panel import async_remove_panel
+    """Remove the sensors of a config entry, the Zones tab and the overlay."""
+    from .panel import async_remove_tab
 
     unloaded = await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
     if unloaded:
-        async_remove_panel(hass)
+        async_remove_tab(hass)
     return unloaded
+
+
+async def async_migrate_entry(hass, entry) -> bool:
+    """Remove the settings that moved to House Structure and Manual J (``migrate``)."""
+    from .migrate import (
+        BUILDING,
+        ENVELOPE_KEYS,
+        MINOR_VERSION,
+        NAMEPLATE_KEYS,
+        moved,
+        without,
+    )
+
+    if entry.version > 1:
+        return False  # from a newer version of the lab
+    if entry.minor_version >= MINOR_VERSION:
+        return True
+    gone = moved(entry.data, ENVELOPE_KEYS)
+    if gone:
+        _LOGGER.warning(
+            "The envelope defaults (%s) moved to Manual J and were removed from "
+            "Home Thermal Lab; set them in Manual J",
+            ", ".join(gone),
+        )
+    for subentry in list(entry.subentries.values()):
+        if subentry.subentry_type == BUILDING:
+            _LOGGER.warning(
+                "The building %r moved to House Structure (a Building part) and "
+                "its setpoints to Manual J; it was removed from Home Thermal Lab",
+                subentry.title,
+            )
+            hass.config_entries.async_remove_subentry(entry, subentry.subentry_id)
+        elif subentry.subentry_type == ENERGY:
+            nameplate = moved(subentry.data, NAMEPLATE_KEYS)
+            if nameplate:
+                _LOGGER.warning(
+                    "%s: the furnace and air conditioner nameplate (%s) moved to "
+                    "House Structure's Furnace and Air conditioner parts and was "
+                    "removed from Home Thermal Lab",
+                    subentry.title,
+                    ", ".join(nameplate),
+                )
+                hass.config_entries.async_update_subentry(
+                    entry, subentry, data=without(subentry.data, NAMEPLATE_KEYS)
+                )
+    hass.config_entries.async_update_entry(
+        entry, data=without(entry.data, ENVELOPE_KEYS), minor_version=MINOR_VERSION
+    )
+    return True
 
 
 async def _reload(hass, entry) -> None:

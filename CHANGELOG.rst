@@ -3,6 +3,10 @@ Changelog
 
 .. release:: unreleased
 
+  - :feature:`-` The sidebar page is now House Structure's **Thermal Lab** page, and the zone view is its **Zones** tab. The lab's own sidebar panel and its copy of Chart.js are gone (House Structure ships Chart.js). Without House Structure the sensors still work, but there is no page.
+  - :feature:`-` **Heat flow** on House Structure's House tab: the watts across each inside wall and floor, out through each outside face, from the furnace and from the sun, now, from the fitted zone models (``heat_flow.py``).
+  - :feature:`-` Each zone's fitted cooling rate is published for `Manual J <https://github.com/minchinweb/ha-manual-j>`_ (``hass.data["home_thermal_lab_fitted"]``), which fills its "UA fitted" column from it.
+  - :feature:`-` Breaking: the Loads tab and the Manual J, S and D code moved to the Manual J integration. The envelope defaults (air leakage and R-values), the furnace and air conditioner nameplate on the energy sensor (AFUE, blower curve, sensible capacity, tons, the furnace's room) and the building sub-entry are removed; they are House Structure's Furnace, Air conditioner and Building parts and Manual J's settings now. Upgrading removes them from the saved settings and logs a warning naming each, so type them into House Structure and Manual J first (the lab's diagnostics from before the upgrade keep a copy). The energy sensors keep their per-state powers.
   - :support:`-` The install button and steps use Home Assistant 2026.11's **Marketplace**, which replaced HACS; HACS (before 2026.11) and copying by hand are still described.
   - :feature:`-` Loads tab: **doors** to outside from House Structure are their own surfaces in the Manual J, at a new **outside door R-value** setting (R-3 by default), and are taken out of their wall's area. A door with no size stays in the wall, and the room says so. Doors in internal walls are not losses, as internal walls are not.
   - :feature:`-` ``scripts/door_state.py`` (hypothesis 09) reads the door and the rooms on each side from House Structure's door sensors; ``--door`` picks another contact and ``--list-doors`` lists them.

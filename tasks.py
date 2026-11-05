@@ -2,11 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
-import json
-from pathlib import Path
-import urllib.request
-
 from invoke import task
 
 try:
@@ -50,39 +45,6 @@ def format_code(ctx):
 def test(ctx):
     """Run the test suite."""
     ctx.run("uv run pytest", pty=False)
-
-
-FRONTEND = Path("custom_components/home_thermal_lab/frontend")
-
-
-@task(help={"check": "Only compare the files with their pins; download nothing."})
-def vendor(ctx, check=False):
-    """Fetch the panel's pinned scripts (Chart.js) into the integration.
-
-    The pins (version, URL, SHA-256) are in `frontend/vendor.json`. The files
-    are committed, so HACS installs them and Home Assistant serves them itself:
-    opening the panel fetches nothing from the internet. To upgrade, change the
-    version and URL, run this with a blank `sha256` to see the new hash, check
-    it, and pin it.
-    """
-    pins = json.loads((FRONTEND / "vendor.json").read_text(encoding="utf-8"))
-    failed = []
-    for name, pin in pins.items():
-        target = FRONTEND / name
-        if check:
-            body = target.read_bytes() if target.exists() else b""
-        else:
-            with urllib.request.urlopen(pin["url"], timeout=60) as response:
-                body = response.read()
-        digest = hashlib.sha256(body).hexdigest()
-        if digest != pin["sha256"]:
-            failed.append(f"{name}: sha256 {digest}, pinned {pin['sha256'] or '-'}")
-            continue
-        if not check:
-            target.write_bytes(body)
-        print(f"{name}: {pin['package']} {pin['version']} OK")
-    if failed:
-        raise SystemExit("; ".join(failed))
 
 
 @task(pre=[lint, test])

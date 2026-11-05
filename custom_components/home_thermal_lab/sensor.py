@@ -141,7 +141,7 @@ from .outlook import (
     setpoints_ahead,
     slot_of,
 )
-from .panel import async_register_panel
+from .panel import async_register_tab, publish_fitted
 from .power import power_series
 from .routine import fit_offset_tau
 from .scoring import (
@@ -259,7 +259,8 @@ ENERGY_SCHEMA = vol.Schema(
         vol.Optional("learn_days", default=14): vol.All(
             vol.Coerce(int), vol.Range(2, 60)
         ),
-        # the room the furnace sits in (shown on the Loads tab)
+        # no longer used (the furnace's room is House Structure's Furnace
+        # part now); still accepted so older YAML loads
         vol.Optional("area_id"): cv.string,
     }
 )
@@ -841,8 +842,9 @@ class ZoneBrain:
     was given), alone or with the neighbour terms; the brain then learns the
     heating rate ``h`` (unless given) and the furnace's delivery lag, measures
     the model against holding the temperature, grades it, and measures the
-    outdoor forecast's bias against the outdoor sensor. The panel reads zones
-    from ``hass.data[DOMAIN]["zones"]``.
+    outdoor forecast's bias against the outdoor sensor. The Zones tab reads
+    zones from ``hass.data[DOMAIN]["zones"]``; each zone's fitted cooling rate
+    is published for Manual J (``panel.publish_fitted``) whenever it changes.
     """
 
     def __init__(self, hass, house: House, zone: dict):
@@ -899,6 +901,7 @@ class ZoneBrain:
         if self._users == 1:
             self._stop_house = self.house.start()
             zones[self.key] = self
+            publish_fitted(self.hass)
 
         def _stop():
             self._users -= 1
@@ -908,6 +911,7 @@ class ZoneBrain:
                     self._stop_house = None
                 if zones.get(self.key) is self:
                     zones.pop(self.key)
+                    publish_fitted(self.hass)
 
         return _stop
 
@@ -957,6 +961,7 @@ class ZoneBrain:
             dt_util.as_local(datetime.now(UTC)),
         )
         self.quality = self._quality(fit, found, skills)
+        publish_fitted(self.hass)
         for callback in list(self._listeners):
             await callback()
 
@@ -1114,7 +1119,7 @@ async def async_setup_entry(hass, entry, async_add_entities):
             )
             continue
         async_add_entities(entities, config_subentry_id=subentry.subentry_id)
-    await _register_panel(hass)
+    await _register_tab(hass)
 
 
 def _with_room(rooms: dict, data: dict, ground: bool = True, sun: bool = True) -> dict:
@@ -1165,15 +1170,15 @@ async def async_setup_platform(hass, config, async_add_entities, discovery_info=
         for item in config["contributions"]
     ]
     async_add_entities(entities)
-    await _register_panel(hass)
+    await _register_tab(hass)
 
 
-async def _register_panel(hass) -> None:
-    """Add the Thermal Lab panel; the sensors work without it."""
+async def _register_tab(hass) -> None:
+    """Add the Zones tab and the Heat flow overlay; the sensors work without them."""
     try:
-        await async_register_panel(hass)
-    except Exception:  # never block the sensors on the panel
-        _LOGGER.exception("Could not add the Thermal Lab panel")
+        await async_register_tab(hass)
+    except Exception:  # never block the sensors on the tab
+        _LOGGER.exception("Could not add the Zones tab")
 
 
 class ShadowSensor(SensorEntity):
