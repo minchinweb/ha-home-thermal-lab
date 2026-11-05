@@ -12,22 +12,29 @@ wave, and for testing hypotheses about how a house behaves thermally.
 - `hypotheses/`: one file per hypothesis (claim, data, method, results).
 - `scripts/`: command-line runners and reports. Copy `.env.example` to `.env` (git-ignored) and fill in your Home Assistant URL, token and sensor.
 
-## Install with HACS
+## Installation
 
-[![Open your Home Assistant instance and open this repository inside the Home Assistant Community Store.](https://my.home-assistant.io/badges/hacs_repository.svg)](https://my.home-assistant.io/redirect/hacs_repository/?owner=minchinweb&repository=ha-home-thermal-lab&category=integration)
+[![Open your Home Assistant instance and open this repository in the Marketplace.](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=minchinweb&repository=ha-home-thermal-lab&category=integration)
 
-The button adds this repository to HACS as a custom repository. By hand:
+1. Click the button above. It opens this repository in the Marketplace
+   (**Settings > Marketplace**, Home Assistant 2026.11 and later) on your own
+   Home Assistant. It's a custom repository, so the Marketplace first asks
+   you to connect GitHub, if you haven't (it reads public repositories
+   only), and to confirm adding it. By hand: choose **Add from link** in the
+   Marketplace and enter `https://github.com/minchinweb/ha-home-thermal-lab`.
+2. Click **Install**. Restart Home Assistant if the Marketplace says to.
+3. Add the integration, pick the outdoor temperature sensor, then add each
+   sensor from the integration's page (below). Or use YAML instead:
 
-1. In HACS, open the menu (three dots) and choose **Custom repositories**. Add
-   `https://github.com/minchinweb/ha-home-thermal-lab` with the type
-   **Integration**.
-2. Find **Home Thermal Lab** in HACS, download it, and restart Home Assistant.
-3. Add the integration (**Settings > Devices & services > Add integration >
-   Home Thermal Lab**), pick the outdoor temperature sensor, then add each
-   sensor from the integration's page (below). Or use YAML instead.
+   [![Open your Home Assistant instance and start setting up this integration.](https://my.home-assistant.io/badges/config_flow_start.svg)](https://my.home-assistant.io/redirect/config_flow_start/?domain=home_thermal_lab)
 
-Without HACS, copy `custom_components/home_thermal_lab/` into your Home
-Assistant `custom_components/` folder.
+Before Home Assistant 2026.11, install it with
+[HACS](https://my.home-assistant.io/redirect/hacs_repository/?owner=minchinweb&repository=ha-home-thermal-lab&category=integration)
+instead (download it, then restart Home Assistant). Without either, copy
+`custom_components/home_thermal_lab/` into Home Assistant's `custom_components/`
+folder and restart. Until that restart Home Assistant doesn't know Home Thermal Lab is
+there, and the **Add integration** link says it "does not support
+configuration via the UI".
 
 The integration switches nothing. It needs Home Assistant 2025.3 or later, the
 recorder (default), and fetches an hourly forecast from Open-Meteo for the home
@@ -308,7 +315,7 @@ misses, so the past stack adds up to what was measured). Points with
 `forecast: 1` are the forecast, with the furnace run by a simple thermostat at
 the current setpoint. The attribute is not written to the database.
 
-With [apexcharts-card](https://github.com/RomRider/apexcharts-card) (from HACS),
+With [apexcharts-card](https://github.com/RomRider/apexcharts-card) (from the Marketplace),
 stacked columns put the gains above the baseline and the losses below it:
 
 ```yaml
