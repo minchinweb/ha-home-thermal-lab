@@ -27,7 +27,9 @@ Only one function does anything:
 ```python
 temperature_delta = 70 - location_weather.winter_design_temperature_fahrenheit
 for surface in winter_surfaces:
-    temperature_loss_btus_per_hour += surface[0].get_heat_transfer_multiplier(temperature_delta) * surface[1]
+    temperature_loss_btus_per_hour += (
+        surface[0].get_heat_transfer_multiplier(temperature_delta) * surface[1]
+    )
 ```
 
 - Winter only. No summer, no latent, no infiltration, no ducts, no equipment sizing.
