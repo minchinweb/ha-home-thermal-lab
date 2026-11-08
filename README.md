@@ -1,3 +1,8 @@
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="custom_components/home_thermal_lab/brand/dark_logo@2x.png">
+  <img alt="Home Thermal Lab" src="custom_components/home_thermal_lab/brand/logo@2x.png" height="64">
+</picture>
+
 # ha-home-thermal-lab
 
 Home Assistant custom components for modelling a target daily temperature
