@@ -57,3 +57,11 @@ The automations worked: all four thermostats went to a fan minimum of 0 at 23:00
 - **Do not read `fan_mixing.py`'s k table yet.** With 4 days (`--days 4 --bin 5`), "still" has a larger k than "fan only" for most rooms (Z2 basement 2.75 against 1.05/h). All 78 still bins come from this one night, which began just after a Z3 + Z4 heat call (22:00 to 22:20), so the fit mostly measures the house settling after that call. It needs more nights.
 - Caveats: one night. The basement started warmer than on 3 to 4 November (21.7 against 21.1 C) and so had more to lose. The upstairs bathroom rose 0.4 C overnight (probably a shower).
 - Watch for: a colder basement on no-fan nights may make Z2 call overnight, which runs the blower and shortens the still stretch.
+
+### No-fan nights seen from the basement bedrooms (2026-11-10; nights of 2, 4, 6 and 8 November)
+
+The automations only started on 2 November, so 2, 4, 6 and 8 November are the real no-fan nights (labels from earlier even-day guesses for 29 and 31 October were wrong).
+
+- The Z2 thermostat (in the Theater) warms about 0.5 C/h from 23:00, when the blower stops: +0.8 to +1.0 C by 00:00 on all four nights, and +0.3 to +0.8 C over 22:00 to 05:00, against -0.6 to -1.2 C on fan nights. NE, SE and Dan's rooms do not change at 23:00. So the Theater reading rises when the fan stops without the other basement rooms following; whether the room itself warms is open.
+- Bedroom humidity climbs steadily on the no-fan nights (about +1 to +2 %/h in the first 3 hours, +4 to +9% overnight in NE and SE, less in Dan's) while the Theater reading falls; on fan nights it is flat.
+- Result: the Theater is not a usable baseline on no-fan nights (see 15). It is a result for this hypothesis: the fan state changes the Theater thermostat reading and the bedroom humidity.

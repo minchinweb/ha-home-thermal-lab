@@ -71,3 +71,18 @@ The all-day fit now also includes each zone's metered plugs (z4: the office comp
 - Answer to "can we test it now": yes, and the result is the same as before. Body heat is too small to see in the room temperature. Presence is better read from computer power and CO2 than from temperature.
 
 With the office lights added as a third term (modelled power, see 14), the occupancy term for the office sensors turns negative (-0.25 C/h*, Z4 thermostat -0.13*) while lights (+3.6) and computer (+1.6) carry the warming. The three signals mark the same sessions and cannot be separated. Occupied hours with the lights off (daytime) are, if anything, cooler than the model expects.
+
+### Sleeper in the small basement bedrooms (2026-11-10; HA history, 2026-10-29 to 11-09)
+
+Rooms from House Structure: NE Basement Bedroom 66.25 sq ft (13.6 m3), SE Basement Bedroom 57.5 sq ft (11.8 m3), Dan's Bedroom 99 sq ft (20.3 m3), Theater 282 sq ft; ceilings 7'3". All are below grade and on zone 2 (the Z2 thermostat is in the Theater). Doors are normally closed at night.
+
+Prediction: a sleeper gives about 70 W. With a heat capacity of about 160 to 185 Wh/C (scaled from the 1.7 kWh/C per 600 sq ft zone figure) and a loss of 10 to 40 W/K, that is +1.5 to +2.5 C by morning, or +0.2 to +0.4 C/h relative to an empty room in the first 2 to 3 hours.
+
+Result: not detected.
+- Over the night (22:00 to 05:00) NE, SE and Dan's all cool about 1 C. Against the Theater, on nights with no Z2 heat and the fan on, NE is -0.01 C and SE -0.21 C, and Dan's room (a known sleeper every night, expected about +1 C) is -0.25 C.
+- First 3 hours (22:00 to 01:00, 6 fan nights): NE minus Theater -0.01 C/h, SE minus Theater -0.03, NE minus Dan +0.06, SE minus Dan +0.04. Night-to-night scatter is about 0.1 C/h. The few nights where one room edges ahead (+0.15 to +0.22 C/h) are within noise and do not match between NE and SE.
+- Dan's room is the control: with a known sleeper it is indistinguishable from the others, so a sleeper in NE or SE would not be visible either. The 70 W and low-loss assumption is too optimistic, or Dan's door was open (not checked).
+- Humidity rises on 4 nights (+4 to +9% overnight in NE and SE, +2 to +3% in Dan's), but those are the no-fan nights (see 08), not occupancy: Dan sleeps every night.
+- Ignore 2026-11-10 (the sensors stalled).
+
+Reading: body heat is too small to see in these rooms' temperatures, in line with the office result above. To test it properly we need a night with a known sleeper in NE or SE, or a night Dan's room is empty. The SE sensor's battery is at 28%.

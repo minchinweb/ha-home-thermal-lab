@@ -35,3 +35,10 @@ Reading: this pair does not show the expected coupling. Next steps: use 5-minute
 - Same picture as at 15 minutes: the S basement bedroom is warmer than Z2 with the door open (1.15 against 0.80 C, AUC 0.81). The rate mismatch becomes pure noise at 5 minutes (one 0.1 C step in 5 minutes is 1.2 C/h), AUC 0.45 to 0.58.
 - New door-edge event study (`--edge`, rate of gap closing in the window before and after each edge, with at least 80% of the window in the old and new state): only 5 clean openings and 1 or 2 clean closings in 11 days, because the door flutters. After the door opens, the gap to the NE bedroom starts closing (-0.18 to +0.42 C/h, 4 of 5) but the gap to Z2 widens (-0.64 to -0.76). After the door closes, closing slows in every pair, as coupling would predict, but on one or two events.
 - Reading: too few clean edges to decide. The door needs a longer record (the edge study can be rerun as data builds up), or a deliberate test (door shut for a night, open the next).
+
+### Kitchen patio doors and window (2026-11-10)
+
+New contacts: `binary_sensor.patio_outside_door`, `binary_sensor.patio_inside_door`, `binary_sensor.kitchen_window`. The patio is an airlock, so the doors count as open only when BOTH are open. `homeassistant/patio_doors_open.yaml` defines `binary_sensor.patio_doors_open` for that.
+
+- First day since install: both doors open for only 2.2 h in total, much of it 3-10 s openings of people going in and out all day (real events, not sensor noise). No clear kitchen temperature signature. The kitchen window was effectively never opened.
+- Reading: no result yet. This is the outside-door/ventilation case (04), not room-to-room coupling. Rerun once there are longer both-open stretches, ideally on a cold day. Keep the short openings as data (people in and out all day); a `delay_on` filter would hide them.

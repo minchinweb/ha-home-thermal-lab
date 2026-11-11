@@ -1,0 +1,37 @@
+# Patio doors "open" = BOTH the outside and the inside door are open.
+#
+# The patio is an airlock: with only one door open, no air moves between the
+# kitchen and outdoors. This binary sensor is on only when both are open, so
+# it can feed the door-state analysis (hypothesis 09) and the kitchen (Z1)
+# cooling checks.
+#
+# Install either way:
+#   * Settings > Devices & services > Helpers > Create helper > Template >
+#     Binary sensor. Paste the `state` template, set the device class to
+#     "Door" and the name to "Patio doors open".
+#   * Or put the block below under `template:` in configuration.yaml (or an
+#     included file) and reload template entities.
+#
+# The sensor becomes `binary_sensor.patio_doors_open`.
+
+template:
+  - binary_sensor:
+      - name: Patio doors open
+        unique_id: patio_doors_open_both
+        device_class: door
+        # Unavailable while either door sensor is unavailable (they drop out
+        # from time to time), instead of reading "closed".
+        availability: >-
+          {{ states('binary_sensor.patio_outside_door') not in ['unavailable', 'unknown']
+             and states('binary_sensor.patio_inside_door') not in ['unavailable', 'unknown'] }}
+        state: >-
+          {{ is_state('binary_sensor.patio_outside_door', 'on')
+             and is_state('binary_sensor.patio_inside_door', 'on') }}
+        # Sliding-door icon that follows the state.
+        icon: >-
+          {{ 'mdi:door-sliding-open' if is_state('binary_sensor.patio_doors_open', 'on')
+             else 'mdi:door-sliding' }}
+        # Optional: ignore the 3-10 second openings of someone passing through
+        # (real events, about 15 minutes of "both open" over the first day).
+        # Leave this off if you want them counted.
+        # delay_on: "00:00:15"

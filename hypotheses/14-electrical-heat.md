@@ -87,3 +87,12 @@ The office lights are on a dimmer (`light.office_main_lights`, brightness 0-255)
 - With both terms, the office sensors give office computer +1.25 +- 0.24 and lights +1.95 +- 0.28 C/h per kW (Z4 thermostat: +0.88 and +1.65). Both are two to three times what their watts could do, and the 17 clean light steps give +2.8 to +4.5 C/h per kW.
 - Like the computer, the lights mark the times someone is in the office (with a person, and evenings with the computer busy). They are a better presence signal than heat sources.
 - The z4 contribution fit with the lights included: `{a: 0.0174, c: -0.069, g: 0.00005, h: 1.67, x: 0.31, p: 1.15}`, R2 0.66.
+
+### Tankless water heater and AV rack plugs (2026-11-10)
+
+New plugs: tankless `sensor.grillplats_plug_power_3`, AV rack `sensor.grillplats_plug_power_4`.
+
+- Tankless heater: idle 2.9 W, about 15 W tail, 100-135 W while running, about 0.3 kWh/day. Bursty and too small to resolve against room sensors.
+- AV rack: about 190 W idle, about 220 W after 11:18 on 2026-11-10. It is placed in the Theatre in HA, but the baseline is mostly the NAS, the Trocadero server and Unifi switches in the furnace/laundry room, which has no temperature sensor. Treat it as a steady source there, not theatre heat, and don't sum it with `sensor.server_plug_power` (downstream of it). So it is not a clean test of this hypothesis.
+- The 11:18 step (dip to 48 W, 277 W surge, then 220 W) was not a power cycle and the receiver was off. The NAS fits best (drive temperatures up about 4 C 11:00-12:30), unconfirmed; the NAS logs would settle it.
+- Exclude 2026-11-09 about 19:10-19:45 (install: Pi-hole down, UPS reconnected, many entities unavailable).

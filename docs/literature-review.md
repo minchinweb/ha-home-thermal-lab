@@ -136,6 +136,8 @@ Added after the reviews of Eldr and projects.manual-j ([prior-art-review.md](pri
 | **Mushroom Cards, Plotly Graph Card** | Heating Analytics | [piitaya/lovelace-mushroom](https://github.com/piitaya/lovelace-mushroom) | Dashboard cards |
 | **Heating Analytics dependency: HACS** | all | [custom-components/hacs](https://github.com/custom-components/hacs) | Install framework |
 | **Google Drive backup add-on, auto-entities, collapsible cards** | Predbat | various | Peripheral |
+| **Velair** | Prior-art list (user request) | [cgonfer/velair](https://github.com/cgonfer/velair) (MIT) | "Climate automation that adapts to your life" (repo description); not opened |
+| **Cozy-Home** | Prior-art list (user request) | [ads1230/Cozy-Home](https://github.com/ads1230/Cozy-Home) (MIT) | "A total heating solution for your home"; not opened |
 
 ---
 
