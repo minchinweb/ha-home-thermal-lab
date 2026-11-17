@@ -17,9 +17,11 @@
 
 **Zone board.** A zone board sits upstream of the thermostats, so a zone's call is a request, not proof its own air is running:
 - With one heat call and one AC call at the same time, the board alternates between heat and AC.
-- With several heat calls (or several AC calls), all zones become active, not just the ones calling.
-- Fan calls only take effect when there is no heat or AC call, and then all zones are active.
-So the furnace is on whenever any zone calls for heat, and a zone's temperature can rise because of another zone's call. Analyse heating as the union of all zones' heat calls, and treat a zone that is not itself calling as a measure of leakage and spillover.
+- With several heat calls (or several AC calls, or several fan calls), the dampers of those zones open, and only those; the other zones stay closed (apart from leakage).
+- Fan calls only take effect when there is no heat or AC call, and then only the zones calling for the fan get supply air.
+- The cold-air returns are not zoned: whenever the blower runs, it draws from every floor, whichever zones are getting supply.
+(Corrected by the owner on 17 November 2026; earlier notes said that several calls, or any fan call, opened every zone.)
+So the furnace is on whenever any zone calls for heat, and a zone's temperature can rise because of another zone's call (damper leakage, see 06). Analyse heating as the union of all zones' heat calls, and treat a zone that is not itself calling as a measure of leakage and spillover.
 
 **From the literature review (4 November 2026; see `docs/literature-review.md`, Summary):**
 - Fit the passive decay and the heated rise on separate windows, split at the call edges. A fit that spans the end of a call mixes the heating ramp into the decay rate (Climate Advisor, `compute_k_passive`).

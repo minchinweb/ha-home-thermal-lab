@@ -11,7 +11,7 @@ from datetime import datetime
 
 from . import archive
 
-PARAM_NAMES = ("a", "b", "n", "x", "c", "g", "w", "h", "e", "y", "f")
+PARAM_NAMES = ("a", "b", "n", "x", "c", "g", "w", "h", "e", "y", "f", "s")
 
 
 def _round(value: float | None, digits: int = 2) -> float | None:

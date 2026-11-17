@@ -513,6 +513,7 @@ def _fit_one(
     other: list[float] | None = None,
     other_cool: list[float] | None = None,
     fan: list[float] | None = None,
+    own_fan: list[float] | None = None,
 ) -> _Learned:
     """Hour-long block rates, then the multi-step refinement if physical; with
     sunlit walls the wall lag is chosen from ``WALL_TAUS`` by the fit."""
@@ -525,6 +526,7 @@ def _fit_one(
         "cooling": s.cooling,
         "other_cool": other_cool,
         "fan": fan,
+        "own_fan": own_fan,
     }
     if has_walls(zone):
         fit, tau = fit_with_wall_lag(*args, s.raw_wall, WALL_TAUS, **extra)
@@ -542,6 +544,7 @@ def _fit_one(
         cooling=s.cooling,
         other_cool=other_cool,
         fan=fan,
+        own_fan=own_fan,
     )
     reason = problem(fit)
     if reason is None:
@@ -592,8 +595,10 @@ def _fit_house(zones, rows, irradiance, lat, lon, start, end) -> dict[str, _Lear
         {z["climate_entity"]: z.get("neighbours", []) for z in zones},
     )
     origins_every = 48  # D's fading time is fitted from a forecast every 12 hours
-    # The returns are not zoned: the fan runs for the whole house when any zone
-    # runs it alone, so the house fan is the largest zone fan share per bin.
+    # The zone board sends supply air only to the zones calling for the fan, but
+    # the returns are not zoned: the blower draws from every room when any zone
+    # runs it alone. So each zone has the house fan (the largest zone fan share
+    # per bin, the ``f`` term) and its own fan share (its supply air, ``s``).
     fans = {k: _effective_fan(k, series) for k in series}
     count = len(next(iter(series.values())).room)
     house_fan = [max(f[i] for f in fans.values()) for i in range(count)]
@@ -602,7 +607,24 @@ def _fit_house(zones, rows, irradiance, lat, lon, start, end) -> dict[str, _Lear
         key = zone["climate_entity"]
         s = series[key]
         alone_fan = fans[key]
-        found = _fit_one(zone, s, hours, fan=house_fan)
+
+        def fit(*terms, zone=zone, s=s, alone_fan=alone_fan) -> _Learned:
+            """The fit with the house fan, and with the zone's own supply air
+            too if that forecasts idle history 3 hours ahead better."""
+            plain = _fit_one(zone, s, hours, *terms, fan=house_fan)
+            supplied = _fit_one(
+                zone, s, hours, *terms, fan=house_fan, own_fan=alone_fan
+            )
+            if supplied.fit is None or supplied.fit.s == 0.0:
+                return plain
+            plain_err, supplied_err = _error_3h(plain), _error_3h(supplied)
+            if supplied_err is not None and (
+                plain_err is None or supplied_err < plain_err
+            ):
+                return supplied
+            return plain
+
+        found = fit()
         near = near_of.get(key, ())
         if near and zone["model"].get("a") is None:
             neighbour = [
@@ -610,7 +632,7 @@ def _fit_house(zones, rows, irradiance, lat, lon, start, end) -> dict[str, _Lear
             ]
             other = [sum(series[k].heating[i] for k in near) for i in range(count)]
             other_cool = [sum(series[k].cooling[i] for k in near) for i in range(count)]
-            coupled = _fit_one(zone, s, hours, neighbour, other, other_cool, house_fan)
+            coupled = fit(neighbour, other, other_cool)
             alone_err, coupled_err = _error_3h(found), _error_3h(coupled)
             if coupled_err is not None and (
                 alone_err is None or coupled_err < alone_err
@@ -1471,6 +1493,7 @@ class ZoneForecastSensor(SensorEntity):
             "cooling_rate": None if brain.model is None else round(brain.model.e, 3),
             "cooling_bleed": None if brain.model is None else round(brain.model.y, 3),
             "fan_pull": None if brain.model is None else round(brain.model.f, 3),
+            "fan_supply": None if brain.model is None else round(brain.model.s, 3),
             "outdoor_correction": round(got.shift, 2),
             **self._scores,
             "archive_errors": self._archive_errors,

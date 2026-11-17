@@ -147,3 +147,73 @@ def test_the_stop_and_start_temperatures_are_read_from_the_calls():
         room[24 * k + 8] = 21.0
     assert cool_thermostat(room, cooling) == pytest.approx((21.0, 2.0))
     assert cool_thermostat(room, [0.0] * n) is None
+
+
+def _supply_history(seed, own_share=0.5):
+    """A zone warmed by its own supply air (s) and pulled by the house fan (f).
+
+    The house fan runs 70% of the time; the zone's own call is a part of that.
+    """
+    rng = random.Random(seed)
+    n = 600
+    hours = 0.25
+    outdoor = [-5.0 + 8 * rng.random() for _ in range(n)]
+    fan = [1.0 if rng.random() < 0.7 else 0.0 for _ in range(n)]
+    own = [f if rng.random() < own_share else 0.0 for f in fan]
+    truth = ZoneModel(a=0.05, c=0.01, f=-0.1, s=0.4)
+    room = [20.0]
+    for i in range(n - 1):
+        room.append(
+            step(room[i], outdoor[i], 0.0, truth, hours, fan=fan[i], own_fan=own[i])
+        )
+    return room, outdoor, fan, own, hours
+
+
+def test_a_zones_own_supply_air_is_learned_apart_from_the_house_fan():
+    room, outdoor, fan, own, hours = _supply_history(6)
+    n = len(room)
+    fit = fit_no_heat(room, outdoor, [0.0] * n, [0.0] * n, hours, fan=fan, own_fan=own)
+    assert fit.s == pytest.approx(0.4, abs=0.02)
+    assert fit.f == pytest.approx(-0.1, abs=0.02)
+
+
+def test_the_supply_term_may_cool_a_warm_zone():
+    rng = random.Random(7)
+    n = 600
+    hours = 0.25
+    outdoor = [-5.0 + 8 * rng.random() for _ in range(n)]
+    fan = [1.0 if rng.random() < 0.7 else 0.0 for _ in range(n)]
+    own = [f if rng.random() < 0.5 else 0.0 for f in fan]
+    truth = ZoneModel(a=0.05, c=0.2, s=-0.3)
+    room = [22.0]
+    for i in range(n - 1):
+        room.append(step(room[i], outdoor[i], 0.0, truth, hours, own_fan=own[i]))
+    fit = fit_no_heat(room, outdoor, [0.0] * n, [0.0] * n, hours, fan=fan, own_fan=own)
+    assert fit.s == pytest.approx(-0.3, abs=0.02)
+
+
+def test_the_supply_term_is_left_out_when_it_is_the_house_fan():
+    room, outdoor, fan, _, hours = _supply_history(8)
+    n = len(room)
+    fit = fit_no_heat(room, outdoor, [0.0] * n, [0.0] * n, hours, fan=fan, own_fan=fan)
+    assert fit.s == 0.0
+
+
+def test_only_the_zone_calling_for_the_fan_gets_its_supply():
+    model = ZoneModel(a=0.02, c=0.0, s=0.5)
+    calling = _zone(model, fan=[1.0] * STEPS, own_fan=[1.0] * STEPS)
+    not_calling = _zone(model, fan=[1.0] * STEPS)
+    out = simulate_house([calling, not_calling], [21.0] * STEPS, STEP_H)
+    assert out[0][0][-1] > 21.0 + 0.8
+    assert out[1][0][-1] == pytest.approx(21.0)
+
+
+def test_the_supply_term_acts_while_the_air_conditioner_is_simulated():
+    model = ZoneModel(a=0.02, c=0.0, e=-2.0, s=-0.5)
+    base = _zone(model, room=21.0, cool_setpoint=25.0, cool_band=0.5)
+    supplied = _zone(
+        model, room=21.0, cool_setpoint=25.0, cool_band=0.5, own_fan=[1.0] * STEPS
+    )
+    still = simulate_house_full([base], [21.0] * STEPS, STEP_H)[0][0][-1]
+    fanned = simulate_house_full([supplied], [21.0] * STEPS, STEP_H)[0][0][-1]
+    assert fanned < still - 0.8

@@ -11,6 +11,10 @@
 # Runs until the end date in the start automation's condition. To stop early,
 # disable "No-fan night: start" (the restore keeps running and is harmless).
 #
+# Ended: the last no-fan night was 16 November 2026 (results in 08 and 10).
+# Both automations can be disabled or removed; to run it again, move the end
+# date.
+#
 # Install either as a package (`homeassistant: packages: !include_dir_named
 # packages` in configuration.yaml, then copy this file into `packages/`), or
 # paste each automation into the automation editor's YAML mode.

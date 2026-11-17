@@ -16,9 +16,9 @@ Home Assistant, so they can be re-run later or by others.
 | [05](05-furnace-power.md) | Furnace heating power from room gradient | B. Characterise house | in progress: stages, call lengths and rise measured; call statistics sensor; first Z3 calls: the master is the slowest room of its zone |
 | [06](06-crossover-bleed.md) | Heat crosses over between zones during a call (strongest into the kitchen) | B | in progress: register airflow measured; the kitchen gets 68-88% of its own flow whichever zone calls, so it is in practice unzoned; on 3 Nov bleed was about 80% of the kitchen overheating, and opening its windows removed about 300 W/K; almost no bleed into the basement (Z2 thermostat +0.2 to 0.3 C/h on other calls) |
 | [07](07-ac-power.md) | AC cooling power from room gradient | B | waiting for the cooling season |
-| [08](08-fan-flux.md) | Heat flux of running the furnace fan | B | testing: no-fan nights 2-16 Nov; first night: without the fan the basement cooled about 60% faster, other floors unchanged; fan-only draw under about 50 W |
+| [08](08-fan-flux.md) | Heat flux of running the furnace fan | B | supported for the basement: over 8 no-fan nights (ended 16 Nov) the basement bedrooms cooled about 30% faster without the fan, other floors unchanged; a room mixes faster when its own zone is supplied (supply is per zone); fan-only draw under about 50 W; the zone model has a per-zone supply term |
 | [09](09-door-state.md) | Door open/closed from inter-room gradients | B | two runs: too few clean door edges |
-| [10](10-static-flux.md) | Static heat flux between rooms/floors | B | testing: first static night 2-3 Nov; the basement-to-main coupling is mostly the fan, upstairs coupling static |
+| [10](10-static-flux.md) | Static heat flux between rooms/floors | B | testing: 8 no-fan nights: the basement-to-main coupling is mostly z2's fan supply, upstairs and main floor static; 618 still bins ready for the pairwise fit |
 | [11](11-solar-gain.md) | Predict room solar gain | C. Disturbances | horizon fits checked against window photos and sizes; with the other zones' calls as terms the windows add little (3% in the kitchen); apertures a tenth to a half of the glass; the house shades the kitchen's east window from late September to mid-March, and the kitchen's sun gain cannot be measured from autumn data |
 | [12](12-wind-loss.md) | Predict heat loss from wind speed/direction | C | first run: no wind effect detectable |
 | [13](13-thermal-momentum.md) | Measure the house's thermal momentum (inertia, time constant) | B | in progress: tau about 54 h; furnace lag 6-12 min, overshoot 0.2 C; a delivery lag does not help the 15 min forecast; effective room capacity 80-230 times the air; the master's long duct dips it at the start of a call and warms it after |
@@ -47,7 +47,7 @@ forecast, and only makes sense once B and C hold up.
   Model spillover as a fitted parameter.
 - Furnace, fan, solar gain and occupants all act at once. Pick clean windows
   (e.g. overnight, one actor changing) to isolate effects.
-- The zone board upstream of the thermostats means a zone's call starts the equipment for every zone (see 05). Treat calls as whole-house events, and per-zone calls as requests.
+- The zone board upstream of the thermostats means any zone's call starts the furnace or blower, but only the calling zones' dampers open (heat and AC take priority over fan calls; see 05). The returns are not zoned, so the blower draws from every floor. Treat the equipment as whole-house and the supply air as per zone (plus damper leakage, 06).
 - The "Home Performance" integration publishes its own per-room heating-active flags, window-open sensors and daily estimated energy. Use it as a cross-check on our results for 05, 10 and 13; it is not an input.
 - What other projects and standards suggest for each hypothesis is in the
   Summary of `docs/literature-review.md`. Hypotheses 04, 05, 09, 11, 12, 13,

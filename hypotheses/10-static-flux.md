@@ -1,6 +1,6 @@
 # 10 Static heat flux between floors/rooms
 
-**Status:** testing; first static night 2-3 Nov 2026: the basement-to-main coupling is mostly the fan, upstairs is static
+**Status:** testing; 8 no-fan nights (2-16 Nov 2026, ended): the basement-to-main coupling is mostly the fan (z2's supply); upstairs and the main floor cool the same with or without it; 618 still 5-minute bins are ready for the pairwise fit
 
 **Claim:** When the furnace/AC and fans are off, the temperature gradient between rooms/floors gives a stable heat-flux coefficient (conductance) per pair.
 
@@ -39,3 +39,12 @@ The no-fan nights are now running (see 08, from 2 November 2026). Rerun `scripts
 ### First static data (no-fan night, 2 to 3 November 2026)
 
 Six hours with the blower off and no calls (23:00 to 05:00 UTC-6; details in 08). Against the next night (fan on, no calls, outdoor about 3 C colder), the basement cooled 1.38 C instead of 0.85, while the main floor (-1.39 both nights) and upstairs (-0.58 and -0.62) did not change. So with the fan off the basement is held up much less by the floor above, and the fan-on coupling between the basement and the main floor is mostly the blower. The upstairs coupling is the same with or without the fan, so it is static (conduction and the stairwell). The room spread closed from 0.86 to 0.65 C in both cases. One night is too few for `room_network.py`; rerun it on the still bins once three or four nights have passed.
+
+### All eight no-fan nights (2026-11-17)
+
+The no-fan nights ended on 16 November (details and the table in 08). Over 8 nights each way, 23:00 to 05:00 local:
+
+- The basement bedrooms cooled 1.27 C without the fan and 0.97 C with it (-11 against -8 per hour per K x1000). The main floor (-1.53 against -1.58) and upstairs (-0.80 against -0.78) were the same. This confirms the first night: the basement's link to the main floor is mostly the blower, and the upstairs and main-floor links are static (conduction, the stairwell, open doors).
+- The blower link is z2's supply, not the fan as a whole. The zone board sends supply air only to the zones calling for the fan (corrected in 05), and on fan nights z2 called 63 to 71% of the night against about 25% for each other zone.
+- There are now 618 still 5-minute bins with no heating (all on these nights), where before there were none. `scripts/room_network.py` does not yet select them; the pairwise static fit, and the stack-effect asymmetry, are the next step. Caution from 08: many still bins start just after a heat call, so leave out the first hour after a call.
+- The Z2 thermostat (Theater) reads higher when the blower stops, so leave it out of the static fit or treat it as a sensor that depends on the fan.

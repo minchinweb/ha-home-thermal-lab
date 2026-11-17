@@ -141,8 +141,10 @@ def _house_fan(
 ) -> list[float] | None:
     """The house-wide fan share per step: the largest zone share.
 
-    The returns are not zoned, so the fan runs for every room when any zone's
-    fan runs alone (each zone's share already leaves out the other zones' calls).
+    The returns are not zoned, so the blower draws from every room when any
+    zone's fan runs alone (each zone's share already leaves out the other zones'
+    calls). Supply air goes only to the zones calling, which is each zone's own
+    share (the ``s`` term).
     """
     fans = [fan for _, fan in calls if fan is not None]
     if not fans:
@@ -179,8 +181,9 @@ def forecast_house(
     """
     steps = len(outdoor)
     step = timedelta(hours=step_hours)
-    # The usual day's cooling call and fan per zone; the fan is house-wide. A
-    # zone with a learned cooling thermostat has its cooling simulated instead.
+    # The usual day's cooling call and fan per zone. The returns see the
+    # house-wide fan, the supply only the zone's own. A zone with a learned
+    # cooling thermostat has its cooling simulated instead.
     calls = [_usual_calls(z.history, now, step, steps) for z in zones]
     house_fan = _house_fan(calls, steps)
 
@@ -197,6 +200,7 @@ def forecast_house(
                 others=z.neighbours,
                 cool=calls[i][0],
                 fan=house_fan,
+                own_fan=calls[i][1],
                 cool_setpoint=None if z.history is None else z.history.cool_setpoint,
                 cool_band=0.5 if z.history is None else z.history.cool_band,
             )

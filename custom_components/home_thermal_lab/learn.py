@@ -141,6 +141,8 @@ class NoHeatFit:
         y: Warming per hour of other zones' cooling calls, C per hour (negative).
         f: Warming per hour while the house-wide fan runs alone, C per hour
             (negative: the fan pulls heat out of every room).
+        s: Warming per hour while the zone's own fan call runs alone (its
+            supply air), C per hour, of either sign.
     """
 
     a: float
@@ -155,11 +157,14 @@ class NoHeatFit:
     x: float = 0.0
     y: float = 0.0
     f: float = 0.0
+    s: float = 0.0
 
 
-# The sign each learned term must have (1: not negative, -1: not positive). The
-# cooling bleed and the fan pull heat out, so they are kept only when negative.
-SIGN = {"y": -1.0, "f": -1.0}
+# The sign each learned term must have (1: not negative, -1: not positive, 0:
+# either). The cooling bleed and the fan pull heat out, so they are kept only
+# when negative. The zone's own supply air warms a zone colder than the house
+# and cools a warmer one, so its sign is free.
+SIGN = {"y": -1.0, "f": -1.0, "s": 0.0}
 
 
 # A plausible cooling rate: at 0 or below heat flows the wrong way; above 0.5
@@ -181,9 +186,11 @@ def _block_rows(
     cooling: list[float] | None = None,
     other_cool: list[float] | None = None,
     fan: list[float] | None = None,
+    own_fan: list[float] | None = None,
 ) -> list[tuple[float, ...]]:
     """Per idle block: (outdoor - room, rate, light, wall light, ground - room,
-    neighbour - room, other zones' heat calls, other zones' cooling calls, fan).
+    neighbour - room, other zones' heat calls, other zones' cooling calls, fan,
+    the zone's own fan).
 
     A block where the zone's own cooling call ran is not idle, as one where its
     furnace ran is not.
@@ -220,6 +227,7 @@ def _block_rows(
                 0.0 if other is None else sum(other[j] for j in span) / block,
                 0.0 if other_cool is None else sum(other_cool[j] for j in span) / block,
                 0.0 if fan is None else sum(fan[j] for j in span) / block,
+                0.0 if own_fan is None else sum(own_fan[j] for j in span) / block,
             )
         )
         i += block
@@ -241,6 +249,7 @@ def fit_no_heat(
     cooling: list[float] | None = None,
     other_cool: list[float] | None = None,
     fan: list[float] | None = None,
+    own_fan: list[float] | None = None,
 ) -> NoHeatFit | None:
     """Fit the no-heat model on idle bins.
 
@@ -270,6 +279,10 @@ def fit_no_heat(
             when unknown), for the ``n`` term.
         other: Share of each bin other zones' furnace calls ran (summed over
             them), for the ``x`` term.
+        fan: Share of each bin the house-wide fan ran alone, for ``f``.
+        own_fan: Share of each bin the zone's own fan call ran alone, for
+            ``s``. Left out unless it differs from ``fan`` somewhere (it cannot
+            be told apart from ``f`` otherwise).
 
     Returns:
         The fit, or None if there is too little idle data.
@@ -288,6 +301,7 @@ def fit_no_heat(
         cooling,
         other_cool,
         fan,
+        own_fan,
     )
     if len(rows) * block < min_bins:
         return None
@@ -300,8 +314,9 @@ def fit_no_heat(
         "x": any(r[6] > 0 for r in rows),
         "y": any(r[7] > 0 for r in rows),
         "f": any(r[8] > 0 for r in rows),
+        "s": any(r[9] > 0 for r in rows) and any(abs(r[9] - r[8]) > 0.1 for r in rows),
     }
-    index = {"a": 0, "g": 2, "w": 3, "b": 4, "n": 5, "x": 6, "y": 7, "f": 8}
+    index = {"a": 0, "g": 2, "w": 3, "b": 4, "n": 5, "x": 6, "y": 7, "f": 8, "s": 9}
     with_a = True
     while True:
         names = [k for k, on in wanted.items() if on]
@@ -345,6 +360,7 @@ def fit_no_heat(
         x=got.get("x", 0.0),
         y=got.get("y", 0.0),
         f=got.get("f", 0.0),
+        s=got.get("s", 0.0),
     )
 
 
@@ -418,6 +434,7 @@ class ZoneData:
         cooling: Fraction of each bin the zone's cooling call ran.
         other_cool: Share of each bin other zones' cooling calls ran (summed).
         fan: Share of each bin the house-wide fan ran alone.
+        own_fan: Share of each bin the zone's own fan call ran alone.
     """
 
     room: list
@@ -433,6 +450,7 @@ class ZoneData:
     cooling: list[float] | None = None
     other_cool: list[float] | None = None
     fan: list[float] | None = None
+    own_fan: list[float] | None = None
 
     def drivers(self, j: int) -> dict:
         """The keyword drivers of ``shadow.step`` over bin ``j``."""
@@ -444,6 +462,7 @@ class ZoneData:
             "cool": 0.0 if self.cooling is None else self.cooling[j],
             "other_cool": 0.0 if self.other_cool is None else self.other_cool[j],
             "fan": 0.0 if self.fan is None else self.fan[j],
+            "own_fan": 0.0 if self.own_fan is None else self.own_fan[j],
         }
 
 
@@ -535,7 +554,18 @@ def model_of(fit: NoHeatFit, h: float = 0.0, e: float = 0.0) -> ZoneModel:
     """The simulation model for a fit (with a heating and a cooling rate, if
     known)."""
     return ZoneModel(
-        fit.a, fit.c, fit.g, fit.b, fit.w, h, fit.n, fit.x, e=e, y=fit.y, f=fit.f
+        fit.a,
+        fit.c,
+        fit.g,
+        fit.b,
+        fit.w,
+        h,
+        fit.n,
+        fit.x,
+        e=e,
+        y=fit.y,
+        f=fit.f,
+        s=fit.s,
     )
 
 
@@ -579,6 +609,8 @@ def refine_multistep(
         names.append("y")
     if data.fan is not None and any(v > 0 for v in data.fan):
         names.append("f")
+    if fit.s != 0.0:  # only where the fit could tell it from ``f``
+        names.append("s")
     theta = [getattr(fit, k) for k in names]
 
     def residuals(values: list[float]) -> list[float]:
@@ -658,6 +690,7 @@ def refine_multistep(
         x=got.get("x", 0.0),
         y=got.get("y", 0.0),
         f=got.get("f", 0.0),
+        s=got.get("s", 0.0),
     )
 
 
@@ -864,7 +897,7 @@ def heated_error(
                 d["neighbour"],
                 d["other"],
                 pipe,
-                (d["cool"], d["other_cool"], d["fan"]),
+                (d["cool"], d["other_cool"], d["fan"], d["own_fan"]),
             )
             actual = data.room[j + 1]
             if actual is not None:

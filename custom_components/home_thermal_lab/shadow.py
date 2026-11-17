@@ -18,7 +18,7 @@ class ZoneModel:
     """Zone model (per hour), ``dT/dt = a * (outdoor - room) + c + g * light``
     ``+ b * (ground - room) + w * wall_light + h * heat``
     ``+ n * (neighbour - room) + x * other_heat + e * cool + y * other_cool``
-    ``+ f * fan``.
+    ``+ f * fan + s * own_fan``.
 
     Attributes:
         a: Cooling rate toward the outdoor temperature, per hour.
@@ -45,8 +45,13 @@ class ZoneModel:
             (negative: their cool air comes through the open house).
         f: Warming while the fan runs with no zone heating or cooling, C per
             hour (negative: the fan pulls heat out of the room). The returns are
-            not zoned, so the fan acts on every room: the term is driven by the
-            house-wide fan, not by the zone's own call.
+            not zoned, so the blower draws from every room whichever zone asked
+            for it: the term is driven by the house-wide fan.
+        s: Warming while the zone's own fan call runs alone, C per hour. The
+            zone board sends supply air only to the zones calling for the fan,
+            so this is the air (mixed from the whole house's returns) the zone
+            is given: positive for a zone colder than the house (the basement),
+            negative for a warmer one.
     """
 
     a: float
@@ -61,6 +66,7 @@ class ZoneModel:
     e: float = 0.0
     y: float = 0.0
     f: float = 0.0
+    s: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -110,6 +116,7 @@ def _drive(
     cool: float = 0.0,
     other_cool: float = 0.0,
     fan: float = 0.0,
+    own_fan: float = 0.0,
 ) -> float:
     """Everything in the rate that does not depend on the room temperature."""
     return (
@@ -123,6 +130,7 @@ def _drive(
         + model.e * cool
         + model.y * other_cool
         + model.f * fan
+        + model.s * own_fan
     )
 
 
@@ -145,6 +153,7 @@ def step(
     cool: float = 0.0,
     other_cool: float = 0.0,
     fan: float = 0.0,
+    own_fan: float = 0.0,
 ) -> float:
     """Room temperature after ``hours`` with the drivers held, solved exactly.
 
@@ -153,11 +162,22 @@ def step(
     exponential toward ``q / k``: no step-size error, and stable for any step
     (ClimateAdvisor's ODE step does the same). ``cool``, ``other_cool`` and
     ``fan`` are the shares of the step the zone's cooling call, the other zones'
-    cooling calls and the house-wide fan ran.
+    cooling calls and the house-wide fan ran; ``own_fan`` the share the zone's
+    own fan call ran alone (its supply air).
     """
     k = _k(model)
     drive = _drive(
-        model, outdoor, light, wall, ground, neighbour, other, cool, other_cool, fan
+        model,
+        outdoor,
+        light,
+        wall,
+        ground,
+        neighbour,
+        other,
+        cool,
+        other_cool,
+        fan,
+        own_fan,
     )
     q = drive + model.h * heat
     if abs(k) < 1e-12:
@@ -293,7 +313,7 @@ def heated_step(
     neighbour: float = 0.0,
     other: float = 0.0,
     pipe: float = 0.0,
-    calls: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    calls: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0),
 ) -> tuple[float, float, bool, float]:
     """One step of the simulated thermostat.
 
@@ -302,8 +322,8 @@ def heated_step(
     heat arriving, C per hour) carried from step to step.
 
     ``calls`` holds the shares of the step the zone's cooling call ran, the
-    other zones' cooling calls ran, and the house-wide fan ran alone (for the
-    ``e``, ``y`` and ``f`` terms).
+    other zones' cooling calls ran, the house-wide fan ran alone, and the zone's
+    own fan call ran alone (for the ``e``, ``y``, ``f`` and ``s`` terms).
 
     Returns:
         The room temperature after the step, the share of the step the furnace
@@ -356,7 +376,7 @@ def _lagged_step(
     weather: tuple[float, float, float, float],
     near: tuple[float, float],
     pipe: float,
-    calls: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    calls: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 0.0),
 ) -> tuple[float, float, bool, float]:
     """``heated_step`` with the furnace's delivery lag, in sub-steps."""
     outdoor, light, wall, ground = weather
@@ -397,6 +417,8 @@ class HouseZone:
             whose cooling calls cool it (``y``).
         cool: Share each step this zone's cooling call runs (``e``); None: never.
         fan: Share each step the house-wide fan runs alone (``f``); None: never.
+        own_fan: Share each step this zone's own fan call runs alone (``s``);
+            None: never.
         cool_setpoint: The room temperature the air conditioner stops at, when
             its calls are simulated (``cool`` is then not used).
         cool_band: How far above the setpoint the room must rise to start it.
@@ -414,6 +436,7 @@ class HouseZone:
     fan: list[float] | None = None
     cool_setpoint: float | None = None
     cool_band: float = 0.5
+    own_fan: list[float] | None = None
 
 
 def _at(values: list[float] | None, i: int) -> float:
@@ -435,13 +458,15 @@ def cooled_step(
     other: float = 0.0,
     other_cool: float = 0.0,
     fan: float = 0.0,
+    own_fan: float = 0.0,
 ) -> tuple[float, float, bool]:
     """One step of a simulated air conditioner, switching as a thermostat.
 
     It starts when the room is above ``setpoint + band`` and stops when the
     room reaches ``setpoint`` (part way through a step if need be), as
     ``heated_step`` does for heat. ``other_cool`` (the other zones' cooling
-    calls) and ``fan`` (the house-wide fan) are the shares of the step they ran.
+    calls), ``fan`` (the house-wide fan) and ``own_fan`` (the zone's own fan
+    call) are the shares of the step they ran.
 
     Returns:
         The room temperature after the step, the share of the step the air
@@ -453,13 +478,24 @@ def cooled_step(
         cooling = True
     rest = (wall, ground)
     near = (neighbour, other)
+    fans = (fan, own_fan)
     if not cooling:
         after = step(
-            room, outdoor, light, model, hours, *rest, 0.0, *near, 0.0, other_cool, fan
+            room,
+            outdoor,
+            light,
+            model,
+            hours,
+            *rest,
+            0.0,
+            *near,
+            0.0,
+            other_cool,
+            *fans,
         )
         return after, 0.0, False
     q = _drive(
-        model, outdoor, light, wall, ground, neighbour, other, 1.0, other_cool, fan
+        model, outdoor, light, wall, ground, neighbour, other, 1.0, other_cool, *fans
     )
     k = _k(model)
     if abs(k) < 1e-12:
@@ -470,7 +506,17 @@ def cooled_step(
         reach = _hours_to_reach(room, setpoint, q, k, hours)
     if reach is None:
         after = step(
-            room, outdoor, light, model, hours, *rest, 0.0, *near, 1.0, other_cool, fan
+            room,
+            outdoor,
+            light,
+            model,
+            hours,
+            *rest,
+            0.0,
+            *near,
+            1.0,
+            other_cool,
+            *fans,
         )
         return after, 1.0, True
     after = step(
@@ -484,7 +530,7 @@ def cooled_step(
         *near,
         0.0,
         other_cool,
-        fan,
+        *fans,
     )
     return after, reach / hours, False
 
@@ -531,6 +577,7 @@ def simulate_house_full(
             other_heat = sum(last[m] for m in z.others)
             other_cool = sum(last_cool[m] for m in z.others)
             fan = _at(z.fan, i)
+            own_fan = _at(z.own_fan, i)
             if simulated[j] and not heating[j] and now[j] >= sp - z.thermostat.deadband:
                 after, ran, cooling[j] = cooled_step(
                     now[j],
@@ -547,6 +594,7 @@ def simulate_house_full(
                     other_heat,
                     other_cool,
                     fan,
+                    own_fan,
                 )
                 heating_ran = 0.0
                 cool_ran = ran
@@ -566,7 +614,7 @@ def simulate_house_full(
                     near,
                     other_heat,
                     pipes[j],
-                    (own_cool, other_cool, fan),
+                    (own_cool, other_cool, fan, own_fan),
                 )
                 cooling[j] = False
                 cool_ran = own_cool

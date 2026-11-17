@@ -40,7 +40,7 @@ A proposal for a session to implement. It keeps every room and outdoor forecast 
 | `outdoor_at` | the `at` of the outdoor record this forecast used, so the two can be joined |
 | `outdoor_shift` | the outdoor correction applied (°C) |
 | `fit_at` | when the zone's model was last fitted (UTC instant, `null` if none) |
-| `params` | the fitted parameters used (`a`, `b`, `n`, `x`, `c`, `g`, `w`, `h`, `e`, `y`, `f`; absent terms `null`) |
+| `params` | the fitted parameters used (`a`, `b`, `n`, `x`, `c`, `g`, `w`, `h`, `e`, `y`, `f`, `s`; absent terms `null`) |
 | `neighbours` | the neighbour zones used |
 | `leads` | `{"1": t, "3": t, "6": t}`: the issued prediction (°C) at each lead in hours |
 | `leads_d` | the same leads from the profile with offset (D), computed whether or not D was issued |
