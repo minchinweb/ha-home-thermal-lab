@@ -494,6 +494,8 @@ Read from a shallow clone of `gunkl/ClimateAdvisor` (v0.8.60, 2026-11-04). Read 
 
 *Verification status: equations and constants come from `learning.py`, `coordinator.py` and the docs at the commit cloned on 4 November 2026. The docs were read by heading and in targeted sections, not in full. The `08` analytic form was checked against the code's equation by hand, not by running it.*
 
+**Follow-up (todo).** Review the Climate Advisor changes from v0.8.60 (4 November 2026) to v0.9.41. Check whether the thermal model, the `compute_k_passive` window split, the solar range guard, the confidence-graded EWMA and the overshoot clamp changed, and update the equations above if they did.
+
 ### RC_BuildingSimulator code review
 
 Read from a shallow clone of `architecture-building-systems/RC_BuildingSimulator` at `97c1cdd` (last push 7 March 2021), and the `rcbsim` 0.3b0 sdist from PyPI. Read in full: `building_physics.py` (about 590 lines), `supply_system.py` and `emission_system.py`, the solar formulas in `radiation.py`, and the test names. Not read: the examples, `epwreader.py`, the wiki. Tests were not run. The ISO 52016-1 account below comes from a 2019 comparison paper, not the standard text.
